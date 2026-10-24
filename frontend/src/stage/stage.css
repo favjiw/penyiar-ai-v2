@@ -1,0 +1,148 @@
+/* Stage 9:16 untuk OBS. Warna tetap (tidak ikut tema terang/gelap) karena ini output siaran. */
+
+.stage-root {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.canvas {
+  position: relative;
+  height: 100vh;
+  aspect-ratio: 9 / 16;
+  max-width: 100vw;
+  max-height: calc(100vw * 16 / 9);
+  background: #101014;
+  color: #fff;
+  font-family: system-ui, 'Segoe UI', sans-serif;
+  container-type: size;
+  overflow: hidden;
+}
+
+/* Dua panel bertumpuk seperti live HITS asli (FR-10, mode B) */
+.panel-av {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 40%, #2a2340 0%, #121018 70%);
+  transition: box-shadow 150ms;
+}
+.panel-av.top { top: 0; border-bottom: 1px solid #000; }
+.panel-av.bottom { top: 50%; }
+.panel-av.speaking { box-shadow: inset 0 0 0 0.6cqw #ff3d7f; }
+
+.placeholder {
+  width: 32cqw;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #2f2a44;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14cqw;
+  font-weight: 700;
+  color: #8f86b8;
+}
+.panel-av.top .placeholder { margin-top: 4cqh; }
+.panel-av.bottom .placeholder { margin-bottom: 14cqh; }
+
+/* Nameplate: kanan atas tiap panel, di luar header (0–10%) dan daftar komentar (kiri 70% di 65–91%) */
+.nameplate {
+  position: absolute;
+  right: 6cqw;
+  display: flex;
+  align-items: center;
+  gap: 1.5cqw;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 99px;
+  padding: 0.8cqh 2.5cqw;
+  font-size: 3.6cqw;
+  font-weight: 600;
+}
+.panel-av.top .nameplate { top: 12cqh; }
+.panel-av.bottom .nameplate { top: 2cqh; }
+.ai-label {
+  background: #ff3d7f;
+  color: #fff;
+  font-weight: 800;
+  border-radius: 6px;
+  padding: 0 1.4cqw;
+}
+.eq { color: #ff3d7f; letter-spacing: -0.4cqw; animation: pulse 0.8s infinite alternate; }
+@keyframes pulse { from { opacity: 0.4; } to { opacity: 1; } }
+
+/* HUD tengah: di antara dua panel, aman dari header dan daftar komentar */
+.hud {
+  position: absolute;
+  left: 6cqw;
+  right: 6cqw;
+  top: 40cqh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1cqh;
+  text-align: center;
+  pointer-events: none;
+}
+.program-pill {
+  background: #ff3d7f;
+  border-radius: 99px;
+  padding: 0.5cqh 3cqw;
+  font-size: 2.6cqw;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.topic-title {
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 1.5cqw;
+  padding: 1cqh 4cqw;
+  font-size: 4.6cqw;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.question {
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+  border-radius: 1.5cqw;
+  padding: 0.8cqh 3cqw;
+  font-size: 3.2cqw;
+  font-weight: 600;
+}
+
+.zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(255, 0, 0, 0.25);
+  outline: 1px dashed rgba(255, 80, 80, 0.9);
+  color: #ffd0d0;
+  font-size: 2.4cqw;
+  padding: 0.5cqh 1cqw;
+}
+.zone:not(.side) { bottom: auto; }
+
+.unlock {
+  position: absolute;
+  inset: auto 6cqw 45cqh;
+  background: #ffd43b;
+  color: #111;
+  font-weight: 700;
+  text-align: center;
+  padding: 1.5cqh;
+  border-radius: 2cqw;
+}
+.debug {
+  position: absolute;
+  top: 0.5cqh;
+  left: 6cqw;
+  font-size: 2.2cqw;
+  color: #aaa;
+}

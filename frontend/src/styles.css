@@ -138,3 +138,36 @@ button.icon { padding: 2px 7px; font-size: 13px; line-height: 1.2; }
 .side li .meta { display: block; font-size: 12px; color: var(--muted); }
 .empty { color: var(--muted); font-size: 14px; }
 kbd { font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+
+/* ── Tab dan panel live (Tahap 2) ─────────────────────────────────────── */
+.tabs { display: flex; gap: 4px; margin-left: 12px; }
+.tabs button { border: none; background: transparent; padding: 6px 12px; border-radius: 7px; }
+.tabs button.on { background: var(--bg); font-weight: 600; }
+.tabs .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-left: 4px; }
+
+.live-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.live-bar select { width: auto; max-width: 360px; }
+.live-bar .spacer { flex: 1; }
+.pill { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--line); }
+.pill.state-live { background: var(--accent); color: var(--accent-fg); }
+.pill.state-paused { background: var(--warn-bg); color: var(--warn-fg); }
+button.danger { border-color: var(--err-fg); color: var(--err-fg); }
+
+.live-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; margin-top: 16px; align-items: start; }
+@media (max-width: 1000px) { .live-grid { grid-template-columns: minmax(0, 1fr); } }
+.side-stack { display: flex; flex-direction: column; gap: 16px; }
+
+.transcript { max-height: 70vh; overflow-y: auto; }
+.transcript .line { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.transcript .line.now { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.who { font-weight: 700; margin-right: 4px; }
+.who.raka { color: #3b82f6; }
+.who.salsa { color: var(--accent); }
+
+.onair-seg { font-size: 18px; font-weight: 700; }
+.coverage { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; }
+.coverage li { display: grid; grid-template-columns: minmax(0, 1fr) 80px 36px; gap: 8px; align-items: center; font-size: 13px; }
+.coverage li > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.coverage meter { width: 100%; }
+ol.log { margin: 8px 0 0; padding-left: 18px; font-size: 13px; }
+.angle { color: var(--muted); font-size: 13px; }

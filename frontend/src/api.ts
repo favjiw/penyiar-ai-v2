@@ -1,3 +1,4 @@
+import type { ShowSnapshot } from './live/types'
 import type { Blocker, GenerateRequest, GenerateResponse, RegenerateResponse } from './types'
 
 export class ApiError extends Error {
@@ -32,5 +33,11 @@ export const api = {
   lock: (id: string) => post<Blocker>(`/api/blocker/${id}/lock`),
   newVersion: (id: string) => post<Blocker>(`/api/blocker/${id}/version`),
   lockedList: () => request<Blocker[]>('/api/blockers?locked=true'),
+  startShow: (blocker_id: string, mode: 'A' | 'B' = 'B') => post<ShowSnapshot>('/api/show/start', { blocker_id, mode }),
+  control: (action: 'pause' | 'resume' | 'next' | 'stop') => post<ShowSnapshot>(`/api/show/${action}`),
+  precheck: () =>
+    post<{ models_ok: boolean; tts_ok: boolean; tts_error?: string; tts_warmup_ms?: Record<string, number>; output: { stage_connected: boolean }; models: Record<string, string> }>(
+      '/api/precheck',
+    ),
   health: () => request<{ llm_mode: string; tts_mode: string; models: Record<string, string> }>('/api/health'),
 }
