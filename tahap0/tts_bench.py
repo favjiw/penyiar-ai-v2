@@ -92,6 +92,8 @@ async def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--provider", choices=["gemini", "edge", "both"], default="both")
     ap.add_argument("--timeout", type=float, default=30.0, help="batas waktu per kalimat (detik)")
+    ap.add_argument("--pace-rpm", type=float, default=0, help="batasi laju request (Gemini free tier TTS: 3 RPM)")
+    ap.add_argument("--skip-existing", action="store_true", help="lewati kalimat yang file audionya sudah ada")
     ap.add_argument("--sentences", default=str(ROOT / "data" / "tts_sentences.txt"))
     args = ap.parse_args()
 
@@ -114,6 +116,10 @@ async def main() -> None:
         for gender, voice in voices[provider].items():
             for i, text in enumerate(sentences, 1):
                 stem = f"{provider}_{gender}_{i:02d}"
+                if args.skip_existing and list(OUT.glob(f"{stem}.*")):
+                    continue
+                if args.pace_rpm and rows:
+                    await asyncio.sleep(60 / args.pace_rpm)
                 start = time.perf_counter()
                 first_chunk = None
                 try:
