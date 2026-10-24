@@ -252,3 +252,27 @@ async def test_supervisor_drops_to_rules_on_daily_quota(tmp_path):
     turns = [l for l in read_log(engine.log.path) if l["type"] == "turn"]
     assert turns[-1]["supervisor"]["mode"] == "rules"
     assert sum(1 for t, d in events if t == "alert" and "Supervisor" in d["message"]) == 1
+
+
+async def test_pipeline_depth_controls_turns_prepared_ahead(tmp_path):
+    for depth, expected in ((1, 1), (2, 2)):
+        engine, _ = make_engine(tmp_path / str(depth), time_scale=50.0, PIPELINE_DEPTH=depth)
+        engine.start()
+        while not engine.transcript:
+            await asyncio.sleep(0.01)
+        await asyncio.sleep(0.3)  # giliran 1 masih "diputar" lama; produsen mengisi buffer
+        assert engine.turn_no - len(engine.transcript) == expected
+        await engine.stop()
+
+
+async def test_producer_failure_ends_session_with_error(tmp_path):
+    engine, _ = make_engine(tmp_path)
+
+    async def broken():
+        raise RuntimeError("produksi rusak")
+
+    engine._produce = broken
+    engine.start()
+    await wait_end(engine)
+    assert engine.error and "produksi rusak" in engine.error
+    assert list(read_log(engine.log.path))[-1]["reason"] == "error"

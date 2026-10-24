@@ -526,23 +526,39 @@ class ShowEngine:
             prompts={a.prompt.name: a.prompt.version for a in (self.persona_agent, self.supervisor, self.showrunner)},
         )
         await self._broadcast_state()
+        # Pipelining (FR-2): produsen menyiapkan sampai PIPELINE_DEPTH giliran di depan;
+        # satu slot terbuka setiap kali sebuah giliran mulai diputar. Depth 1 = giliran n+1
+        # dibuat selagi n diputar; depth 2 menambah satu giliran cadangan untuk meredam API lambat.
+        ready: asyncio.Queue[Optional[PreparedTurn] | Exception] = asyncio.Queue()
+        slots = asyncio.Semaphore(max(1, self.settings.PIPELINE_DEPTH))
+
+        async def producer() -> None:
+            try:
+                while True:
+                    await slots.acquire()
+                    item = await self._produce()
+                    await ready.put(item)
+                    if item is None:
+                        return
+            except Exception as e:  # diteruskan ke loop utama supaya tercatat sebagai galat sesi
+                await ready.put(e)
+
+        producing = asyncio.create_task(producer())
         try:
-            prepared = await self._produce()
-            while prepared is not None:
+            while True:
+                item = await ready.get()
+                if isinstance(item, Exception):
+                    raise item
+                if item is None:
+                    break
                 await self._resume.wait()
-                if prepared.epoch != self.epoch:  # di-skip sebelum diputar
-                    prepared = await self._produce()
+                if item.epoch != self.epoch:  # di-skip sebelum diputar
+                    slots.release()
                     continue
-                play = asyncio.create_task(self._play(prepared))
+                slots.release()
                 await self._broadcast_state()
-                try:
-                    nxt = await self._produce()  # pipelining: giliran berikut dibuat selagi diputar
-                    await play
-                except BaseException:
-                    play.cancel()  # stop: jangan menunggu audio yang sedang diputar
-                    raise
+                await self._play(item)
                 await self._broadcast_state()
-                prepared = nxt
             await self._finish("completed")
         except asyncio.CancelledError:
             raise
@@ -551,6 +567,8 @@ class ShowEngine:
             self.error = f"{type(e).__name__}: {e}"
             self.log.event("error", stage="engine", message=self.error[:500])
             await self._finish("error")
+        finally:
+            producing.cancel()
 
     async def _finish(self, reason: str) -> None:
         if self.state == ShowState.ENDED:
