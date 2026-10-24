@@ -802,8 +802,8 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 
 ### 15.2 Keputusan terbuka
 1. STT, TTS utama, dan T2: diputuskan di gerbang Tahap 0.
-2. Nama tampilan penyiar manusia di prompt mode A.
-3. Apakah Opening dan Closing mode A juga diisi AI, atau AI baru masuk di topik 1.
+2. Nama tampilan penyiar manusia di prompt mode A. Default [C]: diisi operator di konsol saat Mulai.
+3. Apakah Opening dan Closing mode A juga diisi AI, atau AI baru masuk di topik 1. Default [C]: AI ikut menanggapi di semua segmen; penyiar memandu dan menekan next.
 4. Nilai default `SHOWRUNNER_EVERY_K`, `MIN_TURNS_PER_TOPIC`, `MAX_TURNS_PER_TOPIC`, dikalibrasi dari live HITS 20 Okt.
 5. Persetujuan pembimbing HITS untuk kriteria "realistis" (T1 vs T2).
 6. ~~Nama repo baru.~~ Diputuskan: `penyiar-ai-v2` [F].
@@ -818,7 +818,7 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 | 1 Fondasi + Blocker | Menunggu pemeriksaan Favian | 24 Okt 2026 | Backend (config, skema, LLM + rate limiter, TTS ElevenLabs/Edge + breaker, persona) dan FR-1 lengkap (API + konsol: generate, bandingkan, edit, kunci, versi, buat ulang). 27 tes lulus. KT otomatis: 10/10 tema valid dalam 5,8–8,1 s (`gemini-3.5-flash-lite`, prompt `blocker-v2`). Sisa KT: penilaian layak siar ≥8/10 di `docs/kt/FR-1-blocker.md`. Catatan: repo lama ternyata tidak punya breaker TTS (FR-6), jadi dibuat baru. Repo lama sudah diberi tag `v1-format-clock` dan README arsip. |
 | 2 Mode B inti | Menunggu pemeriksaan Favian | 24 Okt 2026 | FR-2/3/4/5/6/12, konsol live, stage; 83 tes lulus. Sesi 21,4 menit dari blocker tanpa crash/intervensi (`docs/kt/tahap2-gate-4.md`): topik 1–2 memakai jatah waktu dengan sudut baru, topik 3 rusak karena kuota harian habis (penanganan kuota, cadangan `compat:`, dan `PIPELINE_DEPTH=2` sudah ditambahkan). Ulangan sore hari (`tahap2-gate-5.md`) tidak mewakili karena DNS laptop putus-sambung (30/74 persona timeout), tetapi semua jalur cadangan bertahan. Sisa: gerbang 20 menit dari jaringan stabil; jeda p95 ≤4 s. Angka sistem di jaringan baik (sesi 3): persona p50 1,4 s, Supervisor p50 1,2 s, jeda p50 0 s. |
 | 3 Avatar T1 + OBS | Berjalan | 24 Okt 2026 | Pemutar avatar video di stage (FR-8: crossfade dua `<video>`, idle/listen/talk/react mengikuti siapa yang bicara dan emosi, `focus_y` untuk panel 9:8), diuji dengan klip dummy (`assets/make_dummy_clips.py`); panduan OBS (`docs/obs-setup.md`). Menunggu: klip Google Flow (Lampiran A), uji tahan 60 menit dengan klip asli, live uji TikTok 20 menit. |
-| 4 Mode A | Belum | | |
+| 4 Mode A | Berjalan | 25 Okt 2026 | FR-7 (PTT Web Speech di prompter), FR-11 prompter, bank filler, ModeAEngine (TTS per kalimat, penyiar boleh memotong, Showrunner mode saran); 93 tes lulus; uji browser mock lulus (`docs/kt/tahap4-mode-a.md`). Probe latensi live tidak mewakili (Gemini 4–6 s per panggilan saat diuji). Menunggu: uji STT nyata, ukur ulang latensi, sesi 15 menit bersama penyiar. |
 | 5 Avatar T2 | Belum | | |
 | 6 Tambahan skripsi | Belum | | |
 | 7 Eksperimen | Belum | | |
