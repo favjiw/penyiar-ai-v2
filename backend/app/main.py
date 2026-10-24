@@ -1,6 +1,5 @@
-"""FastAPI: REST API Tahap 1 (Generator Blocker) dan health.
+"""FastAPI: REST API generator blocker, health, dan router live (app/show/api.py).
 
-Show Engine, WebSocket /ws/session, dan kontrol live ditambahkan di Tahap 2.
 Jalankan dari folder backend/: `uvicorn app.main:app --reload --port 8000`.
 """
 
@@ -27,7 +26,9 @@ from app.blocker.store import now_iso
 from app.config import Settings, get_settings
 from app.llm import create_llm_client
 from app.schemas import Blocker, GenerateBlockerRequest
+from app.show.api import router as show_router
 from app.tts import create_tts
+from app.ws import ConnectionManager
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("app")
@@ -49,11 +50,16 @@ def build_app(settings: Settings | None = None) -> FastAPI:
         app.state.store = store
         app.state.generator = BlockerGenerator(llm, settings.model_for("blocker"), store)
         app.state.tts = create_tts(settings)
+        app.state.ws = ConnectionManager()
+        app.state.engine = None
         Path(settings.LOG_DIR).mkdir(parents=True, exist_ok=True)
         logger.info("Siap: LLM_MODE=%s TTS_MODE=%s", settings.LLM_MODE, settings.TTS_MODE)
         yield
+        if app.state.engine is not None:
+            await app.state.engine.stop()
 
     app = FastAPI(title="Penyiar AI v2", lifespan=lifespan)
+    app.include_router(show_router)
 
     @app.exception_handler(BlockerNotFound)
     async def _not_found(_: Request, e: BlockerNotFound):
@@ -97,6 +103,8 @@ def build_app(settings: Settings | None = None) -> FastAPI:
             "models": {role: s.model_for(role) for role in ("blocker", "persona", "showrunner", "supervisor")},
             "quota": limiters.status() if limiters else {},
             "tts": request.app.state.tts.status(),
+            "show": request.app.state.engine.state.value if request.app.state.engine else "idle",
+            "output": request.app.state.ws.output_status(),
         }
 
     @app.post("/api/blocker/generate")
