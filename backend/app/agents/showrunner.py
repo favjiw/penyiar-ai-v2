@@ -1,5 +1,10 @@
 """Showrunner (FR-4, fokus publikasi): kapan obrolan lanjut, diarahkan, atau pindah topik.
 
+Jatah waktu topik [F, 24 Okt 2026]: bila SESSION_TARGET_MIN diisi, setiap topik
+mendapat jatah waktu. Di kebijakan `llm`, selama jatah masih ada, keputusan pindah
+diubah menjadi arahan ke sudut baru di luar poin (`new_angle`) yang masih nyambung
+ke topik; setelah jatah habis dan ≥60% poin tercakup, topik dipindah.
+
 Kebijakan (SHOWRUNNER_POLICY):
 - `llm`: LLM menilai cakupan poin dan kejenuhan, lalu memutuskan;
 - `fixed_turns`: pindah setiap FIXED_TURNS_PER_TOPIC giliran (baseline publikasi);
@@ -16,6 +21,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass, field
+from typing import Optional
 
 from app.agents.persona import HistoryEntry
 from app.llm import LLMClient, LLMError, register_mock
@@ -34,6 +40,14 @@ class TopicProgress:
     audio_s: float = 0.0
     covered: set[str] = field(default_factory=set)
     history: list[HistoryEntry] = field(default_factory=list)
+    budget_s: Optional[float] = None  # jatah waktu topik (detik dinding); None = tanpa target
+    elapsed_s: float = 0.0  # waktu dinding sejak topik dimulai, diisi engine sebelum decide
+    angles: list[str] = field(default_factory=list)  # sudut tambahan yang sudah dipakai
+    started_at: Optional[float] = None  # time.monotonic() saat giliran pertama topik dibuat
+
+    @property
+    def time_left_s(self) -> Optional[float]:
+        return None if self.budget_s is None else self.budget_s - self.elapsed_s
 
     @property
     def uncovered(self) -> list[str]:
@@ -77,6 +91,10 @@ class Showrunner:
         ]
         if target_hint:
             lines.append(f"Petunjuk lunak durasi (bukan aturan): {target_hint}")
+        if p.budget_s is not None:
+            lines.append(f"JATAH WAKTU TOPIK: ±{p.budget_s:.0f} detik; sudah berjalan ±{p.elapsed_s:.0f} detik.")
+        if p.angles:
+            lines.append("Sudut tambahan yang sudah dipakai (jangan diulang):\n" + "\n".join(f"- {a}" for a in p.angles))
         lines.append("OBROLAN SEJAK TOPIK DIMULAI:\n" + "\n".join(f"{h.name}: {h.text}" for h in p.history[-24:]))
         return "\n\n".join(lines)
 
@@ -90,6 +108,24 @@ class Showrunner:
             reason=reason or (f"{p.turns} giliran tercapai" if go else f"{p.turns}/{self.fixed_turns} giliran"),
             policy="fixed_turns",
         )
+
+    def _apply_budget(self, p: TopicProgress, decision: str, hint: str, reason: str, new_angle: str, uncovered: list) -> tuple[str, str, str]:
+        """Jatah waktu topik: sudut baru selama jatah ada; pindah setelah jatah habis."""
+        left = p.time_left_s
+        end = "close" if p.is_last else "transition"
+        if left > 0:
+            if decision in ("transition", "close") or (decision == "continue" and not uncovered):
+                if uncovered:
+                    return "steer", f"bahas {uncovered[0].id}: {uncovered[0].text}", f"jatah topik tersisa ±{left:.0f} s; {reason}"
+                angle = new_angle.strip() or hint.strip()
+                if angle:
+                    p.angles.append(angle)
+                    return "steer", f"sudut baru: {angle}", f"jatah topik tersisa ±{left:.0f} s, poin sudah habis; {reason}"
+                return "continue", "", f"jatah topik tersisa ±{left:.0f} s; {reason}"
+            return decision, hint, reason
+        if decision not in ("transition", "close") and p.coverage >= 0.6 and p.turns >= self.min_turns:
+            return end, "", f"jatah waktu topik habis ({p.elapsed_s:.0f}/{p.budget_s:.0f} s); {reason}"
+        return decision, hint, reason
 
     def fallback_decision(self, p: TopicProgress, turn: int, reason: str) -> ShowrunnerDecision:
         """Keputusan tanpa LLM (kuota habis, jaringan, atau batas waktu): aturan fixed_turns."""
@@ -146,6 +182,9 @@ class Showrunner:
         elif decision == "close" and not p.is_last:
             decision = "transition"
 
+        if self.policy == "llm" and p.time_left_s is not None:
+            decision, hint, reason = self._apply_budget(p, decision, hint, reason, j.new_angle, uncovered)
+
         next_speaker = j.next_speaker.strip().lower() or None
         return ShowrunnerDecision(
             turn=turn,
@@ -174,6 +213,7 @@ def _mock_showrunner(prompt: str, n: int) -> dict:
         "saturation": min(1.0, turns / 12),
         "decision": "transition" if done else "steer",
         "steer_hint": "" if done else f"bahas {ids[len(covered)]}",
+        "new_angle": f"sudut tambahan ke-{n}",
         "next_speaker": "",
         "reason": "mock: cakupan mengikuti jumlah giliran",
     }

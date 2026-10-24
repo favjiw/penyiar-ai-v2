@@ -389,9 +389,13 @@ class ShowEngine:
             p.finished = True
         elif p.segment == "topic":
             prog = self.progress[ctx.topic.id]
+            if prog.started_at is None:
+                self._start_topic_clock(prog)
             prog.turns += 1
             prog.audio_s += prepared.duration_s
             prog.history.append(self.history[-1])
+            if prog.started_at is not None:
+                prog.elapsed_s = time.monotonic() - prog.started_at
             if self.showrunner.should_call(prog):
                 try:
                     decision = await asyncio.wait_for(
@@ -408,6 +412,18 @@ class ShowEngine:
                     p.pending = "transition"
                 elif decision.decision == "close":
                     p.pending = "to_closing"
+
+    def _start_topic_clock(self, prog: TopicProgress) -> None:
+        """Jatah waktu topik [F]: sisa target sesi (dikurangi cadangan Closing) dibagi sisa topik."""
+        prog.started_at = time.monotonic()
+        target = self.settings.SESSION_TARGET_MIN * 60
+        if not target:
+            return
+        elapsed = prog.started_at - self.started_at
+        remaining_topics = len(self.blocker.topics) - self.blocker.topics.index(prog.topic)
+        closing_reserve = self.settings.CLOSING_TURNS * 10
+        prog.budget_s = max(60.0, (target - elapsed - closing_reserve) / remaining_topics)
+        self.log.event("quota", topic_id=prog.topic.id, topic_budget_s=round(prog.budget_s), session_elapsed_s=round(elapsed))
 
     def _pacing_hint(self, topic: BlockerTopic, prog: TopicProgress) -> str:
         """Petunjuk lunak durasi untuk Showrunner (FR-4): jatah per topik vs yang sudah berjalan."""

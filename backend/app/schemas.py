@@ -205,6 +205,7 @@ class ShowrunnerJudgement(BaseModel):
     saturation: float
     decision: ShowrunnerDecisionType
     steer_hint: str
+    new_angle: str  # sudut baru di luar poin yang masih nyambung ke topik, untuk sisa jatah waktu
     next_speaker: str  # raka | salsa | "" (bebas)
     reason: str
 

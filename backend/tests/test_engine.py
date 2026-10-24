@@ -173,3 +173,29 @@ async def test_slow_llm_stages_fall_back_instead_of_dead_air(tmp_path):
     assert log[-1]["reason"] == "completed"
     assert any(l["type"] == "error" and l["stage"] == "persona" for l in log)
     assert any(l["type"] == "showrunner" and "SHOWRUNNER_TIMEOUT_MS" in l["reason"] for l in log)
+
+
+
+async def test_topic_budget_keeps_topic_going_with_new_angles(tmp_path, monkeypatch):
+    import time as real_time
+    from types import SimpleNamespace
+
+    import app.show.engine as engine_mod
+
+    # Jam dinding engine dipercepat 20x: jatah ±60 s per topik selesai dalam ±3 s nyata.
+    t0 = real_time.monotonic()
+    fast = SimpleNamespace(monotonic=lambda: t0 + (real_time.monotonic() - t0) * 20, perf_counter=real_time.perf_counter, strftime=real_time.strftime)
+    monkeypatch.setattr(engine_mod, "time", fast)
+
+    engine, _ = make_engine(tmp_path, time_scale=0.05, SESSION_TARGET_MIN=2, CLOSING_TURNS=1)
+    engine.start()
+    await wait_end(engine, timeout=60)
+    log = list(read_log(engine.log.path))
+    budgets = [l for l in log if l["type"] == "quota" and "topic_budget_s" in l]
+    assert [b["topic_id"] for b in budgets] == ["t1", "t2"]
+    angles = [l for l in log if l["type"] == "showrunner" and l["steer_hint"].startswith("sudut baru")]
+    assert angles, "poin habis sebelum jatah, harusnya ada arahan sudut baru"
+    t1_end = next(l for l in log if l["type"] == "showrunner" and l["topic_id"] == "t1" and l["decision"] == "transition")
+    assert "jatah topik tersisa" not in t1_end["reason"]  # pindah baru setelah jatah habis
+    t1 = [l for l in log if l["type"] == "turn" and l["topic_id"] == "t1"]
+    assert len(t1) > 7  # tanpa jatah, mock pindah di giliran 6

@@ -8,7 +8,7 @@ from tests.test_persona import make_blocker
 
 class _Judge(LLMClient):
     def __init__(self, **answer):
-        self.answer = {"points_covered": [], "saturation": 0.3, "decision": "continue", "steer_hint": "", "next_speaker": "", "reason": "r"} | answer
+        self.answer = {"points_covered": [], "saturation": 0.3, "decision": "continue", "steer_hint": "", "new_angle": "", "next_speaker": "", "reason": "r"} | answer
         self.prompts = []
 
     async def generate(self, prompt, *, model, system_instruction="", response_schema=None, temperature=1.0):
@@ -75,3 +75,36 @@ async def test_llm_failure_falls_back_to_fixed_turns():
 async def test_next_speaker_validated():
     assert (await sr(_Judge(next_speaker="Salsa")).decide(progress(3), 1)).next_speaker == "salsa"
     assert (await sr(_Judge(next_speaker="budi")).decide(progress(3), 1)).next_speaker is None
+
+
+def budgeted(turns, elapsed, budget=300, covered=("t1p1", "t1p2", "t1p3"), last=False):
+    p = progress(turns, last=last, covered=covered)
+    p.budget_s, p.elapsed_s = budget, elapsed
+    return p
+
+
+async def test_budget_left_turns_transition_into_new_angle():
+    p = budgeted(9, elapsed=120)
+    d = await sr(_Judge(decision="transition", points_covered=["t1p1", "t1p2", "t1p3"], new_angle="kebiasaan unik penghuni kos")).decide(p, 1)
+    assert d.decision == "steer" and d.steer_hint == "sudut baru: kebiasaan unik penghuni kos"
+    assert p.angles == ["kebiasaan unik penghuni kos"] and "jatah topik tersisa" in d.reason
+    assert "kebiasaan unik penghuni kos" in sr(_Judge()).judgement_prompt(p)  # tidak diulang
+
+
+async def test_budget_left_with_uncovered_points_steers_to_point():
+    d = await sr(_Judge(decision="transition", points_covered=["t1p1"])).decide(budgeted(9, 60, covered=["t1p1"]), 1)
+    assert d.decision == "steer" and d.steer_hint.startswith("bahas t1p2")
+
+
+async def test_budget_spent_moves_on_once_coverage_is_enough():
+    d = await sr(_Judge(decision="steer", steer_hint="lanjut")).decide(budgeted(12, elapsed=310), 1)
+    assert d.decision == "transition" and "jatah waktu topik habis" in d.reason
+    d_last = await sr(_Judge(decision="continue")).decide(budgeted(12, elapsed=310, last=True), 1)
+    assert d_last.decision == "close"
+    low = await sr(_Judge(decision="steer", steer_hint="x")).decide(budgeted(12, elapsed=310, covered=["t1p1"]), 1)
+    assert low.decision == "steer"  # cakupan <60%: tetap bahas poin
+
+
+async def test_budget_rule_only_for_llm_policy():
+    d = await sr(_Judge(points_covered=["t1p1", "t1p2", "t1p3"]), "coverage_only").decide(budgeted(9, elapsed=10), 1)
+    assert d.decision == "transition"
