@@ -204,7 +204,8 @@ def _mock_drafts(prompt: str, call_no: int) -> dict:
             {
                 "judul": f"{tema}: bagian {i}",
                 "sudut_pandang": angle.format(tema=tema.lower()),
-                "poin": [{"text": f"poin {j} soal {tema.lower()} ({label.lower()})", "perlu_cek": False} for j in range(1, 5)],
+                # Tanpa angka: poin berangka otomatis ditandai perlu_cek
+                "poin": [{"text": f"poin {ke} soal {tema.lower()} ({label.lower()})", "perlu_cek": False} for ke in ("pertama", "kedua", "ketiga", "keempat")],
                 "pertanyaan_penonton": f"Kalau lo, gimana soal {tema.lower()}?",
                 "transisi": "Oke, lanjut ke obrolan berikutnya ya." if i < n_topik else "Oke, kita rangkum dulu ya.",
             }

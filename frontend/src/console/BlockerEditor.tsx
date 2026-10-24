@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import type { Blocker, BlockerTopic } from '../types'
 
 interface Props {
@@ -26,12 +27,20 @@ const emptyTopic = (): BlockerTopic => ({
 
 /** Editor inline draf blocker (FR-1): ubah teks, tambah/hapus/geser poin dan topik. */
 export function BlockerEditor({ blocker: b, onChange }: Props) {
+  const root = useRef<HTMLDivElement>(null)
+  // Input yang baru ditambahkan langsung difokuskan, supaya operator bisa terus mengetik tanpa mouse.
+  const pendingFocus = useRef<string | null>(null)
+  useEffect(() => {
+    if (!pendingFocus.current) return
+    root.current?.querySelector<HTMLInputElement>(`[data-focus="${pendingFocus.current}"]`)?.focus()
+    pendingFocus.current = null
+  })
   const set = (patch: Partial<Blocker>) => onChange({ ...b, ...patch })
   const setTopic = (i: number, patch: Partial<BlockerTopic>) =>
     set({ topics: b.topics.map((t, k) => (k === i ? { ...t, ...patch } : t)) })
 
   return (
-    <div>
+    <div ref={root}>
       <label className="field">
         Label varian
         <input type="text" value={b.variant_label} onChange={(e) => set({ variant_label: e.target.value })} />
@@ -48,6 +57,7 @@ export function BlockerEditor({ blocker: b, onChange }: Props) {
             <input
               type="text"
               value={p}
+              data-focus={`open-${j}`}
               aria-label={`Poin opening ${j + 1}`}
               onChange={(e) => set({ opening: { ...b.opening, poin: b.opening.poin.map((x, k) => (k === j ? e.target.value : x)) } })}
             />
@@ -57,7 +67,13 @@ export function BlockerEditor({ blocker: b, onChange }: Props) {
           </div>
         ))}
         <div className="row">
-          <button className="small" onClick={() => set({ opening: { ...b.opening, poin: [...b.opening.poin, ''] } })}>
+          <button
+            className="small"
+            onClick={() => {
+              pendingFocus.current = `open-${b.opening.poin.length}`
+              set({ opening: { ...b.opening, poin: [...b.opening.poin, ''] } })
+            }}
+          >
             + Poin opening
           </button>
         </div>
@@ -67,7 +83,7 @@ export function BlockerEditor({ blocker: b, onChange }: Props) {
         <fieldset key={i}>
           <legend>Topik {i + 1}</legend>
           <div className="row">
-            <input type="text" value={t.judul} aria-label="Judul topik" onChange={(e) => setTopic(i, { judul: e.target.value })} />
+            <input type="text" value={t.judul} data-focus={`judul-${i}`} aria-label="Judul topik" onChange={(e) => setTopic(i, { judul: e.target.value })} />
             <span className="topic-tools">
               <button className="icon" title="Geser ke atas" disabled={i === 0} onClick={() => set({ topics: move(b.topics, i, i - 1) })}>
                 ↑
@@ -90,6 +106,7 @@ export function BlockerEditor({ blocker: b, onChange }: Props) {
               <input
                 type="text"
                 value={p.text}
+                data-focus={`poin-${i}-${j}`}
                 aria-label={`Poin ${j + 1}`}
                 onChange={(e) => setTopic(i, { poin: t.poin.map((x, k) => (k === j ? { ...x, text: e.target.value } : x)) })}
               />
@@ -113,7 +130,13 @@ export function BlockerEditor({ blocker: b, onChange }: Props) {
             </div>
           ))}
           <div className="row">
-            <button className="small" onClick={() => setTopic(i, { poin: [...t.poin, { id: '', text: '', perlu_cek: false }] })}>
+            <button
+              className="small"
+              onClick={() => {
+                pendingFocus.current = `poin-${i}-${t.poin.length}`
+                setTopic(i, { poin: [...t.poin, { id: '', text: '', perlu_cek: false }] })
+              }}
+            >
               + Poin
             </button>
           </div>
@@ -131,7 +154,13 @@ export function BlockerEditor({ blocker: b, onChange }: Props) {
       ))}
       {b.topics.length < MAX_TOPICS && (
         <div className="row">
-          <button className="small" onClick={() => set({ topics: [...b.topics, emptyTopic()] })}>
+          <button
+            className="small"
+            onClick={() => {
+              pendingFocus.current = `judul-${b.topics.length}`
+              set({ topics: [...b.topics, emptyTopic()] })
+            }}
+          >
             + Topik
           </button>
         </div>
