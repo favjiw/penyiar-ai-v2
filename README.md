@@ -24,6 +24,16 @@ Frontend (dari folder `frontend/`), lalu buka http://localhost:5173:
 npx vite --port 5173
 ```
 
+Live mode B dari konsol: kunci blocker di tab **Blocker**, buka tab **Live**, klik **Cek pra-live**, **Buka Stage** (popup 9:16 untuk OBS), lalu **Mulai mode B**. Pintasan: `P` pause/lanjut, `N` next topik, `S` stop. Stage: `/stage?clean=1` untuk OBS, `/stage?zones=1` menampilkan zona yang tertutup UI TikTok.
+
+Sesi tanpa browser (uji/eksperimen) dan ringkasannya:
+
+```bash
+cd backend
+python scripts/run_show.py --tema "Kos-kosan" --topik 3        # real time, audio tidak diputar
+python scripts/report.py logs/show_<id>.jsonl --transcript transkrip.md
+```
+
 Tanpa kuota API: set `LLM_MODE=mock` dan `TTS_MODE=mock` di `.env`. Konfigurasi preview Claude Code ada di `.claude/launch.json` (`backend`, `backend-mock`, `backend-edge`, `frontend`).
 
 ## Tes
@@ -38,7 +48,9 @@ cd frontend && npm run typecheck
 | Folder | Isi |
 |---|---|
 | `backend/app/` | FastAPI, config, skema, klien LLM, TTS, generator blocker, prompt (`prompts/*.md`), data persona |
-| `backend/scripts/blocker_kt.py` | Uji kriteria terima FR-1 (10 tema) |
-| `frontend/src/` | Konsol operator (React + Vite + TypeScript) |
+| `backend/app/agents/` | Persona, Supervisor, Showrunner |
+| `backend/app/show/` | Show Engine (mode B) dan API live + WebSocket |
+| `backend/scripts/` | `blocker_kt.py` (KT FR-1), `run_show.py` (sesi headless), `report.py` (ringkasan log) |
+| `frontend/src/` | Konsol operator dan stage 9:16 (React + Vite + TypeScript) |
 | `tahap0/` | Alat dan hasil uji kelayakan Tahap 0 |
 | `docs/` | Transkrip/analisis live HITS 20 Okt dan laporan KT |
