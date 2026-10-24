@@ -29,7 +29,7 @@ from app.agents.persona import HistoryEntry, PersonaAgent, PersonaResult, TurnCo
 from app.agents.showrunner import Showrunner, TopicProgress
 from app.agents.supervisor import Supervisor
 from app.config import Settings
-from app.llm import LLMClient, LLMError
+from app.llm import LLMClient, LLMError, LLMQuotaExhausted
 from app.schemas import (
     Blocker,
     BlockerTopic,
@@ -153,6 +153,8 @@ class ShowEngine:
         self._last_play_end: Optional[float] = None
         self._task: Optional[asyncio.Task] = None
         self.error: Optional[str] = None
+        self._persona_failures = 0
+        self._supervisor_mode = settings.SUPERVISOR_MODE
 
     # ── Event dan status ─────────────────────────────────────────────────────
 
@@ -303,14 +305,38 @@ class ShowEngine:
 
     # ── Membuat satu giliran ─────────────────────────────────────────────────
 
+    async def _alert(self, stage: str, message: str) -> None:
+        """Masalah yang perlu diketahui operator, tapi siaran tetap jalan."""
+        self.log.event("error", stage=stage, message=message[:300])
+        await self._emit("alert", {"stage": stage, "message": message[:300], "turn": self.turn_no})
+
     async def _persona_turn(self, speaker: PersonaCard, ctx: TurnContext, correction=None) -> PersonaResult:
         try:
-            return await asyncio.wait_for(self.persona_agent.generate(speaker, ctx, correction), self.settings.PERSONA_TIMEOUT_MS / 1000)
+            result = await asyncio.wait_for(self.persona_agent.generate(speaker, ctx, correction), self.settings.PERSONA_TIMEOUT_MS / 1000)
+            self._persona_failures = 0
+            return result
+        except LLMQuotaExhausted as e:
+            fallback_model = self.settings.GEMINI_MODEL_PERSONA_FALLBACK
+            if fallback_model and self.persona_agent._model != fallback_model:
+                await self._alert("quota", f"Kuota harian model persona habis; pindah ke {fallback_model}")
+                self.log.event("quota", role="persona", model_from=self.persona_agent._model, model_to=fallback_model)
+                self.persona_agent._model = fallback_model
+                return await self._persona_turn(speaker, ctx, correction)
+            return await self._persona_failed(speaker, ctx, str(e))
         except (LLMError, asyncio.TimeoutError) as e:
-            self.log.event("error", stage="persona", message=(str(e) or "melewati PERSONA_TIMEOUT_MS")[:300])
-            # Kuota/jaringan: kalimat aman dari bank supaya siaran tetap jalan.
-            text = self.supervisor.fallback(speaker, ctx.segment)
-            return PersonaResult(PersonaOutput(text=text, emotion=Emotion.NEUTRAL), raw="", model="fallback", latency_ms=0, dialog_act=None, catchphrase=None)
+            return await self._persona_failed(speaker, ctx, str(e) or "melewati PERSONA_TIMEOUT_MS")
+
+    async def _persona_failed(self, speaker: PersonaCard, ctx: TurnContext, message: str) -> PersonaResult:
+        self._persona_failures += 1
+        self.log.event("error", stage="persona", message=message[:300])
+        if self._persona_failures >= self.settings.PERSONA_FAILURES_BEFORE_WRAP and self.plan.segment != "closing":
+            # Tanpa persona, siaran hanya memutar kalimat aman berulang: lebih baik ditutup rapi.
+            await self._alert("engine", f"Persona gagal {self._persona_failures}x berturut-turut ({message[:80]}); siaran dibawa ke Closing")
+            p = self.plan
+            p.segment, p.seg_turns, p.pending, p.announce_closing, p.announce_topic = "closing", 0, None, True, None
+        # Kuota/jaringan: kalimat aman dari bank supaya siaran tetap jalan.
+        text = self.supervisor.fallback(speaker, ctx.segment)
+        return PersonaResult(PersonaOutput(text=text, emotion=Emotion.NEUTRAL), raw="", model="fallback", latency_ms=0, dialog_act=None, catchphrase=None)
 
     async def _produce(self) -> Optional[PreparedTurn]:
         """Buat giliran berikutnya sesuai rencana, atau None bila siaran selesai."""
@@ -331,6 +357,9 @@ class ShowEngine:
         sup_start = time.perf_counter()
         reviewed = await self.supervisor.review(speaker, candidate, ctx, lambda corr: self._persona_turn(speaker, ctx, corr), turn)
         latency.supervisor = int((time.perf_counter() - sup_start) * 1000)
+        if self.supervisor.mode != self._supervisor_mode:
+            await self._alert("quota", f"Supervisor turun ke mode {self.supervisor.mode}: {self.supervisor.last_llm_error[:120]}")
+            self._supervisor_mode = self.supervisor.mode
 
         audio_path, duration, tts_provider, tts_reason, credits = None, max(1.5, len(reviewed.text.split()) / 3.0), "", "", 0
         try:

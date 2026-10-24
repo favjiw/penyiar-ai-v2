@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
 from app.agents.persona import HistoryEntry, PersonaResult, TurnContext
-from app.llm import LLMClient, LLMError, register_mock
+from app.llm import LLMClient, LLMError, LLMQuotaExhausted, register_mock
 from app.prompts import load_prompt
 from app.schemas import CorrectionMemory, Emotion, LedgerEntry, PersonaCard, SupervisorJudgement, SupervisorMode, SupervisorVerdict
 
@@ -178,6 +178,8 @@ class Supervisor:
             # Kuota/jaringan: giliran ini cukup diperiksa aturan (PRD §8), siaran jalan terus.
             self.llm_failures += 1
             self.last_llm_error = str(e)[:200]
+            if isinstance(e, LLMQuotaExhausted):
+                self.mode = "rules"  # kuota harian habis: sisa sesi pakai aturan saja
             return clean, hits, None, 0, ""
         return clean, hits, judgement, latency, prompt
 

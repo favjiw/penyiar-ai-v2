@@ -40,6 +40,10 @@ class LLMError(RuntimeError):
     pass
 
 
+class LLMQuotaExhausted(LLMError):
+    """Kuota harian (RPD) model habis: percuma diulang sampai kuota pulih."""
+
+
 class LLMClient(ABC):
     @abstractmethod
     async def generate(
@@ -151,6 +155,8 @@ class GeminiLLMClient(LLMClient):
                 )
             except Exception as e:
                 last_error = e
+                if "PerDay" in str(e):
+                    raise LLMQuotaExhausted(f"Kuota harian {model} habis: {str(e)[:200]}") from e
                 retryable = any(c in str(e) for c in ("429", "500", "503", "UNAVAILABLE", "RESOURCE_EXHAUSTED"))
                 if not retryable or attempt == self.MAX_RETRIES - 1:
                     break

@@ -147,6 +147,12 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
       {precheck && !onAir && <div className="status">{precheck}</div>}
       {message && <div className="error">{message}</div>}
       {snap.error && <div className="error">Siaran berhenti karena galat: {snap.error}</div>}
+      {live.alerts.length > 0 && (
+        <div className="error" role="status">
+          ⚠ {live.alerts[live.alerts.length - 1].message}
+          {live.alerts.length > 1 && <span className="angle"> (+{live.alerts.length - 1} peringatan sebelumnya)</span>}
+        </div>
+      )}
       {live.audioBlocked && (
         <div className="error" role="alert">
           Browser memblokir audio otomatis.{' '}

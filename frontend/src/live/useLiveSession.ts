@@ -13,6 +13,7 @@ export interface LiveSession {
   supervisor: SupervisorEvent[]
   output: OutputStatus | null
   speaking: string | null
+  alerts: { stage: string; message: string; turn: number }[]
   audioBlocked: boolean
   unlockAudio: () => void
 }
@@ -30,6 +31,7 @@ export function useLiveSession(role: Role): LiveSession {
   const [supervisor, setSupervisor] = useState<SupervisorEvent[]>([])
   const [output, setOutput] = useState<OutputStatus | null>(null)
   const [speaking, setSpeaking] = useState<string | null>(null)
+  const [alerts, setAlerts] = useState<LiveSession['alerts']>([])
   const [audioBlocked, setAudioBlocked] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
@@ -124,6 +126,7 @@ export function useLiveSession(role: Role): LiveSession {
               sessionRef.current = snap.session_id
               setShowrunner(snap.showrunner ? [snap.showrunner] : [])
               setSupervisor([])
+              setAlerts([])
             }
             if (snap.transcript) setTranscript(snap.transcript)
             if (snap.state === 'ended') stopAudio()
@@ -148,6 +151,9 @@ export function useLiveSession(role: Role): LiveSession {
           case 'supervisor':
             setSupervisor((l) => [...l, data].slice(-KEEP))
             break
+          case 'alert':
+            setAlerts((l) => [...l, data].slice(-20))
+            break
           case 'output_status':
             ownerRef.current = data.is_audio_owner
             setOutput(data)
@@ -171,5 +177,5 @@ export function useLiveSession(role: Role): LiveSession {
     }
   }, [role, play, send, stopAudio])
 
-  return { connected, snapshot, transcript, showrunner, supervisor, output, speaking, audioBlocked, unlockAudio }
+  return { connected, snapshot, transcript, showrunner, supervisor, output, speaking, alerts, audioBlocked, unlockAudio }
 }

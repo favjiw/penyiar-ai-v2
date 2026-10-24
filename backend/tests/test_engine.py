@@ -164,7 +164,10 @@ async def test_slow_llm_stages_fall_back_instead_of_dead_air(tmp_path):
         async def generate(self, *a, **kw):
             await asyncio.sleep(30)
 
-    engine, _ = make_engine(tmp_path, PERSONA_TIMEOUT_MS=50, SHOWRUNNER_TIMEOUT_MS=50, SUPERVISOR_MODE="rules", MIN_TURNS_PER_TOPIC=3, FIXED_TURNS_PER_TOPIC=3)
+    engine, _ = make_engine(
+        tmp_path, PERSONA_TIMEOUT_MS=50, SHOWRUNNER_TIMEOUT_MS=50, SUPERVISOR_MODE="rules", MIN_TURNS_PER_TOPIC=3, FIXED_TURNS_PER_TOPIC=3,
+        PERSONA_FAILURES_BEFORE_WRAP=100,  # uji jalur timeout, bukan wrap-up
+    )
     engine.persona_agent._llm = Hanging()
     engine.showrunner._llm = Hanging()
     engine.start()
@@ -199,3 +202,53 @@ async def test_topic_budget_keeps_topic_going_with_new_angles(tmp_path, monkeypa
     assert "jatah topik tersisa" not in t1_end["reason"]  # pindah baru setelah jatah habis
     t1 = [l for l in log if l["type"] == "turn" and l["topic_id"] == "t1"]
     assert len(t1) > 7  # tanpa jatah, mock pindah di giliran 6
+
+
+class _QuotaGone:
+    """LLM yang selalu melaporkan kuota harian habis."""
+
+    def __init__(self, model_ok=None, inner=None):
+        self.model_ok, self.inner, self.models = model_ok, inner, []
+
+    async def generate(self, prompt, *, model, **kw):
+        from app.llm import LLMQuotaExhausted
+
+        self.models.append(model)
+        if model == self.model_ok:
+            return await self.inner.generate(prompt, model=model, **kw)
+        raise LLMQuotaExhausted("GenerateRequestsPerDayPerProjectPerModel-FreeTier")
+
+
+async def test_persona_switches_to_fallback_model_on_daily_quota(tmp_path):
+    engine, events = make_engine(tmp_path, GEMINI_MODEL_PERSONA="utama", GEMINI_MODEL_PERSONA_FALLBACK="cadangan")
+    llm = _QuotaGone(model_ok="cadangan", inner=MockLLMClient(delay_sec=0))
+    engine.persona_agent._llm = llm
+    engine.start()
+    await wait_end(engine)
+    log = list(read_log(engine.log.path))
+    assert log[-1]["reason"] == "completed"
+    assert any(l["type"] == "quota" and l.get("model_to") == "cadangan" for l in log)
+    assert not any(l["type"] == "error" and l["stage"] == "persona" for l in log)
+    assert any(t == "alert" for t, _ in events)
+
+
+async def test_persona_down_for_good_wraps_up_to_closing(tmp_path):
+    engine, events = make_engine(tmp_path, SUPERVISOR_MODE="rules")
+    engine.persona_agent._llm = _QuotaGone()
+    engine.start()
+    await wait_end(engine)
+    turns = [l for l in read_log(engine.log.path) if l["type"] == "turn"]
+    assert len(turns) <= 8  # tidak berputar di kalimat aman sampai topik habis
+    assert turns[-1]["segment"] == "closing"
+    assert any(t == "alert" and "Closing" in d["message"] for t, d in events)
+
+
+async def test_supervisor_drops_to_rules_on_daily_quota(tmp_path):
+    engine, events = make_engine(tmp_path, SUPERVISOR_MODE="full")
+    engine.supervisor._llm = _QuotaGone()
+    engine.start()
+    await wait_end(engine)
+    assert engine.supervisor.mode == "rules"
+    turns = [l for l in read_log(engine.log.path) if l["type"] == "turn"]
+    assert turns[-1]["supervisor"]["mode"] == "rules"
+    assert sum(1 for t, d in events if t == "alert" and "Supervisor" in d["message"]) == 1

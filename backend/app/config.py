@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL_BLOCKER: str = ""
     GEMINI_MODEL_PERSONA: str = ""
+    GEMINI_MODEL_PERSONA_FALLBACK: str = ""  # dipakai bila kuota harian model persona habis
     GEMINI_MODEL_SHOWRUNNER: str = ""
     GEMINI_MODEL_SUPERVISOR: str = ""
     GEMINI_MODEL_TTS: str = ""
@@ -63,6 +64,7 @@ class Settings(BaseSettings):
     SUPERVISOR_TIMEOUT_MS: int = 5000
     PERSONA_TIMEOUT_MS: int = 10000  # lewat batas → kalimat aman, supaya tidak ada siaran hening panjang
     SHOWRUNNER_TIMEOUT_MS: int = 6000  # lewat batas → keputusan fixed_turns
+    PERSONA_FAILURES_BEFORE_WRAP: int = 3  # persona gagal beruntun sebanyak ini → langsung ke Closing
     PIPELINE_DEPTH: int = 1
     OPENING_TURNS: int = 2  # batas lunak Opening (mode B)
     CLOSING_TURNS: int = 2
