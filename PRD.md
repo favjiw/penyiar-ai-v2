@@ -1,10 +1,10 @@
-# PRD Penyiar AI Co-Host Live TikTok HITS (v2.2)
+# PRD Penyiar AI Co-Host Live TikTok HITS (v2.3)
 
 | | |
 |---|---|
 | Pemilik | Muhammad Favian Jiwani (Favian) |
 | Tanggal | 24 Oktober 2026 |
-| Status | Draf v2.2, Tahap 0 berjalan |
+| Status | Draf v2.3, Tahap 2 menunggu pemeriksaan |
 | Menggantikan | Semua PRD dan dokumen desain di repo `conversational-ai`: `PRD-KP-HITS-AI-Live*.md`, `PRD HITS AI Live v1.1`, `docs/avatar/PRD Avatar 3D…`, `docs/KEPUTUSAN-DESAIN.md`, `docs/RUNDOWN-LIVE-1-JAM-DRAF.md` |
 | Repo | `favjiw/penyiar-ai-v2` (public) [F] |
 
@@ -335,6 +335,7 @@ Format setiap FR: deskripsi → aturan → kriteria terima (KT).
   - saat `MIN_TURNS_PER_TOPIC` (default 6) terlewati;
   - Showrunner tidak boleh memutuskan transisi sebelum batas minimum.
 - **Mode B:** keputusan dieksekusi otomatis. `transition` → giliran berikutnya diberi instruksi transisi (memakai kalimat transisi blocker sebagai bahan, bukan dibaca mentah).
+- **Jatah waktu topik [F, 24 Okt 2026]:** blocker tetap 3–5 poin. Bila `SESSION_TARGET_MIN` diisi, tiap topik mendapat jatah = sisa target (dikurangi cadangan Closing) ÷ sisa topik. Di kebijakan `llm`, selama jatah masih ada, keputusan pindah diubah menjadi `steer` ke poin yang belum dibahas atau ke **sudut baru di luar poin** (`new_angle`, tidak diulang) yang masih nyambung ke topik; setelah jatah habis dan ≥60% poin tercakup, topik dipindah. Saat LLM Showrunner gagal atau timeout, jatah ini tetap yang menentukan. Kebijakan baseline (`fixed_turns`, `coverage_only`) tidak memakai jatah.
 - **Mode A:** hanya saran di prompter dan konsol, misalnya "Poin tercakup 3/5 · saran: bahas 'ospek online vs offline' · siap pindah". AI juga mendapat `steer_hint` sebagai konteks.
 - **Baseline publikasi** (bisa dipilih lewat config):
   - `fixed_turns` (pindah setiap X giliran);
@@ -786,7 +787,7 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 
 | Risiko | Dampak | Mitigasi |
 |---|---|---|
-| Kuota free tier tidak cukup untuk 60 menit | Live berhenti atau terdegradasi | Model per peran, aturan sebelum LLM, Showrunner tiap k giliran, failover (§8), live uji 20 menit dulu |
+| Kuota free tier tidak cukup untuk 60 menit | Live berhenti atau terdegradasi | Terukur di Tahap 2: **500 RPD per model**; sesi 20 menit ±240 request bila persona dan Supervisor satu model. Model per peran, `GEMINI_MODEL_PERSONA_FALLBACK`, Supervisor turun ke `rules` dan persona gagal beruntun → Closing (sudah diterapkan), aturan sebelum LLM |
 | Latensi mode A terasa canggung | Pengalaman siaran buruk | Filler, TTS per kalimat, jawaban pendek, PTT |
 | Avatar T1 tidak sinkron bibir | Dinilai kurang realistis | Komunikasikan batasan; T2 bila lolos; framing kamera agak jauh / mic menutupi sebagian mulut (seperti referensi) |
 | GTX 1080 terlalu lambat untuk T2 | T2 batal | T1 tetap jalan; angka RTF menjadi temuan |
@@ -813,7 +814,7 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 |---|---|---|---|
 | 0 Uji kelayakan | Berjalan | 24 Okt 2026 | Alat uji di `tahap0/` siap. TTS terukur: Edge, Gemini (free tier 3 RPM, terlalu lambat untuk live), ElevenLabs flash (p50 0,55 s) dipilih sebagai TTS utama [F], Edge failover. Menunggu: penilaian dengar TTS, rekaman STT, kuota AI Studio, klip Flow, PC lab. Lihat `tahap0/HASIL.md`. |
 | 1 Fondasi + Blocker | Menunggu pemeriksaan Favian | 24 Okt 2026 | Backend (config, skema, LLM + rate limiter, TTS ElevenLabs/Edge + breaker, persona) dan FR-1 lengkap (API + konsol: generate, bandingkan, edit, kunci, versi, buat ulang). 27 tes lulus. KT otomatis: 10/10 tema valid dalam 5,8–8,1 s (`gemini-3.5-flash-lite`, prompt `blocker-v2`). Sisa KT: penilaian layak siar ≥8/10 di `docs/kt/FR-1-blocker.md`. Catatan: repo lama ternyata tidak punya breaker TTS (FR-6), jadi dibuat baru. Repo lama sudah diberi tag `v1-format-clock` dan README arsip. |
-| 2 Mode B inti | Menunggu keputusan Favian | 24 Okt 2026 | FR-2/3/4/5/6/12 + konsol live + stage sementara (HUD + audio) selesai; 65 tes lulus. 3 sesi live dari blocker tanpa crash/intervensi (`docs/kt/tahap2-gate-*.md`). Sesi 3: Supervisor p50 1,18 s, jeda p50 0 s / p95 8,5 s (satu menit API lambat), 52/52 ElevenLabs, 1.619 kredit. **Gerbang 20 menit belum tercapai:** blocker 3 topik × 3–5 poin habis di ±8–9 menit (Showrunner pindah topik setelah poin tercakup dan obrolan jenuh). Perlu keputusan: tambah materi blocker, atau longgarkan Showrunner, atau ubah definisi gerbang. Nilai MIN/MAX per topik (§15.2 #4) dipakai 8/60 di uji ini. |
+| 2 Mode B inti | Menunggu pemeriksaan Favian | 24 Okt 2026 | FR-2/3/4/5/6/12, konsol live, dan stage sementara (HUD + audio) selesai; 74 tes lulus. **Gerbang:** sesi mode B dari blocker **21,4 menit tanpa crash dan tanpa intervensi**, log lengkap (`docs/kt/tahap2-gate-4.md`). Topik 1–2 memakai jatah waktu dengan 18 sudut baru; topik 3 terdegradasi karena kuota harian Gemini (500 RPD/model) habis, dan penanganannya sudah diperbaiki. Supervisor p50 1,18 s di sesi tanpa gangguan kuota (`tahap2-gate-3.md`). Belum: jeda p95 ≤4 s, sesi 20 menit ulang dengan kuota segar, penilaian dengar transkrip. Nilai uji `MIN/MAX_TURNS_PER_TOPIC` 8/60 (§15.2 #4). |
 | 3 Avatar T1 + OBS | Belum | | |
 | 4 Mode A | Belum | | |
 | 5 Avatar T2 | Belum | | |
@@ -831,6 +832,9 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
   - pengecualian biaya Rp0 khusus TTS (§1.3, §2.3, §8);
   - FR-6, §6.1, §9.2, §12, §15.1, dan Lampiran B disesuaikan;
   - repo diputuskan `favjiw/penyiar-ai-v2` (§0, §15.2 #6).
+- **v2.3 (24 Okt 2026):** hasil gerbang Tahap 2 [F]:
+  - FR-4: jatah waktu topik; Showrunner mengarahkan ke sudut baru di luar poin sampai jatah habis (blocker tetap 3–5 poin);
+  - §15.1: kuota free tier terukur 500 RPD per model, beserta mitigasinya.
 
 ---
 
