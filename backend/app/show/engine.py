@@ -144,6 +144,7 @@ class ShowEngine:
         self.transcript: list[dict[str, Any]] = []
         self.on_air: dict[str, Any] = {"segment": "opening", "topic": None, "speaking": None}
         self.last_showrunner: Optional[ShowrunnerDecision] = None
+        self._on_air_pos: tuple[Segment, int] = ("opening", 0)  # posisi yang sedang terdengar
         self.started_at = 0.0
         self._resume = asyncio.Event()
         self._resume.set()
@@ -210,8 +211,11 @@ class ShowEngine:
         """Lompat ke topik berikutnya (atau penutup); giliran yang sudah disiapkan dibuang."""
         if self.state not in (ShowState.LIVE, ShowState.PAUSED) or self.plan.finished:
             return
-        before = (self.plan.segment, self.plan.topic_idx)
+        # Rencana bisa sudah satu giliran di depan (giliran pertama topik berikutnya sudah
+        # disiapkan); skip dihitung dari yang sedang on air, bukan dari rencana.
+        before = self._on_air_pos
         self.epoch += 1
+        self.plan = Plan(segment=before[0], topic_idx=before[1])
         self._advance_segment()
         self.log.event("operator_action", action="skip", from_segment=before[0], from_topic_idx=before[1], to_segment=self.plan.segment)
         await self._emit("stop_audio", {"reason": "skip"})
@@ -404,6 +408,7 @@ class ShowEngine:
     # ── Pemutaran ────────────────────────────────────────────────────────────
 
     async def _play(self, t: PreparedTurn) -> None:
+        self._on_air_pos = (t.segment, self.blocker.topics.index(t.topic) if t.topic else 0)
         if t.starts_topic is not None:
             topic = {"id": t.starts_topic.id, "judul": t.starts_topic.judul, "pertanyaan_penonton": t.starts_topic.pertanyaan_penonton}
             self.on_air.update(segment="topic", topic=topic)

@@ -72,11 +72,13 @@ async def test_skip_jumps_to_next_topic(tmp_path):
     engine.start()
     while engine.on_air["segment"] != "topic":
         await asyncio.sleep(0.01)
+    await asyncio.sleep(0.05)  # biarkan giliran berikutnya sudah disiapkan (pipelining)
     await engine.skip()
     await wait_end(engine)
     turns = [l for l in read_log(engine.log.path) if l["type"] == "turn"]
     t1 = [t for t in turns if t["topic_id"] == "t1"]
     assert len(t1) < 6  # topik 1 dipotong operator
+    assert sum(1 for t in turns if t["topic_id"] == "t2") >= 6  # topik 2 tidak ikut terlewati
     assert any(l["type"] == "operator_action" and l["action"] == "skip" for l in read_log(engine.log.path))
 
 
@@ -141,3 +143,15 @@ async def test_report_summarizes_session(tmp_path):
     assert s["topics"]["t1"]["ended_by"] == "transition" and s["topics"]["t2"]["ended_by"] == "close"
     md = transcript_md(lines)
     assert "## Topik 1" in md and "**Raka:**" in md
+
+
+async def test_skip_while_next_topic_is_prefetched_moves_one_topic(tmp_path):
+    engine, _ = make_engine(tmp_path, time_scale=0.05)
+    engine.start()
+    # Tunggu momen rencana sudah di topik 2 sementara yang terdengar masih topik 1.
+    while not (engine.plan.segment == "topic" and engine.plan.topic_idx == 1 and engine._on_air_pos == ("topic", 0)):
+        await asyncio.sleep(0.005)
+    await engine.skip()
+    await wait_end(engine)
+    turns = [l for l in read_log(engine.log.path) if l["type"] == "turn"]
+    assert sum(1 for t in turns if t["topic_id"] == "t2") >= 6
