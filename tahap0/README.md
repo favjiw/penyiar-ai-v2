@@ -15,7 +15,7 @@ cp .env.example .env   # isi GEMINI_API_KEY dan GEMINI_MODEL_TTS
 | Uji | Alat | Status |
 |---|---|---|
 | Kuota free tier | `quota.md` + `quota_calc.py` | Sebagian: 500 RPD/model terukur dari 429 |
-| TTS Gemini vs Edge vs ElevenLabs | `tts_bench.py`, `el_audition.py`, `audio_judge.py` | Terukur; menunggu penilaian dengar |
+| TTS Gemini vs Edge vs ElevenLabs | `tts_bench.py`, `el_audition.py`, `audio_judge.py` | Selesai: suara disetujui Favian |
 | STT Web Speech vs faster-whisper | `stt_webspeech.html`, `stt_bench.py` + `data/stt_sentences.txt` | Belum |
 | Avatar T1 crossfade | `crossfade_test.html` | Belum |
 | Avatar T2 RTF | `t2_rtf.py` | Belum |

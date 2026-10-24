@@ -65,6 +65,8 @@ Dakocan, Senandika, Tri Nugraha, dan Honeypie menyisipkan/mengulang kata ("perna
 
 **Keputusan:** Favian memilih ElevenLabs flash sebagai TTS utama; PRD diperbarui ke v2.2 (pengecualian Rp0 khusus TTS).
 
+**Penilaian dengar (24 Okt 2026):** Favian mendengar sampel Pratama (Raka) dan Aita (Salsa) beserta pembanding (Ginanjar, Kira, Edge) dan menyatakan suara sudah oke [F]. KT FR-6 lengkap (5 penilai, skor ≥3,5) masih menunggu penilai lain.
+
 ## STT
 
 Belum. Web Speech: `stt_webspeech.html`. faster-whisper: `stt_bench.py` di PC lab dengan rekaman dari halaman yang sama.
@@ -101,6 +103,6 @@ Belum: perlu PC lab. Ukur dengan `t2_rtf.py`. Catatan: di laptop MX250, `nvidia-
 | Keputusan | Pilihan | Alasan |
 |---|---|---|
 | STT | | |
-| TTS utama | **ElevenLabs `eleven_flash_v2_5`** (Pratama = Raka, Aita = Salsa), Edge failover [F, 24 Okt 2026] | Flash p50 0,55 s dan setia teks; Gemini free tier 3 RPM, p50 12,7 s. PRD v2.2 |
+| TTS utama | **ElevenLabs `eleven_flash_v2_5`** (Pratama = Raka, Aita = Salsa), Edge failover [F, 24 Okt 2026]; suara disetujui Favian setelah didengar | Flash p50 0,55 s dan setia teks; Gemini free tier 3 RPM, p50 12,7 s. PRD v2.2 |
 | T2 | | |
 | `PIPELINE_DEPTH` | | |
