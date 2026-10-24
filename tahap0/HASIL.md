@@ -71,14 +71,22 @@ Belum. Web Speech: `stt_webspeech.html`. faster-whisper: `stt_bench.py` di PC la
 
 ## Kuota
 
-Belum. Isi `quota.md`. Perkiraan kebutuhan mode B dengan asumsi default (giliran 8 s + jeda 1 s, Showrunner tiap 3 giliran, 10% regenerasi):
+Diukur dari error 429 saat uji (24 Okt 2026), bukan dari dasbor AI Studio; angka RPM teks belum terlihat.
 
-| Peran | req/menit | 20 menit | 60 menit |
-|---|---|---|---|
-| persona | 7,3 | 147 | 441 |
-| supervisor (full) | 7,3 | 147 | 441 |
-| showrunner | 2,2 | 45 | 134 |
-| tts | 6,7 | 134 | 400 |
+| Model | Batas terukur | Catatan |
+|---|---|---|
+| `gemini-3.8-flash-tts` | 3 RPM | Tidak dipakai di live |
+| `gemini-3.5-flash-lite` | **500 RPD** | `gemini-flash-lite-latest` alias model ini (kuota bersama) |
+| `gemini-3.1-flash-lite` | (RPD belum kena) | Sering 503 "high demand" |
+
+Kebutuhan terukur dari sesi mode B 20 menit (Tahap 2): ±100 giliran → ±100 request persona, ±100 Supervisor (`full`), ±35 Showrunner. Bila persona dan Supervisor di model yang sama: ±240 request/sesi, jadi **±2 sesi 20 menit per hari per model**, atau 1 sesi 60 menit tidak muat sama sekali.
+
+Konsekuensi untuk live 60 menit dan eksperimen FR-14:
+- pisahkan peran ke model berbeda (masing-masing 500 RPD), dan isi `GEMINI_MODEL_PERSONA_FALLBACK`;
+- Supervisor `rules` (tanpa LLM) menghemat ±100 request per 20 menit;
+- eksperimen offline mode B perlu dijadwalkan lintas hari atau memakai beberapa model.
+
+Masih perlu: cek dasbor AI Studio untuk RPM/RPD resmi semua model, isi `quota.md`.
 
 ## Avatar T1
 
