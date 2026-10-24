@@ -393,8 +393,7 @@ class ShowEngine:
             prog.audio_s += prepared.duration_s
             prog.history.append(self.history[-1])
             if self.showrunner.should_call(prog):
-                hint = f"target total ±{self.settings.SESSION_TARGET_MIN} menit" if self.settings.SESSION_TARGET_MIN else ""
-                decision = await self.showrunner.decide(prog, prepared.turn, hint)
+                decision = await self.showrunner.decide(prog, prepared.turn, self._pacing_hint(ctx.topic, prog))
                 self.last_showrunner = decision
                 self.log.event("showrunner", decision)
                 await self._emit("showrunner", decision.model_dump())
@@ -404,6 +403,21 @@ class ShowEngine:
                     p.pending = "transition"
                 elif decision.decision == "close":
                     p.pending = "to_closing"
+
+    def _pacing_hint(self, topic: BlockerTopic, prog: TopicProgress) -> str:
+        """Petunjuk lunak durasi untuk Showrunner (FR-4): jatah per topik vs yang sudah berjalan."""
+        target = self.settings.SESSION_TARGET_MIN
+        if not target:
+            return ""
+        n = len(self.blocker.topics)
+        idx = self.blocker.topics.index(topic)
+        elapsed = (time.monotonic() - self.started_at) / 60 if self.started_at else 0
+        remaining_topics = n - idx
+        budget = max(1.0, (target - elapsed) / remaining_topics + prog.audio_s / 60)
+        return (
+            f"siaran sudah ±{elapsed:.0f} dari target ±{target} menit; ini topik {idx + 1} dari {n}; "
+            f"jatah lunak topik ini ±{budget:.0f} menit, sudah berjalan ±{prog.audio_s / 60:.1f} menit"
+        )
 
     # ── Pemutaran ────────────────────────────────────────────────────────────
 
