@@ -128,8 +128,23 @@ class Showrunner:
         return decision, hint, reason
 
     def fallback_decision(self, p: TopicProgress, turn: int, reason: str) -> ShowrunnerDecision:
-        """Keputusan tanpa LLM (kuota habis, jaringan, atau batas waktu): aturan fixed_turns."""
-        return self._fixed(p, turn, reason=reason)
+        """Keputusan tanpa LLM (kuota habis, jaringan, atau batas waktu).
+
+        Bila topik punya jatah waktu (kebijakan llm), jatah itu yang menentukan:
+        lanjut selama jatah ada, pindah setelah habis. Tanpa jatah: aturan fixed_turns.
+        """
+        left = p.time_left_s
+        if self.policy != "llm" or left is None:
+            return self._fixed(p, turn, reason=reason)
+        go = left <= 0 and p.turns >= self.min_turns
+        return ShowrunnerDecision(
+            turn=turn,
+            topic_id=p.topic.id,
+            points_covered=sorted(p.covered),
+            decision=("close" if p.is_last else "transition") if go else "continue",
+            reason=f"{reason}; jatah {'habis' if go else f'tersisa ±{left:.0f} s'}",
+            policy="budget",
+        )
 
     async def decide(self, p: TopicProgress, turn: int, target_hint: str = "") -> ShowrunnerDecision:
         valid_ids = {pt.id for pt in p.topic.poin}
@@ -157,8 +172,8 @@ class Showrunner:
             )
             j = ShowrunnerJudgement.model_validate(resp.parsed)
         except (LLMError, ValueError) as e:
-            logger.warning("Showrunner LLM gagal, pakai fixed_turns: %s", e)
-            return self._fixed(p, turn, reason=f"LLM gagal ({str(e)[:80]}); fixed_turns")
+            logger.warning("Showrunner LLM gagal, pakai aturan cadangan: %s", e)
+            return self.fallback_decision(p, turn, f"LLM gagal ({str(e)[:80]})")
         latency = int((time.perf_counter() - start) * 1000)
 
         # Cakupan hanya bertambah; id yang tidak ada di topik diabaikan.

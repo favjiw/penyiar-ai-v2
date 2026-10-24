@@ -219,7 +219,7 @@ class ShowrunnerDecision(BaseModel):
     steer_hint: str = ""
     next_speaker: Optional[str] = None
     reason: str = ""
-    policy: ShowrunnerPolicy = "llm"
+    policy: Literal["llm", "fixed_turns", "coverage_only", "budget"] = "llm"  # budget = cadangan berbasis jatah waktu
     forced: bool = False
     latency_ms: int = 0
 

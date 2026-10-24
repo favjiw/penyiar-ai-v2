@@ -108,3 +108,13 @@ async def test_budget_spent_moves_on_once_coverage_is_enough():
 async def test_budget_rule_only_for_llm_policy():
     d = await sr(_Judge(points_covered=["t1p1", "t1p2", "t1p3"]), "coverage_only").decide(budgeted(9, elapsed=10), 1)
     assert d.decision == "transition"
+
+
+
+async def test_fallback_respects_topic_budget():
+    s = sr(_Down(), fixed_turns=6)
+    early = await s.decide(budgeted(26, elapsed=200), 1)
+    assert early.decision == "continue" and early.policy == "budget" and "tersisa" in early.reason
+    late = await s.decide(budgeted(26, elapsed=400), 1)
+    assert late.decision == "transition" and "habis" in late.reason
+    assert s.fallback_decision(budgeted(26, elapsed=200), 1, "timeout").decision == "continue"

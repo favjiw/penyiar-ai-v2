@@ -402,7 +402,7 @@ class ShowEngine:
                         self.showrunner.decide(prog, prepared.turn, self._pacing_hint(ctx.topic, prog)), self.settings.SHOWRUNNER_TIMEOUT_MS / 1000
                     )
                 except asyncio.TimeoutError:
-                    decision = self.showrunner.fallback_decision(prog, prepared.turn, "melewati SHOWRUNNER_TIMEOUT_MS; fixed_turns")
+                    decision = self.showrunner.fallback_decision(prog, prepared.turn, "melewati SHOWRUNNER_TIMEOUT_MS")
                 self.last_showrunner = decision
                 self.log.event("showrunner", decision)
                 await self._emit("showrunner", decision.model_dump())
