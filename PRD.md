@@ -1,10 +1,10 @@
-# PRD Penyiar AI Co-Host Live TikTok HITS (v2.1)
+# PRD Penyiar AI Co-Host Live TikTok HITS (v2.2)
 
 | | |
 |---|---|
 | Pemilik | Muhammad Favian Jiwani (Favian) |
 | Tanggal | 24 Oktober 2026 |
-| Status | Draf v2.1, siap dikerjakan mulai Tahap 0 |
+| Status | Draf v2.2, Tahap 0 berjalan |
 | Menggantikan | Semua PRD dan dokumen desain di repo `conversational-ai`: `PRD-KP-HITS-AI-Live*.md`, `PRD HITS AI Live v1.1`, `docs/avatar/PRD Avatar 3D…`, `docs/KEPUTUSAN-DESAIN.md`, `docs/RUNDOWN-LIVE-1-JAM-DRAF.md` |
 | Repo | `favjiw/penyiar-ai-v2` (public) [F] |
 
@@ -49,7 +49,7 @@ Live TikTok HITS Unikom Radio adalah kamera yang merekam studio on-air: penyiar 
 - Mode A: 1 penyiar manusia + 1 AI. Penyiar memilih lawan bicara AI (Raka atau Salsa) sebelum live [F].
 - Mode B: AI + AI penuh otomatis; agen tahu kapan pindah topik [F].
 - Tahap awal: komentar dibaca dan dipandu penyiar manusia, AI hanya menanggapi penyiar [F].
-- Tanpa biaya: semua komponen harus gratis [F].
+- Tanpa biaya: semua komponen harus gratis [F], **kecuali TTS**: ElevenLabs dipakai sebagai TTS utama (keputusan 24 Okt 2026, lihat FR-6) [F].
 - Agen Showrunner disetujui dan menjadi fokus publikasi [F]. Supervisor tetap fokus skripsi.
 - Isi topik di blocker mengikuti usulan Claude (FR-1) [F].
 - Perangkat:
@@ -93,7 +93,7 @@ Live TikTok HITS Unikom Radio adalah kamera yang merekam studio on-air: penyiar 
 - AI membaca komentar TikTok sendiri (setidaknya di tahap awal).
 - Telepon pendengar.
 - Roleplay 3M/SKEMA.
-- Layanan berbayar apa pun: ElevenLabs, HeyGen, Tavus, GPU cloud berbayar.
+- Layanan berbayar apa pun selain ElevenLabs untuk TTS [F]: HeyGen, Tavus, GPU cloud berbayar, dan sejenisnya.
 
 ---
 
@@ -201,7 +201,7 @@ Operator: pause / skip topik / stop, kapan saja
 │   ├─ Persona Engine (LLM, per persona)                   │
 │   ├─ Showrunner (LLM)                                    │
 │   ├─ Supervisor (LLM + aturan)                           │
-│   ├─ TTS Service (Gemini TTS ↔ Edge TTS, cache)          │
+│   ├─ TTS Service (ElevenLabs ↔ Edge TTS, cache)          │
 │   ├─ STT Service (mode A)                                │
 │   ├─ Avatar Service T2 (opsional, worker GPU PC lab)     │
 │   ├─ Comment Ingest + Supervisor (FR-13, skripsi)        │
@@ -376,18 +376,24 @@ Kode Supervisor di repo lama masih **stub**: prompt satu baris, tanpa koreksi da
   - semua verdict tercatat di log.
 
 ### FR-6 TTS
-- **Utama [C]:** Gemini TTS lewat AI Studio free tier. Model diatur lewat `GEMINI_MODEL_TTS` dan diverifikasi di Tahap 0. Gaya diatur lewat prompt dan tag (mis. tawa).
-- **Cadangan gratis [C]:** Edge TTS (pustaka tidak resmi `edge-tts`):
+- **Utama [F]:** ElevenLabs, model `eleven_flash_v2_5` (diatur lewat `ELEVENLABS_MODEL`, tidak di-hard-code), endpoint streaming.
+  - Raka: suara **Pratama** (`q8qwd1jY2jS3AWOBeq25`); cadangan Ginanjar (`JjCMg2oeB7ExbMJUJHSK`).
+  - Salsa: suara **Aita** (`ffTJE9l3Kt2ipEM32UOc`); cadangan Kira (`gmnazjXOFoOcWA59sd5m`).
+  - Voice ID diatur lewat `ELEVENLABS_VOICE_*` / kartu persona.
+  - Alasan (Tahap 0, `tahap0/HASIL.md`): latensi p50 0,55 s dan byte pertama ±0,45 s; transkrip setia teks. Gemini TTS free tier hanya 3 RPM dengan latensi p50 12,7 s, jadi tidak layak untuk live.
+  - Suara library kadang cold start 15–20 s pada request pertama: cek pra-live wajib memanaskan (warm-up) kedua suara.
+  - Pemakaian kredit dipantau (header `character-cost`, ±0,2 kredit/karakter di flash) dan ditampilkan di konsol bersama status kuota.
+- **Failover [F]:** Edge TTS (pustaka tidak resmi `edge-tts`), gratis:
   - pria `id-ID-ArdiNeural`;
   - wanita `id-ID-GadisNeural`.
 
   Konfigurasi lama memakai `su-ID-TutiNeural` (Sunda); ganti.
-- **Failover otomatis** ke cadangan bila galat atau kuota habis (breaker seperti di repo lama).
+- **Failover otomatis** ke Edge bila ElevenLabs galat, timeout, atau kredit habis (breaker seperti di repo lama). `aiohttp` untuk Edge memakai resolver DNS sistem (temuan Tahap 0).
 - **Dipecah per kalimat untuk mode A:** kalimat pertama di-TTS dan diputar sambil sisanya dibuat.
 - **Bank filler per persona:** 15–25 klip pendek ("hmm", "wah", "iya juga ya", tawa kecil, "bentar-bentar"), dibuat sekali lalu di-cache.
-- Tidak ada ElevenLabs atau VoiceStudio di jalur utama (berbayar).
+- Gemini TTS tidak dipakai di jalur live; boleh dipakai offline untuk bank filler bila kualitasnya lebih disukai. VoiceStudio tidak dipakai.
 - **KT:**
-  - 5 penilai (minimal Favian + 2 rekan + 2 penyiar HITS bila bisa) memberi skor ≥3,5/5 untuk "tidak terdengar seperti robot" pada sampel Gemini TTS;
+  - 5 penilai (minimal Favian + 2 rekan + 2 penyiar HITS bila bisa) memberi skor ≥3,5/5 untuk "tidak terdengar seperti robot" pada sampel ElevenLabs (Pratama dan Aita);
   - failover teruji.
 
 ### FR-7 Input penyiar mode A (PTT + STT)
@@ -519,8 +525,8 @@ Kode Supervisor di repo lama masih **stub**: prompt satu baris, tanpa koreksi da
 
 | Aspek | Kebutuhan |
 |---|---|
-| Biaya | Rp0 [F]: Gemini free tier, Edge TTS, model open source, perangkat yang ada. |
-| Kuota | Rate limiter per model (`GEMINI_RPM_*`). Model berbeda per peran untuk membagi beban: persona, Supervisor, Showrunner, blocker. Status kuota tampil di konsol. Bila kuota habis: TTS ke Edge, Supervisor ke `rules`, Showrunner ke `fixed_turns`; semua tercatat. |
+| Biaya | Rp0 [F] untuk semua komponen kecuali TTS: Gemini free tier, Edge TTS, model open source, perangkat yang ada. TTS utama ElevenLabs (berbayar/kredit) [F]; pemakaian kredit dicatat per sesi. |
+| Kuota | Rate limiter per model (`GEMINI_RPM_*`). Model berbeda per peran untuk membagi beban: persona, Supervisor, Showrunner, blocker. Status kuota tampil di konsol. Bila kuota atau kredit habis: TTS ElevenLabs ke Edge, Supervisor ke `rules`, Showrunner ke `fixed_turns`; semua tercatat. |
 | Latensi | Mode B: jeda antargiliran p95 ≤4 s (T1). Mode A: §FR-7. |
 | Keandalan | Live uji 20 menit tanpa crash (KP); 60 menit (target akhir). Reconnect WS otomatis. Status live tetap benar setelah reload. |
 | Kepatuhan TikTok | Label AI di layar, penyampaian di pembukaan bahwa penyiar adalah AI, dan pengaturan label konten AI TikTok diaktifkan. Uji coba di akun pribadi dulu. |
@@ -570,7 +576,7 @@ Kode Supervisor di repo lama masih **stub**: prompt satu baris, tanpa koreksi da
 ### 9.2 Kartu persona
 Sama dengan `PersonaCard` di repo lama (`id`, `name`, `gender`, `voice`, `speaking_style`, `catchphrases`, `topic_limits`, `background_facts`, `do_not`, `opinions`), ditambah:
 ```json
-{ "voices": {"gemini": "<nama voice>", "edge": "id-ID-ArdiNeural"},
+{ "voices": {"elevenlabs": "q8qwd1jY2jS3AWOBeq25", "edge": "id-ID-ArdiNeural"},
   "clips": "assets/avatar/raka/manifest.json",
   "filler_bank": "assets/filler/raka/" }
 ```
@@ -665,7 +671,7 @@ Repo lama **tidak diubah**. Beri tag `v1-format-clock` di commit `a3e04ca` dan t
 | Ambil | Dari | Catatan |
 |---|---|---|
 | Klien LLM + rate limiter + mock | `backend/app/llm/client.py`, `rate_limiter.py` | Tambah limiter per peran. |
-| TTS (Gemini, Edge, cache, breaker, word timings) | `backend/app/tts/provider.py` | Buang ElevenLabs/VoiceStudio dari jalur utama; perbaiki voice Edge wanita ke `id-ID`. |
+| TTS (Gemini, Edge, cache, breaker, word timings) | `backend/app/tts/provider.py` | Pertahankan ElevenLabs sebagai utama (streaming, `character-cost`); buang VoiceStudio; perbaiki voice Edge wanita ke `id-ID`. |
 | Prompt persona `natural_v2`, anti-repetisi, dialog act, catchphrase | `backend/app/conversation/engine.py` | Pisahkan menjadi `agents/persona.py`; buang kode slot/Tema lama. |
 | Gaya HITS | `backend/app/conversation/hits_style.py` | Buang `song_recap_hint`. |
 | Persona Raka dan Salsa | `backend/app/data/persona/*.json` | Tambah field §9.2. |
@@ -700,7 +706,7 @@ Repo lama **tidak diubah**. Beri tag `v1-format-clock` di commit `a3e04ca` dan t
 - `demo-3d-realistic.mp4`, `demo-animation.mp4`: hanya arsip progres KP.
 - `backend/logs/session_*.jsonl`, `clock_*.music.jsonl`: log uji pengembangan, bukan data eksperimen.
 - `cache/`, `external/hits-song-recommender`, `data/station_audio/`, empat model VRM yang belum di-commit.
-- `.env`: **jangan disalin**. Buat `.env` baru dari `.env.example`. Catatan progres lama menyebut key ElevenLabs dan Groq pernah tertulis di chat; pastikan sudah dirotasi atau dicabut, karena keduanya tidak dipakai lagi.
+- `.env`: **jangan disalin**. Buat `.env` baru dari `.env.example`. Catatan progres lama menyebut key ElevenLabs dan Groq pernah tertulis di chat; pastikan sudah dirotasi atau dicabut. Key ElevenLabs baru hanya disimpan di `.env`.
 
 ---
 
@@ -786,7 +792,8 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 | GTX 1080 terlalu lambat untuk T2 | T2 batal | T1 tetap jalan; angka RTF menjadi temuan |
 | Kebijakan TikTok soal suara dan konten AI realistis | Live dibatasi atau diturunkan | Label AI, pengumuman di pembukaan, akun pribadi untuk uji, ada operator manusia |
 | TikTokLive (pustaka tidak resmi) rusak | FR-13 gagal | Input manual operator |
-| Edge TTS (tidak resmi) berubah atau diblokir | Cadangan TTS hilang | Gemini TTS utama; cek ulang berkala |
+| Edge TTS (tidak resmi) berubah atau diblokir | Cadangan TTS hilang | ElevenLabs utama; cek ulang berkala |
+| Kredit ElevenLabs habis saat live | Suara berganti ke Edge di tengah siaran | Pantau kredit di konsol dan cek pra-live; perkirakan kebutuhan per sesi (±4 rb kredit per 20 menit mode B di flash, `tahap0/HASIL.md`); failover Edge |
 | Generator blocker mengarang fakta | Salah informasi on-air | Larangan klaim spesifik, `perlu_cek`, operator memeriksa sebelum kunci |
 | Wajah karakter Flow mirip orang nyata | Masalah etika | Pastikan karakter fiktif; jangan memakai foto orang sebagai referensi |
 
@@ -804,7 +811,7 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 
 | Tahap | Status | Tanggal | Catatan |
 |---|---|---|---|
-| 0 Uji kelayakan | Berjalan | 24 Okt 2026 | Alat uji di `tahap0/` siap. TTS terukur: Edge, Gemini (free tier 3 RPM, terlalu lambat untuk live), ElevenLabs flash (p50 0,55 s; berbayar, bertentangan dengan §2.3/§8, menunggu keputusan [F]). Menunggu: penilaian dengar TTS, rekaman STT, kuota AI Studio, klip Flow, PC lab. Lihat `tahap0/HASIL.md`. |
+| 0 Uji kelayakan | Berjalan | 24 Okt 2026 | Alat uji di `tahap0/` siap. TTS terukur: Edge, Gemini (free tier 3 RPM, terlalu lambat untuk live), ElevenLabs flash (p50 0,55 s) dipilih sebagai TTS utama [F], Edge failover. Menunggu: penilaian dengar TTS, rekaman STT, kuota AI Studio, klip Flow, PC lab. Lihat `tahap0/HASIL.md`. |
 | 1 Fondasi + Blocker | Belum | | |
 | 2 Mode B inti | Belum | | |
 | 3 Avatar T1 + OBS | Belum | | |
@@ -819,6 +826,11 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
   - sumber diganti ke branch `talk-durasi`;
   - ditambah jendela stage popup, `launch.json`, transkrip/analisis live HITS, dan data pilot identity drift;
   - ditambah daftar yang sengaja tidak diambil.
+- **v2.2 (24 Okt 2026):** keputusan TTS dari hasil Tahap 0 [F]:
+  - TTS utama ElevenLabs `eleven_flash_v2_5` (Pratama untuk Raka, Aita untuk Salsa), Edge TTS sebagai failover;
+  - pengecualian biaya Rp0 khusus TTS (§1.3, §2.3, §8);
+  - FR-6, §6.1, §9.2, §12, §15.1, dan Lampiran B disesuaikan;
+  - repo diputuskan `favjiw/penyiar-ai-v2` (§0, §15.2 #6).
 
 ---
 
@@ -861,7 +873,9 @@ GEMINI_MODEL_BLOCKER=   GEMINI_MODEL_PERSONA=   GEMINI_MODEL_SHOWRUNNER=
 GEMINI_MODEL_SUPERVISOR=  GEMINI_MODEL_TTS=   GEMINI_MODEL_JUDGE=
 GEMINI_RPM_PERSONA=  GEMINI_RPM_SUPERVISOR=  GEMINI_RPM_SHOWRUNNER=  GEMINI_RPM_TTS=
 # TTS
-TTS_PRIMARY=gemini   TTS_FALLBACK=edge
+TTS_PRIMARY=elevenlabs   TTS_FALLBACK=edge
+ELEVENLABS_API_KEY=   ELEVENLABS_MODEL=eleven_flash_v2_5
+ELEVENLABS_VOICE_MALE=q8qwd1jY2jS3AWOBeq25   ELEVENLABS_VOICE_FEMALE=ffTJE9l3Kt2ipEM32UOc
 EDGE_VOICE_MALE=id-ID-ArdiNeural   EDGE_VOICE_FEMALE=id-ID-GadisNeural
 # STT (mode A)
 STT_PROVIDER=webspeech|faster_whisper|gemini   FASTER_WHISPER_URL=
