@@ -1,0 +1,39 @@
+# Env
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Runtime output
+logs/*
+!logs/.gitkeep
+backend/logs/*
+!backend/logs/.gitkeep
+cache/
+backend/cache/
+tahap0/out/
+
+# Large media (aset avatar dikelola terpisah)
+*.mp4
+*.wav
+*.mp3
+
+# OS / IDE
+.idea/
+.vscode/*
+.DS_Store
+Thumbs.db
+desktop.ini
