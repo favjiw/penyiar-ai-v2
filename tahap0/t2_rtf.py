@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import shlex
 import shutil
 import subprocess
 import threading
@@ -91,7 +90,7 @@ def main() -> None:
             sampler = VramSampler()
             sampler.start()
             start = time.perf_counter()
-            proc = subprocess.run(shlex.split(cmd, posix=False), cwd=args.cwd, capture_output=True, text=True)
+            proc = subprocess.run(cmd, shell=True, cwd=args.cwd, capture_output=True, text=True)
             elapsed = time.perf_counter() - start
             peak = sampler.stop()
             row = {
