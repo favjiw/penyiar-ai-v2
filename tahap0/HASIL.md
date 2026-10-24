@@ -33,6 +33,38 @@ Kesimpulan sementara [C]:
 - Usulan: **Edge TTS sebagai utama**. Gemini TTS dipakai offline untuk bank filler dan klip yang di-cache, bila kualitasnya dinilai jauh lebih baik.
 - Masih perlu: penilaian "robot atau tidak" atas `gemini_male_01..07.wav` dibanding `edge_male_01..07.mp3`, serta pengecekan RPD di AI Studio.
 
+### ElevenLabs (24 Okt 2026, key dari Favian)
+
+Key uji hanya punya izin TTS (tanpa `user_read`, `models_read`, `voices_read`), jadi sisa kredit dan tier akun tidak bisa dibaca dan Voice Library tidak bisa dicari lewat API. Kandidat suara Indonesia diambil dari katalog publik [json2video](https://json2video.com/ai-voices/languages/indonesian/indonesia/) (96 suara), lalu diverifikasi langsung lewat API: 12 dari 12 kandidat bisa dipakai.
+
+**Audisi** (`el_audition.py`, model `eleven_flash_v2_5`, 2 kalimat per suara). Kriteria pilihan [C]: transkrip setia (tanpa kata disisipkan/diulang), tempo cepat ala siaran, deskripsi "young".
+
+| Persona | Pilihan | voice_id | Cadangan | Alasan |
+|---|---|---|---|---|
+| Raka | Pratama (young; clear, confident, warm) | `q8qwd1jY2jS3AWOBeq25` | Ginanjar `JjCMg2oeB7ExbMJUJHSK` | WER 0 di kedua kalimat, tempo cepat |
+| Salsa | Aita (young; youthful, expressive, friendly) | `ffTJE9l3Kt2ipEM32UOc` | Kira `gmnazjXOFoOcWA59sd5m` | WER terendah, tempo tercepat |
+
+Dakocan, Senandika, Tri Nugraha, dan Honeypie menyisipkan/mengulang kata ("pernah kayak, pernah kayak"); tidak dipilih. Sampel semua kandidat: `out/el_audition/` — **pilihan ini perlu didengar ulang oleh Favian**.
+
+**Benchmark** (10 kalimat × 2 suara pilihan, endpoint streaming, mp3 128 kbps):
+
+| Model | Suara | Latensi total p50 | Maks | Byte pertama p50 | Kata/detik | WER transkrip rata-rata |
+|---|---|---|---|---|---|---|
+| `eleven_flash_v2_5` | Pratama | 0,57 s | 1,08 s | 0,46 s | 3,3 | 0,078 |
+| `eleven_flash_v2_5` | Aita | 0,55 s | 0,58 s | 0,44 s | 3,0 | 0,064 |
+| `eleven_multilingual_v2` | Pratama | 1,35 s | 1,85 s | 1,30 s | 3,1 | 0,112 |
+| `eleven_multilingual_v2` | Aita | 1,43 s | 1,61 s | 1,37 s | 1,9 (lambat) | 0,052 |
+| `eleven_v3` (uji 2 kalimat) | Pratama | 2,4–2,8 s | | | | |
+
+- Sisa WER hanya variasi ejaan transkripsi (lo/lu, gue/gua, abis/habis); tidak ada kata yang hilang atau disisipkan.
+- **Cold start:** request pertama ke suara library kadang 15–20 s; berikutnya ±0,5 s. Perlu warm-up per suara saat cek pra-live.
+- `eleven_v3` menerima tag `[laughs]` (sampel `out/tts/v3_laugh.mp3`), tapi 4–5× lebih lambat dari flash.
+- **Biaya:** header `character-cost` mencatat 16 kredit untuk kalimat 79 karakter di flash (±0,2/karakter) dan 29–31 di v3. Perkiraan kasar mode B (giliran ±150 karakter, 6,7 giliran/menit): ±4 rb kredit per 20 menit, ±12 rb per 60 menit di flash. Kuota bulanan akun belum diketahui (key tanpa `user_read`).
+
+**Catatan validitas juri audio:** `audio_judge.py` (Gemini `gemini-3.5-flash-lite`) memberi skor 5/5 di semua aspek untuk semua klip, **termasuk Edge TTS dan Gemini TTS**. Skor kealamian dari LLM-judge audio ini tidak bisa dipakai; hanya transkripsinya (WER) yang berguna. Penilaian "robot atau tidak" tetap harus oleh manusia (KT FR-6).
+
+**Konflik dengan PRD:** §1.3, §2.3, dan §8 menetapkan Rp0 dan mengecualikan ElevenLabs. Uji ini atas permintaan Favian; bila ElevenLabs dipakai di live, PRD perlu diubah (keputusan [F]) dan dicatat di §17.
+
 ## STT
 
 Belum. Web Speech: `stt_webspeech.html`. faster-whisper: `stt_bench.py` di PC lab dengan rekaman dari halaman yang sama.
@@ -61,6 +93,6 @@ Belum: perlu PC lab. Ukur dengan `t2_rtf.py`. Catatan: di laptop MX250, `nvidia-
 | Keputusan | Pilihan | Alasan |
 |---|---|---|
 | STT | | |
-| TTS utama | Usulan: Edge (Gemini untuk cache offline) | Gemini free tier 3 RPM, latensi p50 12,7 s; menunggu penilaian kualitas dan keputusan Favian |
+| TTS utama | Usulan [C]: ElevenLabs `eleven_flash_v2_5` (Pratama/Aita) bila PRD diubah untuk mengizinkannya; Edge sebagai cadangan/failover. Bila tetap Rp0: Edge utama. | Flash p50 0,55 s dan setia teks; Gemini free tier 3 RPM, p50 12,7 s. Menunggu penilaian dengar dan keputusan Favian |
 | T2 | | |
 | `PIPELINE_DEPTH` | | |
