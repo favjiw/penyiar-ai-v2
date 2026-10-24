@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     SUPERVISOR_MAX_REGEN: int = 1
     SUPERVISOR_TIMEOUT_MS: int = 5000
     PIPELINE_DEPTH: int = 1
+    OPENING_TURNS: int = 2  # batas lunak Opening (mode B)
+    CLOSING_TURNS: int = 2
+    SESSION_TARGET_MIN: int = 0  # petunjuk lunak durasi total untuk Showrunner; 0 = tanpa
+    PERSONA_TEMPERATURE: float = 0.9
+    HUMAN_HOST_NAME: str = ""  # mode A (Tahap 4); keputusan terbuka PRD §15.2 #2
 
     # Avatar
     AVATAR_TIER: Literal["t1", "t2"] = "t1"

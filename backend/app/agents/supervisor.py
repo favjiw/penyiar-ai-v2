@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
 from app.agents.persona import HistoryEntry, PersonaResult, TurnContext
-from app.llm import LLMClient, register_mock
+from app.llm import LLMClient, LLMError, register_mock
 from app.prompts import load_prompt
 from app.schemas import CorrectionMemory, Emotion, LedgerEntry, PersonaCard, SupervisorJudgement, SupervisorMode, SupervisorVerdict
 
@@ -116,6 +116,8 @@ class Supervisor:
         self.prompt = load_prompt("supervisor")
         self.ledger: list[LedgerEntry] = []
         self._fallback_used: dict[str, int] = {}
+        self.llm_failures = 0
+        self.last_llm_error = ""
 
     # ── LLM (mode full) ──────────────────────────────────────────────────────
 
@@ -168,7 +170,13 @@ class Supervisor:
         hits = sanitized + rule_violations(clean, ctx.history)
         if self.mode != "full" or len(hits) > len(sanitized):
             return clean, hits, None, 0, ""
-        judgement, latency, prompt = await self._judge(persona, clean, ctx)
+        try:
+            judgement, latency, prompt = await self._judge(persona, clean, ctx)
+        except LLMError as e:
+            # Kuota/jaringan: giliran ini cukup diperiksa aturan (PRD §8), siaran jalan terus.
+            self.llm_failures += 1
+            self.last_llm_error = str(e)[:200]
+            return clean, hits, None, 0, ""
         return clean, hits, judgement, latency, prompt
 
     @staticmethod
