@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Uji STT Web Speech</title>
+<style>
+  :root { --bg: #fff; --fg: #111; --muted: #666; --line: #ddd; --ok: #0a7d32; --bad: #b3261e; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #151515; --fg: #eee; --muted: #999; --line: #333; --ok: #5bd17f; --bad: #ff8a80; } }
+  body { background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, sans-serif; max-width: 900px; margin: 24px auto; padding: 0 16px; }
+  .ref { font-size: 28px; font-weight: 600; margin: 16px 0; }
+  .hyp { font-size: 20px; min-height: 30px; color: var(--muted); }
+  .hyp.final { color: var(--fg); }
+  button { font-size: 16px; padding: 8px 14px; margin-right: 6px; }
+  table { border-collapse: collapse; width: 100%; margin-top: 20px; font-size: 14px; }
+  td, th { border-bottom: 1px solid var(--line); padding: 4px 6px; text-align: left; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+  small { color: var(--muted); }
+</style>
+</head>
+<body>
+<h1>Uji STT: Web Speech <code>id-ID</code></h1>
+<p><small>Buka lewat <code>python -m http.server -d tahap0 8800</code> lalu <code>http://localhost:8800/stt_webspeech.html</code> di Chrome. Tahan <b>Spasi</b> sambil membaca kalimat (push-to-talk), lepas saat selesai. Latensi = lepas tombol → transkrip final. Audio ikut direkam untuk diuji ulang dengan faster-whisper.</small></p>
+
+<div>Kalimat <span id="idx"></span> / <span id="total"></span></div>
+<div class="ref" id="ref"></div>
+<div class="hyp" id="hyp"></div>
+<p>
+  <button id="prev">← Sebelumnya</button>
+  <button id="next">Berikutnya →</button>
+  <button id="csv">Unduh CSV</button>
+  <button id="zip">Unduh rekaman</button>
+</p>
+<div id="summary"></div>
+<table><thead><tr><th>#</th><th>Hasil</th><th>WER</th><th>Latensi (s)</th></tr></thead><tbody id="rows"></tbody></table>
+
+<script>
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let sentences = [], i = 0, results = {}, recordings = {};
+let rec, mediaRec, chunks = [], releasedAt = 0, holding = false, finalText = '';
+
+const norm = s => s.toLowerCase().replace(/-/g, ' ').replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean);
+function wer(ref, hyp) {
+  const r = norm(ref), h = norm(hyp);
+  let prev = Array.from({ length: h.length + 1 }, (_, j) => j);
+  r.forEach((rw, a) => {
+    const cur = [a + 1];
+    h.forEach((hw, b) => cur.push(Math.min(prev[b + 1] + 1, cur[b] + 1, prev[b] + (rw !== hw))));
+    prev = cur;
+  });
+  return r.length ? prev[h.length] / r.length : 0;
+}
+
+function show() {
+  document.getElementById('idx').textContent = i + 1;
+  document.getElementById('total').textContent = sentences.length;
+  document.getElementById('ref').textContent = sentences[i];
+  const r = results[i];
+  const hyp = document.getElementById('hyp');
+  hyp.textContent = r ? r.hyp : '';
+  hyp.className = 'hyp' + (r ? ' final' : '');
+  render();
+}
+
+function render() {
+  const tb = document.getElementById('rows');
+  tb.innerHTML = '';
+  let words = 0, errs = 0; const lats = [];
+  sentences.forEach((s, k) => {
+    const r = results[k]; if (!r) return;
+    const n = norm(s).length; words += n; errs += r.wer * n; lats.push(r.latency);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${k + 1}</td><td></td><td class="${r.wer <= 0.1 ? 'ok' : 'bad'}">${r.wer.toFixed(2)}</td><td>${r.latency.toFixed(2)}</td>`;
+    tr.children[1].textContent = r.hyp;
+    tb.appendChild(tr);
+  });
+  lats.sort((a, b) => a - b);
+  document.getElementById('summary').textContent = words
+    ? `Selesai ${lats.length}/${sentences.length} · akurasi kata ≈ ${((1 - errs / words) * 100).toFixed(1)}% (target ≥90%) · latensi p50 ${lats[Math.floor(lats.length / 2)].toFixed(2)} s`
+    : '';
+}
+
+async function start() {
+  if (holding) return;
+  holding = true; finalText = '';
+  const hyp = document.getElementById('hyp');
+  hyp.textContent = '…'; hyp.className = 'hyp';
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  chunks = [];
+  mediaRec = new MediaRecorder(stream);
+  mediaRec.ondataavailable = e => chunks.push(e.data);
+  mediaRec.onstop = () => { recordings[i] = new Blob(chunks, { type: 'audio/webm' }); stream.getTracks().forEach(t => t.stop()); };
+  mediaRec.start();
+  rec = new SR();
+  rec.lang = 'id-ID'; rec.interimResults = true; rec.continuous = true;
+  rec.onresult = e => {
+    let interim = '';
+    for (let k = e.resultIndex; k < e.results.length; k++) {
+      if (e.results[k].isFinal) finalText += e.results[k][0].transcript + ' ';
+      else interim += e.results[k][0].transcript;
+    }
+    hyp.textContent = (finalText + interim).trim();
+  };
+  rec.onend = () => {
+    const latency = (performance.now() - releasedAt) / 1000;
+    const text = finalText.trim() || hyp.textContent.replace('…', '').trim();
+    results[i] = { hyp: text, wer: wer(sentences[i], text), latency };
+    show();
+  };
+  rec.start();
+}
+
+function stop() {
+  if (!holding) return;
+  holding = false;
+  releasedAt = performance.now();
+  mediaRec && mediaRec.state !== 'inactive' && mediaRec.stop();
+  rec && rec.stop();
+}
+
+function download(name, blob) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+document.addEventListener('keydown', e => { if (e.code === 'Space' && !e.repeat) { e.preventDefault(); start(); } if (e.code === 'ArrowRight') next(); if (e.code === 'ArrowLeft') prev(); });
+document.addEventListener('keyup', e => { if (e.code === 'Space') { e.preventDefault(); stop(); } });
+const next = () => { i = Math.min(i + 1, sentences.length - 1); show(); };
+const prev = () => { i = Math.max(i - 1, 0); show(); };
+document.getElementById('next').onclick = next;
+document.getElementById('prev').onclick = prev;
+document.getElementById('csv').onclick = () => {
+  const esc = s => `"${String(s).replace(/"/g, '""')}"`;
+  const lines = ['no,ref,hyp,wer,latency_s'];
+  sentences.forEach((s, k) => { const r = results[k]; if (r) lines.push([k + 1, esc(s), esc(r.hyp), r.wer.toFixed(3), r.latency.toFixed(3)].join(',')); });
+  download('webspeech_results.csv', new Blob([lines.join('\n')], { type: 'text/csv' }));
+};
+document.getElementById('zip').onclick = () => {
+  // Unduh satu per satu (01.webm ..) agar langsung cocok dengan stt_bench.py
+  Object.entries(recordings).forEach(([k, b], n) => setTimeout(() => download(String(+k + 1).padStart(2, '0') + '.webm', b), n * 300));
+};
+
+if (!SR) document.getElementById('ref').textContent = 'Browser ini tidak mendukung Web Speech API. Pakai Chrome.';
+else fetch('data/stt_sentences.txt').then(r => r.text()).then(t => { sentences = t.split(/\r?\n/).map(s => s.trim()).filter(Boolean); show(); });
+</script>
+</body>
+</html>
