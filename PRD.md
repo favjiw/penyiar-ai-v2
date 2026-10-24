@@ -1,10 +1,10 @@
-# PRD Penyiar AI Co-Host Live TikTok HITS (v2.3)
+# PRD Penyiar AI Co-Host Live TikTok HITS (v2.4)
 
 | | |
 |---|---|
 | Pemilik | Muhammad Favian Jiwani (Favian) |
 | Tanggal | 24 Oktober 2026 |
-| Status | Draf v2.3, Tahap 2 menunggu pemeriksaan |
+| Status | Draf v2.4, Tahap 2 menunggu pemeriksaan |
 | Menggantikan | Semua PRD dan dokumen desain di repo `conversational-ai`: `PRD-KP-HITS-AI-Live*.md`, `PRD HITS AI Live v1.1`, `docs/avatar/PRD Avatar 3D…`, `docs/KEPUTUSAN-DESAIN.md`, `docs/RUNDOWN-LIVE-1-JAM-DRAF.md` |
 | Repo | `favjiw/penyiar-ai-v2` (public) [F] |
 
@@ -49,7 +49,9 @@ Live TikTok HITS Unikom Radio adalah kamera yang merekam studio on-air: penyiar 
 - Mode A: 1 penyiar manusia + 1 AI. Penyiar memilih lawan bicara AI (Raka atau Salsa) sebelum live [F].
 - Mode B: AI + AI penuh otomatis; agen tahu kapan pindah topik [F].
 - Tahap awal: komentar dibaca dan dipandu penyiar manusia, AI hanya menanggapi penyiar [F].
-- Tanpa biaya: semua komponen harus gratis [F], **kecuali TTS**: ElevenLabs dipakai sebagai TTS utama (keputusan 24 Okt 2026, lihat FR-6) [F].
+- Tanpa biaya: semua komponen harus gratis [F], **kecuali**:
+  - TTS: ElevenLabs dipakai sebagai TTS utama (keputusan 24 Okt 2026, lihat FR-6) [F];
+  - LLM cadangan berbiaya kecil: `compat:gemini-3.8-flash` lewat endpoint kompatibel OpenAI (cosmoshub), hanya sebagai cadangan persona saat kuota harian Gemini habis dan untuk eksperimen offline FR-14 (±$0,00001 per panggilan) [F].
 - Agen Showrunner disetujui dan menjadi fokus publikasi [F]. Supervisor tetap fokus skripsi.
 - Isi topik di blocker mengikuti usulan Claude (FR-1) [F].
 - Perangkat:
@@ -93,7 +95,7 @@ Live TikTok HITS Unikom Radio adalah kamera yang merekam studio on-air: penyiar 
 - AI membaca komentar TikTok sendiri (setidaknya di tahap awal).
 - Telepon pendengar.
 - Roleplay 3M/SKEMA.
-- Layanan berbayar apa pun selain ElevenLabs untuk TTS [F]: HeyGen, Tavus, GPU cloud berbayar, dan sejenisnya.
+- Layanan berbayar apa pun selain ElevenLabs untuk TTS dan LLM cadangan `compat:` (§1.3) [F]: HeyGen, Tavus, GPU cloud berbayar, dan sejenisnya.
 
 ---
 
@@ -512,7 +514,7 @@ Kode Supervisor di repo lama masih **stub**: prompt satu baris, tanpa koreksi da
 - **KT:** pada 50 komentar uji berlabel, akurasi label ≥0,85; latensi pelabelan ≤3 s.
 
 ### FR-14 Harness eksperimen
-- Menjalankan mode B **offline**: tanpa stage dan tanpa TTS (`TTS_MODE=mock`), untuk banyak sesi dengan seed tetap. Kombinasi kondisi:
+- Menjalankan mode B **offline**: tanpa stage dan tanpa TTS (`TTS_MODE=mock`), untuk banyak sesi dengan seed tetap. LLM eksperimen boleh `compat:gemini-3.8-flash` [F] supaya tidak dibatasi kuota 500 RPD per model Gemini; model yang dipakai dicatat di log per sesi. Kombinasi kondisi:
   - Supervisor off / rules / full;
   - Showrunner llm / fixed_turns / coverage_only.
 - **Identity drift:** pakai ulang `experiment/snapshot.py`, kuesioner, dan `scoring.py` (replikasi Choi et al. 2025). Snapshot diambil di akhir setiap topik.
@@ -526,7 +528,7 @@ Kode Supervisor di repo lama masih **stub**: prompt satu baris, tanpa koreksi da
 
 | Aspek | Kebutuhan |
 |---|---|
-| Biaya | Rp0 [F] untuk semua komponen kecuali TTS: Gemini free tier, Edge TTS, model open source, perangkat yang ada. TTS utama ElevenLabs (berbayar/kredit) [F]; pemakaian kredit dicatat per sesi. |
+| Biaya | Rp0 [F] untuk semua komponen kecuali TTS dan LLM cadangan: Gemini free tier, Edge TTS, model open source, perangkat yang ada. TTS utama ElevenLabs (berbayar/kredit) [F]; pemakaian kredit dicatat per sesi. LLM cadangan `compat:gemini-3.8-flash` (berbayar per panggilan, ±$0,003 per sesi 20 menit) hanya untuk cadangan persona dan eksperimen offline [F]; bukan model utama live karena latensinya ±3,7 s (`docs/kt/llm-compat-cosmoshub.md`). |
 | Kuota | Rate limiter per model (`GEMINI_RPM_*`). Model berbeda per peran untuk membagi beban: persona, Supervisor, Showrunner, blocker. Status kuota tampil di konsol. Bila kuota atau kredit habis: TTS ElevenLabs ke Edge, Supervisor ke `rules`, Showrunner ke `fixed_turns`; semua tercatat. |
 | Latensi | Mode B: jeda antargiliran p95 ≤4 s (T1). Mode A: §FR-7. |
 | Keandalan | Live uji 20 menit tanpa crash (KP); 60 menit (target akhir). Reconnect WS otomatis. Status live tetap benar setelah reload. |
@@ -787,7 +789,7 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 
 | Risiko | Dampak | Mitigasi |
 |---|---|---|
-| Kuota free tier tidak cukup untuk 60 menit | Live berhenti atau terdegradasi | Terukur di Tahap 2: **500 RPD per model**; sesi 20 menit ±240 request bila persona dan Supervisor satu model. Model per peran, `GEMINI_MODEL_PERSONA_FALLBACK`, Supervisor turun ke `rules` dan persona gagal beruntun → Closing (sudah diterapkan), aturan sebelum LLM |
+| Kuota free tier tidak cukup untuk 60 menit | Live berhenti atau terdegradasi | Terukur di Tahap 2: **500 RPD per model**; sesi 20 menit ±240 request bila persona dan Supervisor satu model. Model per peran, `GEMINI_MODEL_PERSONA_FALLBACK=compat:gemini-3.8-flash` [F], Supervisor turun ke `rules` dan persona gagal beruntun → Closing (sudah diterapkan), aturan sebelum LLM |
 | Latensi mode A terasa canggung | Pengalaman siaran buruk | Filler, TTS per kalimat, jawaban pendek, PTT |
 | Avatar T1 tidak sinkron bibir | Dinilai kurang realistis | Komunikasikan batasan; T2 bila lolos; framing kamera agak jauh / mic menutupi sebagian mulut (seperti referensi) |
 | GTX 1080 terlalu lambat untuk T2 | T2 batal | T1 tetap jalan; angka RTF menjadi temuan |
@@ -835,6 +837,9 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 - **v2.3 (24 Okt 2026):** hasil gerbang Tahap 2 [F]:
   - FR-4: jatah waktu topik; Showrunner mengarahkan ke sudut baru di luar poin sampai jatah habis (blocker tetap 3–5 poin);
   - §15.1: kuota free tier terukur 500 RPD per model, beserta mitigasinya.
+- **v2.4 (24 Okt 2026):** LLM cadangan berbiaya kecil [F]:
+  - `compat:gemini-3.8-flash` (endpoint cosmoshub) sebagai cadangan persona saat kuota harian Gemini habis dan untuk eksperimen offline FR-14;
+  - pengecualian biaya di §1.3, §2.3, §8; FR-14, §15.1, dan Lampiran B disesuaikan.
 
 ---
 
@@ -874,6 +879,9 @@ LLM_MODE=live|mock            TTS_MODE=live|mock
 # Gemini (model ID diisi setelah dicek di AI Studio)
 GEMINI_API_KEY=
 GEMINI_MODEL_BLOCKER=   GEMINI_MODEL_PERSONA=   GEMINI_MODEL_SHOWRUNNER=
+GEMINI_MODEL_PERSONA_FALLBACK=compat:gemini-3.8-flash
+# LLM cadangan kompatibel OpenAI (awalan model compat:)
+OPENAI_COMPAT_BASE_URL=https://api.cosmoshub.tech/v1   OPENAI_COMPAT_API_KEY=   OPENAI_COMPAT_REASONING_EFFORT=none
 GEMINI_MODEL_SUPERVISOR=  GEMINI_MODEL_TTS=   GEMINI_MODEL_JUDGE=
 GEMINI_RPM_PERSONA=  GEMINI_RPM_SUPERVISOR=  GEMINI_RPM_SHOWRUNNER=  GEMINI_RPM_TTS=
 # TTS
