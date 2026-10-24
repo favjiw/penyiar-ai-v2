@@ -163,7 +163,13 @@ class StartShowRequest(BaseModel):
     blocker_id: str
     mode: ShowMode = "B"
     ai_persona: Optional[str] = None  # mode A: raka | salsa
+    human_name: str = ""  # mode A: nama tampilan penyiar manusia (§15.2 #2)
     seed: Optional[int] = None
+
+
+class PTTTurnRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=1000)
+    stt_ms: int = 0  # lepas tombol → transkrip final, diukur di browser
 
 
 # Supervisor (FR-5)

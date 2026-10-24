@@ -52,3 +52,33 @@ def test_precheck_and_stop(client):
     assert client.post("/api/show/pause").json()["state"] == "paused"
     assert client.post("/api/show/stop").json()["state"] == "ended"
     assert client.get("/api/show").json()["state"] == "ended"
+
+
+def test_mode_a_start_ptt_and_next(client):
+    blocker = locked_blocker(client)
+    assert client.post("/api/show/start", json={"blocker_id": blocker["id"], "mode": "A", "ai_persona": "budi"}).status_code == 422
+    snap = client.post("/api/show/start", json={"blocker_id": blocker["id"], "mode": "A", "ai_persona": "raka", "human_name": "Kak Dimas"}).json()
+    assert snap["mode"] == "A" and snap["human"]["name"] == "Kak Dimas" and snap["ai_persona"] == "raka"
+    import time
+
+    deadline = time.time() + 10
+    while client.get("/api/show").json()["fillers_ready"] == 0 and time.time() < deadline:
+        time.sleep(0.05)  # bank filler disiapkan di latar
+    with client.websocket_connect("/ws/session?role=prompter") as prompter:
+        prompter.receive_json()
+        r = client.post("/api/ptt/turn", json={"text": "Raka, lo tim kopi atau teh?", "stt_ms": 300})
+        assert r.status_code == 200
+        seen = []
+        while "turn" not in seen:
+            seen.append(prompter.receive_json()["type"])
+        assert "human_turn" in seen and "filler" in seen
+    assert client.post("/api/show/next").json()["segment"] == "topic"
+    assert client.post("/api/ptt/turn", json={"text": ""}).status_code == 422
+    client.post("/api/show/stop")
+
+
+def test_ptt_rejected_in_mode_b(client):
+    blocker = locked_blocker(client)
+    client.post("/api/show/start", json={"blocker_id": blocker["id"], "mode": "B"})
+    assert client.post("/api/ptt/turn", json={"text": "halo"}).status_code == 409
+    client.post("/api/show/stop")

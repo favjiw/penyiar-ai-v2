@@ -74,6 +74,7 @@ class ModeAEngine(ShowEngine):
         snap["ai_persona"] = self.ai.id
         snap["busy"] = self._reply is not None and not self._reply.done()
         snap["topic_points"] = self._topic_points()
+        snap["fillers_ready"] = len(self.fillers._bank.get(self.ai.id, []))
         return snap
 
     def _topic_points(self) -> list[dict[str, Any]]:
@@ -108,6 +109,7 @@ class ModeAEngine(ShowEngine):
         if n == 0:
             await self._alert("tts", "Bank filler kosong (TTS gagal); jawaban tetap jalan tanpa filler")
         self.log.event("quota", fillers_ready=n, tts=self.tts.status())
+        await self._broadcast_state()
 
     async def stop(self) -> None:
         if self._reply and not self._reply.done():

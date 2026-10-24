@@ -12,9 +12,10 @@ from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisco
 from fastapi.responses import FileResponse
 
 from app.data.personas import load_personas
-from app.schemas import ShowState, StartShowRequest
+from app.schemas import PTTTurnRequest, ShowState, StartShowRequest
 from app.session_log import read_log
 from app.show.engine import ShowEngine
+from app.show.mode_a import ModeAEngine
 from app.ws import ConnectionManager
 
 logger = logging.getLogger(__name__)
@@ -46,21 +47,20 @@ async def start_show(req: StartShowRequest, request: Request):
     blocker = app.state.store.get(req.blocker_id)
     if not blocker.locked:
         raise HTTPException(422, "Kunci blocker dulu sebelum live")
-    if req.mode != "B":
-        raise HTTPException(422, "Mode A dikerjakan di Tahap 4")
     ws: ConnectionManager = app.state.ws
-    engine = ShowEngine(
-        app.state.settings,
-        app.state.llm,
-        app.state.tts,
-        blocker,
-        load_personas(),
-        ws.broadcast,
-        audio_dir(request),
-        mode=req.mode,
-        seed=req.seed,
-        has_audio_owner=lambda: ws.audio_owner() is not None,
-    )
+    common = dict(seed=req.seed, has_audio_owner=lambda: ws.audio_owner() is not None)
+    if req.mode == "A":
+        if req.ai_persona not in load_personas():
+            raise HTTPException(422, "Mode A: pilih ai_persona raka atau salsa")
+        engine: ShowEngine = ModeAEngine(
+            app.state.settings, app.state.llm, app.state.tts, blocker, emit=ws.broadcast, audio_dir=audio_dir(request),
+            personas=load_personas(), ai_persona=req.ai_persona,
+            human_name=req.human_name or app.state.settings.HUMAN_HOST_NAME, **common,
+        )
+    else:
+        engine = ShowEngine(
+            app.state.settings, app.state.llm, app.state.tts, blocker, load_personas(), ws.broadcast, audio_dir(request), mode="B", **common
+        )
     app.state.engine = engine
     engine.start()
     return engine.snapshot()
@@ -80,6 +80,17 @@ async def control(action: str, request: Request):
         raise HTTPException(404, f"Aksi {action} tidak dikenal")
     await handlers[action]()
     return engine.snapshot()
+
+
+@router.post("/api/ptt/turn")
+async def ptt_turn(req: PTTTurnRequest, request: Request):
+    """Transkrip final push-to-talk dari prompter (FR-7, STT di browser)."""
+    engine = require_engine(request)
+    if not isinstance(engine, ModeAEngine):
+        raise HTTPException(409, "PTT hanya untuk mode A")
+    if engine.state != ShowState.LIVE:
+        raise HTTPException(409, "Siaran sedang pause")
+    return await engine.human_turn(req.text, req.stt_ms) or {}
 
 
 @router.post("/api/precheck")
@@ -147,6 +158,9 @@ async def ws_session(ws: WebSocket, role: str = "console"):
                 engine.playback_feedback(data)
                 if data.get("status") == "started":
                     await manager.broadcast("speaking", {"persona": data.get("persona")})
+            elif action == "stt_partial":
+                # Transkrip sementara dari prompter, diteruskan ke konsol (FR-7)
+                await manager.broadcast("stt_partial", {"text": str(data.get("text", ""))[:500], "final": bool(data.get("final"))})
             elif action == "audio_state":
                 blocked = bool(data.get("blocked"))
                 (manager.audio_blocked.add if blocked else manager.audio_blocked.discard)(ws)

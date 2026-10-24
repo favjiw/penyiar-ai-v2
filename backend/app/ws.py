@@ -20,6 +20,7 @@ ROLES = ("console", "prompter", "stage")
 EVENT_ROLES: dict[str, tuple[str, ...]] = {
     "supervisor": ("console",),
     "output_status": ("console",),
+    "stt_partial": ("console",),
 }
 
 
