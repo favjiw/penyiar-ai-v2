@@ -142,3 +142,108 @@ class GenerateBlockerRequest(BaseModel):
     catatan: str = Field(default="", max_length=500)
     jumlah_topik: int = Field(default=3, ge=1, le=3)
     jumlah_varian: int = Field(default=3, ge=2, le=3)
+
+
+# ── Show Engine (Tahap 2: FR-2, FR-4, FR-5, FR-12) ───────────────────────────
+
+ShowMode = Literal["A", "B"]
+Segment = Literal["opening", "topic", "closing"]
+SupervisorMode = Literal["off", "rules", "full"]
+ShowrunnerPolicy = Literal["llm", "fixed_turns", "coverage_only"]
+
+
+class ShowState(str, Enum):
+    IDLE = "idle"
+    LIVE = "live"
+    PAUSED = "paused"
+    ENDED = "ended"
+
+
+class StartShowRequest(BaseModel):
+    blocker_id: str
+    mode: ShowMode = "B"
+    ai_persona: Optional[str] = None  # mode A: raka | salsa
+    seed: Optional[int] = None
+
+
+# Supervisor (FR-5)
+
+CheckResult = Literal["ok", "violation"]
+
+
+class SupervisorJudgement(BaseModel):
+    """Keluaran LLM Supervisor (mode full)."""
+
+    persona: CheckResult
+    blocker: CheckResult
+    safety: CheckResult
+    evidence: str
+    correction: str  # arahan singkat untuk regenerasi; kosong bila semua ok
+    claims: list[str]  # klaim faktual baru tentang diri persona di ucapan ini
+
+
+class SupervisorVerdict(BaseModel):
+    mode: SupervisorMode
+    action: Literal["forward", "regenerate", "fallback"] = "forward"
+    checks: dict[str, str] = Field(default_factory=lambda: {"persona": "ok", "blocker": "ok", "safety": "ok"})
+    rule_hits: list[str] = Field(default_factory=list)
+    evidence: str = ""
+    regenerations: int = 0
+    llm_latency_ms: int = 0
+    timed_out: bool = False
+
+
+# Showrunner (FR-4, §9.3)
+
+ShowrunnerDecisionType = Literal["continue", "steer", "transition", "close"]
+
+
+class ShowrunnerJudgement(BaseModel):
+    """Keluaran LLM Showrunner."""
+
+    points_covered: list[str]
+    saturation: float
+    decision: ShowrunnerDecisionType
+    steer_hint: str
+    next_speaker: str  # raka | salsa | "" (bebas)
+    reason: str
+
+
+class ShowrunnerDecision(BaseModel):
+    turn: int
+    topic_id: str
+    points_covered: list[str] = Field(default_factory=list)
+    saturation: float = 0.0
+    decision: ShowrunnerDecisionType = "continue"
+    steer_hint: str = ""
+    next_speaker: Optional[str] = None
+    reason: str = ""
+    policy: ShowrunnerPolicy = "llm"
+    forced: bool = False
+    latency_ms: int = 0
+
+
+# Log giliran (§9.4)
+
+
+class TurnRecord(BaseModel):
+    session_id: str
+    mode: ShowMode
+    segment: Segment
+    topic_id: Optional[str]
+    turn: int
+    persona: str
+    raw_text: str
+    final_text: str
+    emotion: Emotion
+    dialog_act: Optional[str] = None
+    supervisor: SupervisorVerdict
+    latency_ms: LatencyMs = Field(default_factory=LatencyMs)
+    models: dict[str, str] = Field(default_factory=dict)
+    tts_provider: str = ""
+    tts_fallback_reason: str = ""
+    audio_url: Optional[str] = None
+    duration_s: float = 0.0
+    credit_cost: int = 0
+    filler: Optional[str] = None
+    seed: Optional[int] = None
