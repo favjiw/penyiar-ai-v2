@@ -93,6 +93,7 @@ class Settings(BaseSettings):
     DATA_DIR: str = str(BACKEND_ROOT / "data")
     LOG_DIR: str = str(BACKEND_ROOT / "logs")
     CACHE_DIR: str = str(BACKEND_ROOT / "cache")
+    AVATAR_DIR: str = str(REPO_ROOT / "assets" / "avatar")  # klip + manifest.json per persona (FR-8)
 
     # Variabel kosong (mis. `GEMINI_RPM_PERSONA=` di .env.example) berarti pakai default.
     model_config = {"env_file": str(REPO_ROOT / ".env"), "env_file_encoding": "utf-8", "extra": "ignore", "env_ignore_empty": True}

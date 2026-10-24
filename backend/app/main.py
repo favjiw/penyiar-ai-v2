@@ -12,6 +12,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.blocker import (
@@ -60,6 +61,9 @@ def build_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="Penyiar AI v2", lifespan=lifespan)
     app.include_router(show_router)
+    # Klip avatar T1 (FR-8); folder dibuat supaya server tetap jalan sebelum klip ada.
+    Path(settings.AVATAR_DIR).mkdir(parents=True, exist_ok=True)
+    app.mount("/avatar-assets", StaticFiles(directory=settings.AVATAR_DIR), name="avatar-assets")
 
     @app.exception_handler(BlockerNotFound)
     async def _not_found(_: Request, e: BlockerNotFound):

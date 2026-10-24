@@ -40,3 +40,6 @@ desktop.ini
 
 # Data runtime (blocker tersimpan, dll.)
 backend/data/
+
+# Manifest klip dummy (dibuat assets/make_dummy_clips.py). Manifest klip Flow asli: git add -f
+assets/avatar/*/manifest.json
