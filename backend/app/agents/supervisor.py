@@ -193,6 +193,9 @@ class Supervisor:
         out = candidate.output
         if self.mode == "off":
             return Reviewed(out.text, out.emotion, SupervisorVerdict(mode="off"), candidate)
+        if candidate.model == "fallback":
+            # Kalimat dari bank aman sudah disaring; memeriksanya hanya menambah latensi saat LLM sedang lambat.
+            return Reviewed(out.text, out.emotion, SupervisorVerdict(mode=self.mode, evidence="kalimat aman dari bank, tidak diperiksa"), candidate)
 
         cleanup = {"stage_direction", "emoji", "markdown"}
         verdict = SupervisorVerdict(mode=self.mode)

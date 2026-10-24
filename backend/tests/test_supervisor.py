@@ -105,3 +105,10 @@ def test_fallback_matches_segment():
     assert s.fallback(RAKA, "closing") in fallback_bank()["raka"]["closing"]
     first, second = s.fallback(RAKA, "topic"), s.fallback(RAKA, "topic")
     assert first != second  # bergiliran
+
+
+async def test_fallback_lines_skip_the_llm_check():
+    llm = MockLLMClient(delay_sec=0)
+    r = PersonaResult(PersonaOutput(text="Oke, lanjut.", emotion=Emotion.NEUTRAL), raw="", model="fallback", latency_ms=0, dialog_act=None, catchphrase=None)
+    out = await sup("full", llm).review(RAKA, r, ctx(), regen_with(), 1)
+    assert out.text == "Oke, lanjut." and out.verdict.action == "forward" and llm.calls == 0
