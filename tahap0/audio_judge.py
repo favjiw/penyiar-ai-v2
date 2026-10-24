@@ -5,6 +5,7 @@ kealamian (tidak seperti robot), logat Indonesia native, kecocokan gaya penyiar 
 dan ekspresi. Kejelasan diukur dari WER transkripsi terhadap teks asli.
 
     python tahap0/audio_judge.py --dir tahap0/out/el_audition --texts-from el_audition
+    python tahap0/audio_judge.py --dir tahap0/out/tts --texts-from tts --glob "elevenlabs_*.mp3"
     # butuh GEMINI_API_KEY dan GEMINI_MODEL_JUDGE
 """
 
@@ -32,7 +33,8 @@ def main() -> None:
     load_dotenv(ROOT.parent / ".env")
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", required=True)
-    ap.add_argument("--texts-from", choices=["el_audition"], default="el_audition")
+    ap.add_argument("--texts-from", choices=["el_audition", "tts"], default="el_audition")
+    ap.add_argument("--glob", default="*.mp3")
     ap.add_argument("--rpm", type=float, default=8)
     args = ap.parse_args()
 
@@ -44,9 +46,14 @@ def main() -> None:
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
     model = os.environ["GEMINI_MODEL_JUDGE"]
     rows = []
-    for path in sorted(Path(args.dir).glob("*.mp3")):
-        gender, *name, line = path.stem.split("_")
-        ref = LINES[gender][int(line) - 1]
+    tts_sentences = [x.strip() for x in (ROOT / "data" / "tts_sentences.txt").read_text(encoding="utf-8").splitlines() if x.strip()]
+    for path in sorted(Path(args.dir).glob(args.glob)):
+        if args.texts_from == "tts":  # <provider>_<tag>_<gender>_<nn>
+            *name, gender, line = path.stem.split("_")
+            ref = tts_sentences[int(line) - 1]
+        else:  # <gender>_<nama>_<n>
+            gender, *name, line = path.stem.split("_")
+            ref = LINES[gender][int(line) - 1]
         for attempt in range(3):
             try:
                 resp = client.models.generate_content(
@@ -59,14 +66,14 @@ def main() -> None:
             except Exception as e:
                 j = {"catatan": f"galat: {e}"[:120]}
                 time.sleep(30)
-        row = {"file": path.name, "gender": gender, "name": " ".join(name), "line": line,
+        row = {"file": path.name, "gender": gender, "name": " ".join(name), "line": line, "ref": ref,
                "wer": round(wer(ref, j.get("transkrip", "")), 3) if "transkrip" in j else "",
                **{k: j.get(k, "") for k in ("alami", "logat_indonesia", "cocok_penyiar_muda", "ekspresif", "catatan", "transkrip")}}
         rows.append(row)
         print(f"{row['gender']:<6} {row['name']:<12} {line} wer={row['wer']} alami={row['alami']} logat={row['logat_indonesia']} cocok={row['cocok_penyiar_muda']} ekspr={row['ekspresif']}", flush=True)
         time.sleep(60 / args.rpm)
 
-    out = Path(args.dir) / f"judge_{model}.csv"
+    out = Path(args.dir) / f"judge_{model}_{args.texts_from}.csv"
     with open(out, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0]))
         w.writeheader()
