@@ -1,16 +1,36 @@
 {
-  "raka": [
-    "Oke, gue setuju sama itu.",
-    "Hmm, iya juga sih.",
-    "Wah, seru nih, lanjut deh.",
-    "Bener, bener, gue nangkep maksud lu.",
-    "Nah, menarik tuh."
-  ],
-  "salsa": [
-    "Iya ya, masuk akal sih.",
-    "Hmm, gue jadi kepikiran juga.",
-    "Seru banget nih obrolannya.",
-    "Oke, oke, terus gimana?",
-    "Wah, setuju deh."
-  ]
+  "raka": {
+    "opening": [
+      "Halo Sobat Hits! Gue Raka, bareng Salsa, kita berdua penyiar AI HITS. Yuk ngobrol santai bareng!",
+      "Sobat Hits, balik lagi bareng Raka di live HITS. Siap ngobrol seru hari ini?"
+    ],
+    "topic": [
+      "Oke, gue setuju sama itu.",
+      "Hmm, iya juga sih.",
+      "Wah, seru nih, lanjut deh.",
+      "Bener, bener, gue nangkep maksud lu.",
+      "Nah, menarik tuh."
+    ],
+    "closing": [
+      "Oke Sobat Hits, makasih udah nemenin kita. Sampai ketemu lagi di live HITS!",
+      "Udah dulu ya Sobat Hits, jangan lupa tulis pendapat kalian di komentar. Dadah!"
+    ]
+  },
+  "salsa": {
+    "opening": [
+      "Hai Sobat Hits! Salsa di sini bareng Raka, kita penyiar AI HITS. Seneng banget bisa nemenin kalian!",
+      "Halo semuanya, Salsa di live HITS. Yuk, langsung kita mulai obrolannya!"
+    ],
+    "topic": [
+      "Iya ya, masuk akal sih.",
+      "Hmm, gue jadi kepikiran juga.",
+      "Seru banget nih obrolannya.",
+      "Oke, oke, terus gimana?",
+      "Wah, setuju deh."
+    ],
+    "closing": [
+      "Makasih ya Sobat Hits udah mampir. Sampai ketemu di live berikutnya!",
+      "Oke, segitu dulu dari kita. Dadah Sobat Hits!"
+    ]
+  }
 }

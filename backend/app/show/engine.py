@@ -309,7 +309,7 @@ class ShowEngine:
         except (LLMError, asyncio.TimeoutError) as e:
             self.log.event("error", stage="persona", message=(str(e) or "melewati PERSONA_TIMEOUT_MS")[:300])
             # Kuota/jaringan: kalimat aman dari bank supaya siaran tetap jalan.
-            text = self.supervisor._fallback(speaker)
+            text = self.supervisor.fallback(speaker, ctx.segment)
             return PersonaResult(PersonaOutput(text=text, emotion=Emotion.NEUTRAL), raw="", model="fallback", latency_ms=0, dialog_act=None, catchphrase=None)
 
     async def _produce(self) -> Optional[PreparedTurn]:

@@ -47,7 +47,7 @@ def banned_words() -> tuple[str, ...]:
 
 
 @lru_cache
-def fallback_bank() -> dict[str, list[str]]:
+def fallback_bank() -> dict[str, dict[str, list[str]]]:
     return json.loads((DATA_DIR / "fallback.json").read_text(encoding="utf-8"))
 
 
@@ -153,10 +153,12 @@ class Supervisor:
 
     # ── Alur pemeriksaan ─────────────────────────────────────────────────────
 
-    def _fallback(self, persona: PersonaCard) -> str:
-        bank = fallback_bank().get(persona.id) or ["Oke, lanjut."]
-        i = self._fallback_used.get(persona.id, self._rng.randrange(len(bank)))
-        self._fallback_used[persona.id] = i + 1
+    def fallback(self, persona: PersonaCard, segment: str = "topic") -> str:
+        """Kalimat aman sesuai segmen (sapaan di opening, pamit di closing), bergiliran supaya tidak berulang."""
+        bank = fallback_bank().get(persona.id, {}).get(segment) or fallback_bank().get(persona.id, {}).get("topic") or ["Oke, lanjut."]
+        key = f"{persona.id}:{segment}"
+        i = self._fallback_used.get(key, self._rng.randrange(len(bank)))
+        self._fallback_used[key] = i + 1
         return bank[i % len(bank)]
 
     def _record_claims(self, persona: PersonaCard, claims: list[str], turn: int) -> None:
@@ -241,7 +243,7 @@ class Supervisor:
                 return Reviewed(clean2, retry.output.emotion, verdict, retry, prompt2)
 
         verdict.action = "fallback"
-        return Reviewed(self._fallback(persona), Emotion.NEUTRAL, verdict, candidate, prompt)
+        return Reviewed(self.fallback(persona, ctx.segment), Emotion.NEUTRAL, verdict, candidate, prompt)
 
 
 # ── Mock ─────────────────────────────────────────────────────────────────────

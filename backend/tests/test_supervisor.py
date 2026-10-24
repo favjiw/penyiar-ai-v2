@@ -66,7 +66,7 @@ async def test_rules_violation_regenerates_with_correction():
 
 async def test_failed_regeneration_uses_fallback_bank():
     r = await sup("rules").review(RAKA, result("dasar bangsat"), ctx(), regen_with("tetap bangsat"), 1)
-    assert r.verdict.action == "fallback" and r.text in fallback_bank()["raka"]
+    assert r.verdict.action == "fallback" and r.text in fallback_bank()["raka"]["topic"]
     assert r.verdict.regenerations == 1
 
 
@@ -97,3 +97,11 @@ async def test_claims_go_to_ledger_and_next_prompt():
 async def test_first_check_timeout_forwards_and_flags():
     r = await sup("full", _ClaimJudge(delay=0.5), timeout_ms=50).review(RAKA, result("Seru *banget*"), ctx(), regen_with(), 1)
     assert r.verdict.timed_out and r.verdict.action == "forward" and r.text == "Seru banget"
+
+
+def test_fallback_matches_segment():
+    s = sup("rules")
+    assert "Sobat Hits" in s.fallback(RAKA, "opening")
+    assert s.fallback(RAKA, "closing") in fallback_bank()["raka"]["closing"]
+    first, second = s.fallback(RAKA, "topic"), s.fallback(RAKA, "topic")
+    assert first != second  # bergiliran
