@@ -70,13 +70,13 @@ class LatencyMs(BaseModel):
 
 
 class BlockerPoint(BaseModel):
-    id: str
+    id: str = ""  # diisi server (t1p1, ...); poin baru dari editor boleh tanpa id
     text: str
     perlu_cek: bool = False
 
 
 class BlockerTopic(BaseModel):
-    id: str
+    id: str = ""
     judul: str
     sudut_pandang: str
     poin: list[BlockerPoint]
