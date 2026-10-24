@@ -91,6 +91,10 @@ class Showrunner:
             policy="fixed_turns",
         )
 
+    def fallback_decision(self, p: TopicProgress, turn: int, reason: str) -> ShowrunnerDecision:
+        """Keputusan tanpa LLM (kuota habis, jaringan, atau batas waktu): aturan fixed_turns."""
+        return self._fixed(p, turn, reason=reason)
+
     async def decide(self, p: TopicProgress, turn: int, target_hint: str = "") -> ShowrunnerDecision:
         valid_ids = {pt.id for pt in p.topic.poin}
         if p.turns >= self.max_turns:

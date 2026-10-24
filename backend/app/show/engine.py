@@ -305,9 +305,9 @@ class ShowEngine:
 
     async def _persona_turn(self, speaker: PersonaCard, ctx: TurnContext, correction=None) -> PersonaResult:
         try:
-            return await self.persona_agent.generate(speaker, ctx, correction)
-        except LLMError as e:
-            self.log.event("error", stage="persona", message=str(e)[:300])
+            return await asyncio.wait_for(self.persona_agent.generate(speaker, ctx, correction), self.settings.PERSONA_TIMEOUT_MS / 1000)
+        except (LLMError, asyncio.TimeoutError) as e:
+            self.log.event("error", stage="persona", message=(str(e) or "melewati PERSONA_TIMEOUT_MS")[:300])
             # Kuota/jaringan: kalimat aman dari bank supaya siaran tetap jalan.
             text = self.supervisor._fallback(speaker)
             return PersonaResult(PersonaOutput(text=text, emotion=Emotion.NEUTRAL), raw="", model="fallback", latency_ms=0, dialog_act=None, catchphrase=None)
@@ -393,7 +393,12 @@ class ShowEngine:
             prog.audio_s += prepared.duration_s
             prog.history.append(self.history[-1])
             if self.showrunner.should_call(prog):
-                decision = await self.showrunner.decide(prog, prepared.turn, self._pacing_hint(ctx.topic, prog))
+                try:
+                    decision = await asyncio.wait_for(
+                        self.showrunner.decide(prog, prepared.turn, self._pacing_hint(ctx.topic, prog)), self.settings.SHOWRUNNER_TIMEOUT_MS / 1000
+                    )
+                except asyncio.TimeoutError:
+                    decision = self.showrunner.fallback_decision(prog, prepared.turn, "melewati SHOWRUNNER_TIMEOUT_MS; fixed_turns")
                 self.last_showrunner = decision
                 self.log.event("showrunner", decision)
                 await self._emit("showrunner", decision.model_dump())

@@ -155,3 +155,21 @@ async def test_skip_while_next_topic_is_prefetched_moves_one_topic(tmp_path):
     await wait_end(engine)
     turns = [l for l in read_log(engine.log.path) if l["type"] == "turn"]
     assert sum(1 for t in turns if t["topic_id"] == "t2") >= 6
+
+
+async def test_slow_llm_stages_fall_back_instead_of_dead_air(tmp_path):
+    from app.llm import LLMClient
+
+    class Hanging(LLMClient):
+        async def generate(self, *a, **kw):
+            await asyncio.sleep(30)
+
+    engine, _ = make_engine(tmp_path, PERSONA_TIMEOUT_MS=50, SHOWRUNNER_TIMEOUT_MS=50, SUPERVISOR_MODE="rules", MIN_TURNS_PER_TOPIC=3, FIXED_TURNS_PER_TOPIC=3)
+    engine.persona_agent._llm = Hanging()
+    engine.showrunner._llm = Hanging()
+    engine.start()
+    await wait_end(engine, timeout=15)
+    log = list(read_log(engine.log.path))
+    assert log[-1]["reason"] == "completed"
+    assert any(l["type"] == "error" and l["stage"] == "persona" for l in log)
+    assert any(l["type"] == "showrunner" and "SHOWRUNNER_TIMEOUT_MS" in l["reason"] for l in log)

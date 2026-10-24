@@ -61,6 +61,8 @@ class Settings(BaseSettings):
     SUPERVISOR_MODE: Literal["off", "rules", "full"] = "full"
     SUPERVISOR_MAX_REGEN: int = 1
     SUPERVISOR_TIMEOUT_MS: int = 5000
+    PERSONA_TIMEOUT_MS: int = 10000  # lewat batas → kalimat aman, supaya tidak ada siaran hening panjang
+    SHOWRUNNER_TIMEOUT_MS: int = 6000  # lewat batas → keputusan fixed_turns
     PIPELINE_DEPTH: int = 1
     OPENING_TURNS: int = 2  # batas lunak Opening (mode B)
     CLOSING_TURNS: int = 2
