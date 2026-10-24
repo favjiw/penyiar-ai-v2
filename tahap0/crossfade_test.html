@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Uji Crossfade Avatar</title>
+<style>
+  :root { --bg: #fff; --fg: #111; --muted: #666; --line: #ddd; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #151515; --fg: #eee; --muted: #999; --line: #333; } }
+  body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; margin: 16px; display: flex; gap: 20px; flex-wrap: wrap; }
+  .stage { position: relative; width: 360px; aspect-ratio: 9 / 16; background: #000; overflow: hidden; flex: none; }
+  .stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity var(--fade, 200ms) linear; }
+  .stage video.on { opacity: 1; }
+  .badge { position: absolute; top: 8px; left: 8px; background: #e11; color: #fff; font-weight: 700; padding: 2px 8px; border-radius: 4px; z-index: 2; }
+  .state { position: absolute; bottom: 8px; left: 8px; color: #fff; background: rgba(0,0,0,.5); padding: 2px 8px; z-index: 2; font-size: 13px; }
+  .panel { flex: 1; min-width: 300px; max-width: 560px; }
+  button, select, input { font-size: 14px; margin: 3px 4px 3px 0; }
+  pre { border: 1px solid var(--line); padding: 8px; height: 220px; overflow: auto; font-size: 12px; }
+  small { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <span class="badge">AI</span>
+  <video id="v0" muted playsinline preload="auto"></video>
+  <video id="v1" muted playsinline preload="auto"></video>
+  <span class="state" id="stateLbl">belum ada klip</span>
+</div>
+
+<div class="panel">
+  <h1>Uji crossfade avatar T1</h1>
+  <p><small>Pilih semua MP4 satu karakter. Nama file mengikuti Lampiran A PRD (<code>idle_1.mp4</code>, <code>listen_2.mp4</code>, <code>talk_calm_1.mp4</code>, <code>talk_hype_1.mp4</code>, <code>react_laugh.mp4</code>, …). Untuk 3 klip uji minimum: idle, listen, talk.</small></p>
+  <p><input type="file" id="files" accept="video/mp4" multiple></p>
+  <p>
+    Crossfade <input type="number" id="fade" value="200" min="0" max="1000" step="10" style="width:70px"> ms
+  </p>
+  <p>
+    <button id="bIdle">Idle</button>
+    <button id="bListen">Mendengarkan</button>
+    <button id="bTalk">Bicara 6 s</button>
+    <button id="bHype">Bicara semangat 6 s</button>
+    <button id="bReact">Reaksi → bicara</button>
+  </p>
+  <p>
+    Audio giliran (opsional): <input type="file" id="audio" accept="audio/*">
+  </p>
+  <p>
+    <button id="soak">Mulai uji tahan 60 menit</button>
+    <small>Siklus otomatis listen → talk → idle; catat frame drop dan memori tiap menit.</small>
+  </p>
+  <div id="stats"></div>
+  <pre id="log"></pre>
+</div>
+
+<script>
+const vids = [document.getElementById('v0'), document.getElementById('v1')];
+let front = 0, clips = {}, urls = [], state = 'idle', lastFile = null, talkTimer = null, soakTimer = null, soakStart = 0;
+const log = m => { const el = document.getElementById('log'); el.textContent = `${new Date().toLocaleTimeString()} ${m}\n` + el.textContent; };
+
+function group(name) {
+  const base = name.replace(/\.mp4$/i, '');
+  if (base.startsWith('talk_hype')) return 'talk_hype';
+  if (base.startsWith('talk')) return 'talk_calm';
+  if (base.startsWith('react')) return base; // react_laugh, react_thinking, ...
+  return base.replace(/_\d+$/, '');          // idle, listen
+}
+
+document.getElementById('files').onchange = e => {
+  urls.forEach(URL.revokeObjectURL); urls = []; clips = {};
+  for (const f of e.target.files) {
+    const u = URL.createObjectURL(f); urls.push(u);
+    (clips[group(f.name)] ||= []).push({ name: f.name, url: u });
+  }
+  log('Klip: ' + Object.entries(clips).map(([k, v]) => `${k}×${v.length}`).join(', '));
+  setState('idle');
+};
+document.getElementById('fade').oninput = e => document.getElementById('stage').style.setProperty('--fade', e.target.value + 'ms');
+
+function pick(kind) {
+  const list = clips[kind] || clips[kind.startsWith('talk') ? 'talk_calm' : 'idle'] || clips.idle || Object.values(clips)[0];
+  if (!list) return null;
+  const options = list.length > 1 ? list.filter(c => c.name !== lastFile) : list; // tanpa pengulangan berturut-turut
+  const c = options[Math.floor(Math.random() * options.length)];
+  lastFile = c.name;
+  return c;
+}
+
+// Putar klip di elemen belakang; crossfade setelah frame pertama siap agar tidak ada kedip hitam.
+function play(kind, { loop = true, onEnd = null } = {}) {
+  const c = pick(kind); if (!c) return;
+  const back = vids[1 - front];
+  back.loop = loop; back.onended = onEnd;
+  back.src = c.url;
+  const t0 = performance.now();
+  const go = () => {
+    back.classList.add('on'); vids[front].classList.remove('on');
+    const old = vids[front];
+    setTimeout(() => { if (!old.classList.contains('on')) old.pause(); }, +document.getElementById('fade').value + 50);
+    front = 1 - front;
+    log(`${kind}: ${c.name} (siap ${Math.round(performance.now() - t0)} ms)`);
+  };
+  back.play().then(() => (back.requestVideoFrameCallback ? back.requestVideoFrameCallback(go) : go())).catch(err => log('play gagal: ' + err));
+  document.getElementById('stateLbl').textContent = `${kind} · ${c.name}`;
+}
+
+function setState(s, ms) {
+  clearTimeout(talkTimer); state = s;
+  if (s === 'talk' || s === 'talk_hype') {
+    play(s === 'talk' ? 'talk_calm' : 'talk_hype');
+    talkTimer = setTimeout(() => setState('listen'), ms);
+  } else play(s);
+}
+
+const talkWithAudio = kind => {
+  const f = document.getElementById('audio').files[0];
+  if (!f) return setState(kind, 6000);
+  const a = new Audio(URL.createObjectURL(f));
+  a.onplay = () => setState(kind, 1e9);
+  a.onended = () => { URL.revokeObjectURL(a.src); setState('listen'); };
+  a.play();
+};
+document.getElementById('bIdle').onclick = () => setState('idle');
+document.getElementById('bListen').onclick = () => setState('listen');
+document.getElementById('bTalk').onclick = () => talkWithAudio('talk');
+document.getElementById('bHype').onclick = () => talkWithAudio('talk_hype');
+document.getElementById('bReact').onclick = () => {
+  const reacts = Object.keys(clips).filter(k => k.startsWith('react'));
+  if (!reacts.length) return log('Tidak ada klip react_*');
+  clearTimeout(talkTimer);
+  play(reacts[Math.floor(Math.random() * reacts.length)], { loop: false, onEnd: () => setState('talk', 6000) });
+  setTimeout(() => state !== 'talk' && setState('talk', 6000), 1500); // reaksi maks 1,5 s
+};
+
+function stats() {
+  const q = vids.map(v => v.getVideoPlaybackQuality?.() || {});
+  const dropped = q.reduce((s, x) => s + (x.droppedVideoFrames || 0), 0);
+  const total = q.reduce((s, x) => s + (x.totalVideoFrames || 0), 0);
+  const mem = performance.memory ? (performance.memory.usedJSHeapSize / 1048576).toFixed(1) + ' MB' : 'n/a';
+  return { dropped, total, mem };
+}
+setInterval(() => {
+  const s = stats();
+  document.getElementById('stats').textContent = `Frame drop ${s.dropped}/${s.total} · heap JS ${s.mem}` + (soakStart ? ` · uji tahan ${((Date.now() - soakStart) / 60000).toFixed(1)} menit` : '');
+}, 1000);
+
+document.getElementById('soak').onclick = e => {
+  if (soakTimer) { clearInterval(soakTimer); soakTimer = null; soakStart = 0; e.target.textContent = 'Mulai uji tahan 60 menit'; return log('Uji tahan dihentikan'); }
+  soakStart = Date.now(); e.target.textContent = 'Hentikan uji tahan';
+  let n = 0, minute = 0;
+  const cycle = ['listen', 'talk', 'listen', 'talk_hype', 'idle'];
+  soakTimer = setInterval(() => {
+    setState(cycle[n++ % cycle.length], 5000);
+    const m = Math.floor((Date.now() - soakStart) / 60000);
+    if (m > minute) { minute = m; const s = stats(); log(`[menit ${m}] drop ${s.dropped}/${s.total}, heap ${s.mem}`); }
+    if (m >= 60) document.getElementById('soak').click();
+  }, 6000);
+};
+</script>
+</body>
+</html>
