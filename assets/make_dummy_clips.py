@@ -51,7 +51,7 @@ def ffmpeg() -> str:
 
 def make_clip(path: Path, persona: str, code: str, state: str, seconds: int) -> None:
     # Lingkaran yang bergerak memperlihatkan loop dan crossfade; teks memperlihatkan klip mana yang aktif.
-    label = f"{persona.upper()}\\n{code}"
+    label = f"{persona.upper()} {code}"
     vf = (
         f"drawbox=x='270+120*sin(2*PI*t/{seconds})-40':y=380:w=80:h=80:color={STATE_DOT[state]}@0.9:t=fill,"
         f"drawtext=text='{label}':fontcolor=white:fontsize=44:x=(w-text_w)/2:y=560:line_spacing=12,"
@@ -75,7 +75,7 @@ def main() -> None:
     for persona in COLORS:
         folder = ROOT / persona
         folder.mkdir(parents=True, exist_ok=True)
-        manifest = {"persona": persona, "dummy": True, "clips": []}
+        manifest = {"persona": persona, "dummy": True, "focus_y": 0.35, "clips": []}
         for code, state, tag, seconds in CLIPS:
             path = folder / f"{code}.mp4"
             if args.force or not path.exists():

@@ -1,6 +1,7 @@
-import { useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useLiveSession } from '../live/useLiveSession'
 import { COVERED_ZONES, pct, SIDE_MARGIN } from './layout'
+import { VideoAvatar } from './VideoAvatar'
 import './stage.css'
 
 const PANELS = [
@@ -9,8 +10,8 @@ const PANELS = [
 ]
 
 /**
- * Stage sementara Tahap 2: kanvas 9:16 untuk OBS dengan HUD dan audio, tanpa video.
- * Avatar video (FR-8) menggantikan placeholder panel di Tahap 3.
+ * Stage 9:16 untuk OBS (FR-10): avatar video T1 (FR-8) per panel, HUD, dan audio.
+ * Bila klip persona belum ada (manifest tidak ditemukan), panel memakai placeholder.
  * `?clean=1` menyembunyikan info debug, `?zones=1` menampilkan zona tertutup TikTok.
  */
 export function StagePage() {
@@ -18,7 +19,10 @@ export function StagePage() {
   const clean = params.has('clean')
   const zones = params.has('zones')
   const live = useLiveSession('stage')
-  const { snapshot: snap, speaking, output } = live
+  const { snapshot: snap, speaking, output, transcript } = live
+  const [noVideo, setNoVideo] = useState<Record<string, boolean>>({})
+  const markNoVideo = useCallback((id: string) => setNoVideo((v) => (v[id] ? v : { ...v, [id]: true })), [])
+  const lastTurn = transcript[transcript.length - 1]
   const topic = snap.segment === 'topic' ? snap.topic : null
   const segmentLabel = snap.segment === 'opening' ? 'Opening' : snap.segment === 'closing' ? 'Closing' : topic?.judul
 
@@ -31,9 +35,19 @@ export function StagePage() {
       <div className="canvas">
         {PANELS.map((p, i) => (
           <div key={p.id} className={`panel-av ${i === 0 ? 'top' : 'bottom'} ${speaking === p.id ? 'speaking' : ''}`}>
-            <div className="placeholder" aria-hidden>
-              {p.name[0]}
-            </div>
+            {noVideo[p.id] ? (
+              <div className="placeholder" aria-hidden>
+                {p.name[0]}
+              </div>
+            ) : (
+              <VideoAvatar
+                persona={p.id}
+                mode={speaking === p.id ? 'talk' : speaking ? 'listen' : 'idle'}
+                emotion={lastTurn?.persona === p.id ? lastTurn.emotion : null}
+                turnKey={lastTurn?.persona === p.id ? lastTurn.turn : null}
+                onUnavailable={() => markNoVideo(p.id)}
+              />
+            )}
             <div className="nameplate">
               <span className="ai-label">AI</span>
               <span className="name">{p.name}</span>

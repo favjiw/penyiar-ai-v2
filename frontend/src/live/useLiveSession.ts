@@ -3,6 +3,7 @@ import type { OutputStatus, ShowSnapshot, ShowrunnerDecision, SupervisorEvent, T
 
 type Role = 'console' | 'prompter' | 'stage'
 const RECONNECT_MS = 1500
+const RECONNECT_MAX_MS = 10000
 const KEEP = 200
 
 export interface LiveSession {
@@ -105,15 +106,21 @@ export function useLiveSession(role: Role): LiveSession {
   useEffect(() => {
     let closed = false
     let timer: number | undefined
+    let attempts = 0
 
     const connect = () => {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws'
       const ws = new WebSocket(`${proto}://${location.host}/ws/session?role=${role}`)
       wsRef.current = ws
-      ws.onopen = () => setConnected(true)
+      ws.onopen = () => {
+        attempts = 0
+        setConnected(true)
+      }
       ws.onclose = () => {
         setConnected(false)
-        if (!closed) timer = window.setTimeout(connect, RECONNECT_MS)
+        // Jeda makin panjang selama backend mati, supaya console tidak dibanjiri percobaan.
+        const wait = Math.min(RECONNECT_MAX_MS, RECONNECT_MS * 2 ** attempts++)
+        if (!closed) timer = window.setTimeout(connect, wait)
       }
       ws.onmessage = (ev) => {
         const { type, data } = JSON.parse(ev.data)
