@@ -154,6 +154,7 @@ class ShowEngine:
         self._task: Optional[asyncio.Task] = None
         self.error: Optional[str] = None
         self._persona_failures = 0
+        self._persona_failing_since = 0.0
         self._supervisor_mode = settings.SUPERVISOR_MODE
 
     # ── Event dan status ─────────────────────────────────────────────────────
@@ -322,14 +323,24 @@ class ShowEngine:
                 self.log.event("quota", role="persona", model_from=self.persona_agent._model, model_to=fallback_model)
                 self.persona_agent._model = fallback_model
                 return await self._persona_turn(speaker, ctx, correction)
-            return await self._persona_failed(speaker, ctx, str(e))
+            return await self._persona_failed(speaker, ctx, str(e), permanent=True)
         except (LLMError, asyncio.TimeoutError) as e:
             return await self._persona_failed(speaker, ctx, str(e) or "melewati PERSONA_TIMEOUT_MS")
 
-    async def _persona_failed(self, speaker: PersonaCard, ctx: TurnContext, message: str) -> PersonaResult:
+    async def _persona_failed(self, speaker: PersonaCard, ctx: TurnContext, message: str, permanent: bool = False) -> PersonaResult:
+        """Kalimat aman untuk giliran ini; siaran dibawa ke Closing bila persona mati terus.
+
+        `permanent` (kuota harian habis tanpa model cadangan) langsung memenuhi syarat;
+        galat lain (jaringan, timeout) harus beruntun sekaligus berlangsung
+        PERSONA_FAILURE_WRAP_SEC, supaya gangguan DNS sesaat tidak menutup siaran.
+        """
+        now = time.monotonic()
+        if self._persona_failures == 0:
+            self._persona_failing_since = now
         self._persona_failures += 1
         self.log.event("error", stage="persona", message=message[:300])
-        if self._persona_failures >= self.settings.PERSONA_FAILURES_BEFORE_WRAP and self.plan.segment != "closing":
+        long_enough = permanent or now - self._persona_failing_since >= self.settings.PERSONA_FAILURE_WRAP_SEC
+        if self._persona_failures >= self.settings.PERSONA_FAILURES_BEFORE_WRAP and long_enough and self.plan.segment != "closing":
             # Tanpa persona, siaran hanya memutar kalimat aman berulang: lebih baik ditutup rapi.
             await self._alert("engine", f"Persona gagal {self._persona_failures}x berturut-turut ({message[:80]}); siaran dibawa ke Closing")
             p = self.plan

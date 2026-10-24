@@ -276,3 +276,28 @@ async def test_producer_failure_ends_session_with_error(tmp_path):
     await wait_end(engine)
     assert engine.error and "produksi rusak" in engine.error
     assert list(read_log(engine.log.path))[-1]["reason"] == "error"
+
+
+
+async def test_short_network_blip_does_not_wrap_up(tmp_path):
+    from app.llm import LLMError
+
+    class Blip:
+        """Tiga giliran pertama gagal (DNS), lalu pulih."""
+
+        def __init__(self):
+            self.n, self.inner = 0, MockLLMClient(delay_sec=0)
+
+        async def generate(self, prompt, **kw):
+            self.n += 1
+            if self.n <= 3:
+                raise LLMError("getaddrinfo failed")
+            return await self.inner.generate(prompt, **kw)
+
+    engine, events = make_engine(tmp_path, SUPERVISOR_MODE="rules")
+    engine.persona_agent._llm = Blip()
+    engine.start()
+    await wait_end(engine)
+    turns = [l for l in read_log(engine.log.path) if l["type"] == "turn"]
+    assert {t["topic_id"] for t in turns} >= {"t1", "t2"}  # siaran tidak dipotong ke Closing
+    assert not any(t == "alert" and "Closing" in d["message"] for t, d in events)

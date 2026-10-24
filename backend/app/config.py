@@ -69,7 +69,8 @@ class Settings(BaseSettings):
     SUPERVISOR_TIMEOUT_MS: int = 5000
     PERSONA_TIMEOUT_MS: int = 10000  # lewat batas → kalimat aman, supaya tidak ada siaran hening panjang
     SHOWRUNNER_TIMEOUT_MS: int = 6000  # lewat batas → keputusan fixed_turns
-    PERSONA_FAILURES_BEFORE_WRAP: int = 3  # persona gagal beruntun sebanyak ini → langsung ke Closing
+    PERSONA_FAILURES_BEFORE_WRAP: int = 3  # persona gagal beruntun sebanyak ini...
+    PERSONA_FAILURE_WRAP_SEC: int = 90  # ...dan selama ini (detik) → ke Closing; gangguan jaringan sesaat tidak menutup siaran
     PIPELINE_DEPTH: int = 1
     OPENING_TURNS: int = 2  # batas lunak Opening (mode B)
     CLOSING_TURNS: int = 2
