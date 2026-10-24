@@ -63,7 +63,7 @@ Dakocan, Senandika, Tri Nugraha, dan Honeypie menyisipkan/mengulang kata ("perna
 
 **Catatan validitas juri audio:** `audio_judge.py` (Gemini `gemini-3.5-flash-lite`) memberi skor 5/5 di semua aspek untuk semua klip, **termasuk Edge TTS dan Gemini TTS**. Skor kealamian dari LLM-judge audio ini tidak bisa dipakai; hanya transkripsinya (WER) yang berguna. Penilaian "robot atau tidak" tetap harus oleh manusia (KT FR-6).
 
-**Konflik dengan PRD:** §1.3, §2.3, dan §8 menetapkan Rp0 dan mengecualikan ElevenLabs. Uji ini atas permintaan Favian; bila ElevenLabs dipakai di live, PRD perlu diubah (keputusan [F]) dan dicatat di §17.
+**Keputusan:** Favian memilih ElevenLabs flash sebagai TTS utama; PRD diperbarui ke v2.2 (pengecualian Rp0 khusus TTS).
 
 ## STT
 
@@ -93,6 +93,6 @@ Belum: perlu PC lab. Ukur dengan `t2_rtf.py`. Catatan: di laptop MX250, `nvidia-
 | Keputusan | Pilihan | Alasan |
 |---|---|---|
 | STT | | |
-| TTS utama | Usulan [C]: ElevenLabs `eleven_flash_v2_5` (Pratama/Aita) bila PRD diubah untuk mengizinkannya; Edge sebagai cadangan/failover. Bila tetap Rp0: Edge utama. | Flash p50 0,55 s dan setia teks; Gemini free tier 3 RPM, p50 12,7 s. Menunggu penilaian dengar dan keputusan Favian |
+| TTS utama | **ElevenLabs `eleven_flash_v2_5`** (Pratama = Raka, Aita = Salsa), Edge failover [F, 24 Okt 2026] | Flash p50 0,55 s dan setia teks; Gemini free tier 3 RPM, p50 12,7 s. PRD v2.2 |
 | T2 | | |
 | `PIPELINE_DEPTH` | | |
