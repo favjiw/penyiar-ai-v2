@@ -813,7 +813,7 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 |---|---|---|---|
 | 0 Uji kelayakan | Berjalan | 24 Okt 2026 | Alat uji di `tahap0/` siap. TTS terukur: Edge, Gemini (free tier 3 RPM, terlalu lambat untuk live), ElevenLabs flash (p50 0,55 s) dipilih sebagai TTS utama [F], Edge failover. Menunggu: penilaian dengar TTS, rekaman STT, kuota AI Studio, klip Flow, PC lab. Lihat `tahap0/HASIL.md`. |
 | 1 Fondasi + Blocker | Menunggu pemeriksaan Favian | 24 Okt 2026 | Backend (config, skema, LLM + rate limiter, TTS ElevenLabs/Edge + breaker, persona) dan FR-1 lengkap (API + konsol: generate, bandingkan, edit, kunci, versi, buat ulang). 27 tes lulus. KT otomatis: 10/10 tema valid dalam 5,8–8,1 s (`gemini-3.5-flash-lite`, prompt `blocker-v2`). Sisa KT: penilaian layak siar ≥8/10 di `docs/kt/FR-1-blocker.md`. Catatan: repo lama ternyata tidak punya breaker TTS (FR-6), jadi dibuat baru. Repo lama sudah diberi tag `v1-format-clock` dan README arsip. |
-| 2 Mode B inti | Belum | | |
+| 2 Mode B inti | Menunggu keputusan Favian | 24 Okt 2026 | FR-2/3/4/5/6/12 + konsol live + stage sementara (HUD + audio) selesai; 65 tes lulus. 3 sesi live dari blocker tanpa crash/intervensi (`docs/kt/tahap2-gate-*.md`). Sesi 3: Supervisor p50 1,18 s, jeda p50 0 s / p95 8,5 s (satu menit API lambat), 52/52 ElevenLabs, 1.619 kredit. **Gerbang 20 menit belum tercapai:** blocker 3 topik × 3–5 poin habis di ±8–9 menit (Showrunner pindah topik setelah poin tercakup dan obrolan jenuh). Perlu keputusan: tambah materi blocker, atau longgarkan Showrunner, atau ubah definisi gerbang. Nilai MIN/MAX per topik (§15.2 #4) dipakai 8/60 di uji ini. |
 | 3 Avatar T1 + OBS | Belum | | |
 | 4 Mode A | Belum | | |
 | 5 Avatar T2 | Belum | | |
