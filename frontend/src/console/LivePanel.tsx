@@ -27,6 +27,9 @@ interface Props {
 export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
   const { snapshot: snap, transcript, showrunner, supervisor, output } = live
   const [blockerId, setBlockerId] = useState('')
+  const [mode, setMode] = useState<'A' | 'B'>('B')
+  const [aiPersona, setAiPersona] = useState('salsa')
+  const [humanName, setHumanName] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [precheck, setPrecheck] = useState<string>('')
@@ -109,6 +112,7 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
             </strong>
             <span className="angle">
               {fmtElapsed(elapsed)} · giliran {snap.turn}
+              {snap.mode === 'A' && ` · mode A dengan ${snap.human?.name} · filler ${snap.fillers_ready ?? 0}`}
             </span>
             <span className="spacer" />
             <button onClick={() => control(snap.state === 'paused' ? 'resume' : 'pause')} disabled={busy}>
@@ -134,14 +138,45 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
             <button onClick={() => void runPrecheck()} disabled={busy}>
               Cek pra-live
             </button>
-            <button className="primary" onClick={() => act(() => api.startShow(blockerId, 'B'))} disabled={busy || !blockerId}>
-              Mulai mode B (Raka + Salsa)
+            <select value={mode} onChange={(e) => setMode(e.target.value as 'A' | 'B')} aria-label="Mode">
+              <option value="B">Mode B: Raka + Salsa (AI + AI)</option>
+              <option value="A">Mode A: penyiar + AI</option>
+            </select>
+            {mode === 'A' && (
+              <>
+                <select value={aiPersona} onChange={(e) => setAiPersona(e.target.value)} aria-label="Lawan bicara AI">
+                  <option value="salsa">AI: Salsa</option>
+                  <option value="raka">AI: Raka</option>
+                </select>
+                <input
+                  type="text"
+                  className="host-name"
+                  value={humanName}
+                  maxLength={40}
+                  placeholder="Nama penyiar"
+                  onChange={(e) => setHumanName(e.target.value)}
+                />
+              </>
+            )}
+            <button
+              className="primary"
+              onClick={() =>
+                act(() => (mode === 'A' ? api.startShow(blockerId, 'A', { ai_persona: aiPersona, human_name: humanName }) : api.startShow(blockerId, 'B')))
+              }
+              disabled={busy || !blockerId || (mode === 'A' && !humanName.trim())}
+            >
+              Mulai
             </button>
           </>
         )}
         <button onClick={openStage} title="Popup 9:16 untuk ditangkap OBS">
           {output?.stage_connected ? 'Stage ✓' : 'Buka Stage'}
         </button>
+        {(mode === 'A' || snap.mode === 'A') && (
+          <a className="button-link" href="/prompter" target="hits-prompter" title="Prompter untuk penyiar (tablet atau monitor kedua)">
+            {output?.clients?.prompter ? 'Prompter ✓' : 'Buka Prompter'}
+          </a>
+        )}
       </section>
 
       {precheck && !onAir && <div className="status">{precheck}</div>}
@@ -174,6 +209,11 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
               {t.tts_provider && t.tts_provider !== 'elevenlabs' && t.tts_provider !== 'mock' && <span className="badge">TTS {t.tts_provider}</span>}
             </div>
           ))}
+          {live.sttPartial && (
+            <div className="line partial">
+              <span className="who human">{snap.human?.name ?? 'Penyiar'}</span> {live.sttPartial}…
+            </div>
+          )}
           <div ref={transcriptEnd} />
         </section>
 

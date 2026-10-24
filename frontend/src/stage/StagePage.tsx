@@ -4,10 +4,8 @@ import { COVERED_ZONES, pct, SIDE_MARGIN } from './layout'
 import { VideoAvatar } from './VideoAvatar'
 import './stage.css'
 
-const PANELS = [
-  { id: 'raka', name: 'Raka' },
-  { id: 'salsa', name: 'Salsa' },
-]
+const NAMES: Record<string, string> = { raka: 'Raka', salsa: 'Salsa' }
+const MODE_B_PANELS = ['raka', 'salsa']
 
 /**
  * Stage 9:16 untuk OBS (FR-10): avatar video T1 (FR-8) per panel, HUD, dan audio.
@@ -23,6 +21,9 @@ export function StagePage() {
   const [noVideo, setNoVideo] = useState<Record<string, boolean>>({})
   const markNoVideo = useCallback((id: string) => setNoVideo((v) => (v[id] ? v : { ...v, [id]: true })), [])
   const lastTurn = transcript[transcript.length - 1]
+  // Mode A (FR-10): panel atas untuk kamera studio (source OBS terpisah, area transparan), panel bawah avatar AI.
+  const modeA = snap.mode === 'A' && !!snap.ai_persona
+  const panels: (string | null)[] = modeA ? [null, snap.ai_persona as string] : MODE_B_PANELS
   const topic = snap.segment === 'topic' ? snap.topic : null
   const segmentLabel = snap.segment === 'opening' ? 'Opening' : snap.segment === 'closing' ? 'Closing' : topic?.judul
 
@@ -31,30 +32,35 @@ export function StagePage() {
   }, [])
 
   return (
-    <div className="stage-root" onClick={live.audioBlocked ? live.unlockAudio : undefined}>
+    <div className={`stage-root ${modeA ? 'mode-a' : ''}`} onClick={live.audioBlocked ? live.unlockAudio : undefined}>
       <div className="canvas">
-        {PANELS.map((p, i) => (
-          <div key={p.id} className={`panel-av ${i === 0 ? 'top' : 'bottom'} ${speaking === p.id ? 'speaking' : ''}`}>
-            {noVideo[p.id] ? (
-              <div className="placeholder" aria-hidden>
-                {p.name[0]}
+        {panels.map((id, i) =>
+          id === null ? (
+            <div key="camera" className="panel-av top camera" aria-label="area kamera studio" />
+          ) : (
+            <div key={id} className={`panel-av ${i === 0 ? 'top' : 'bottom'} ${speaking === id ? 'speaking' : ''}`}>
+              {noVideo[id] ? (
+                <div className="placeholder" aria-hidden>
+                  {NAMES[id]?.[0] ?? '?'}
+                </div>
+              ) : (
+                <VideoAvatar
+                  persona={id}
+                  // Mode A: penyiar manusia yang banyak bicara, jadi AI terlihat mendengarkan saat diam.
+                  mode={speaking === id ? 'talk' : speaking || modeA ? 'listen' : 'idle'}
+                  emotion={lastTurn?.persona === id ? lastTurn.emotion : null}
+                  turnKey={lastTurn?.persona === id ? lastTurn.turn : null}
+                  onUnavailable={() => markNoVideo(id)}
+                />
+              )}
+              <div className="nameplate">
+                <span className="ai-label">AI</span>
+                <span className="name">{NAMES[id] ?? id}</span>
+                {speaking === id && <span className="eq" aria-label="sedang bicara">●●●</span>}
               </div>
-            ) : (
-              <VideoAvatar
-                persona={p.id}
-                mode={speaking === p.id ? 'talk' : speaking ? 'listen' : 'idle'}
-                emotion={lastTurn?.persona === p.id ? lastTurn.emotion : null}
-                turnKey={lastTurn?.persona === p.id ? lastTurn.turn : null}
-                onUnavailable={() => markNoVideo(p.id)}
-              />
-            )}
-            <div className="nameplate">
-              <span className="ai-label">AI</span>
-              <span className="name">{p.name}</span>
-              {speaking === p.id && <span className="eq" aria-label="sedang bicara">●●●</span>}
             </div>
-          </div>
-        ))}
+          ),
+        )}
 
         <div className="hud">
           <div className="program-pill">HITS UNIKOM RADIO · LIVE</div>

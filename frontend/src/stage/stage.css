@@ -150,3 +150,8 @@
 /* Avatar video T1: isi panel penuh, klip 9:16 dipotong tengah untuk panel setengah tinggi */
 .video-avatar { position: absolute; inset: 0; overflow: hidden; }
 .video-avatar video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+/* Mode A: latar transparan supaya kamera studio (source OBS di bawah Browser Source) terlihat di panel atas */
+.stage-root.mode-a, .stage-root.mode-a .canvas { background: transparent; }
+.panel-av.camera { background: transparent; border-bottom: none; }
+body:has(.stage-root.mode-a) { background: transparent; }

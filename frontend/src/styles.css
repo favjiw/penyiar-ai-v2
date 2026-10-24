@@ -171,3 +171,9 @@ button.danger { border-color: var(--err-fg); color: var(--err-fg); }
 .coverage meter { width: 100%; }
 ol.log { margin: 8px 0 0; padding-left: 18px; font-size: 13px; }
 .angle { color: var(--muted); font-size: 13px; }
+
+.who.human { color: var(--ok); }
+.transcript .line.partial { color: var(--muted); font-style: italic; }
+.live-bar .host-name { width: 160px; }
+a.button-link { border: 1px solid var(--line); border-radius: 7px; padding: 7px 12px; color: var(--fg); text-decoration: none; background: var(--panel); }
+a.button-link:hover { border-color: var(--accent); }
