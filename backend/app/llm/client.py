@@ -122,8 +122,13 @@ class GeminiLLMClient(LLMClient):
             await self.limiters.get(model).acquire()
             try:
                 start = time.perf_counter()
-                resp = await self._client.aio.models.generate_content(
-                    model=model, contents=prompt, config=types.GenerateContentConfig(**config)
+                # Klien sync di thread: klien async google-genai memakai aiohttp+aiodns bila
+                # terpasang, dan aiodns timeout di laptop ini (sama seperti Edge TTS).
+                resp = await asyncio.to_thread(
+                    self._client.models.generate_content,
+                    model=model,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(**config),
                 )
                 latency_ms = int((time.perf_counter() - start) * 1000)
                 raw = resp.text or ""
