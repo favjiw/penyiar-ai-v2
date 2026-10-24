@@ -3,6 +3,7 @@ import { api } from './api'
 import { BlockerStudio } from './console/BlockerStudio'
 import { LivePanel } from './console/LivePanel'
 import { useLiveSession } from './live/useLiveSession'
+import { PrompterPage } from './prompter/PrompterPage'
 import { StagePage } from './stage/StagePage'
 import type { Blocker } from './types'
 
@@ -56,6 +57,6 @@ function Console() {
 export function App() {
   const path = window.location.pathname
   if (path.startsWith('/stage')) return <StagePage />
-  if (path.startsWith('/prompter')) return <main className="empty">Prompter dibuat di Tahap 4 (PRD §13).</main>
+  if (path.startsWith('/prompter')) return <PrompterPage />
   return <Console />
 }
