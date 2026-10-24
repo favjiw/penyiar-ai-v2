@@ -47,7 +47,10 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
     return () => window.clearInterval(t)
   }, [snap.state, snap.elapsed_s])
 
-  useEffect(() => transcriptEnd.current?.scrollIntoView({ block: 'nearest' }), [transcript.length])
+  useEffect(() => {
+    // Tanpa return: scrollIntoView di Chromium baru mengembalikan Promise, dan React mengira itu cleanup.
+    transcriptEnd.current?.scrollIntoView({ block: 'nearest' })
+  }, [transcript.length])
 
   const act = async (fn: () => Promise<unknown>, ok?: string) => {
     setBusy(true)

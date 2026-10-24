@@ -231,7 +231,11 @@ class ShowEngine:
         await self._finish("stopped")
 
     def playback_feedback(self, data: dict[str, Any]) -> None:
-        if data.get("playback_id") == self._playback_id and data.get("status") in ("ended", "error"):
+        if data.get("playback_id") != self._playback_id:
+            return
+        if data.get("status") == "error":
+            self.log.event("error", stage="playback", playback_id=self._playback_id, message=str(data.get("message", "audio gagal diputar"))[:200])
+        if data.get("status") in ("ended", "error"):
             self._playback_done.set()
 
     def release_playback(self) -> None:

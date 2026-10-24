@@ -68,7 +68,7 @@
   font-weight: 600;
 }
 .panel-av.top .nameplate { top: 12cqh; }
-.panel-av.bottom .nameplate { top: 2cqh; }
+.panel-av.bottom .nameplate { top: 9cqh; } /* kanan, di luar daftar komentar (kiri 70%) */
 .ai-label {
   background: #ff3d7f;
   color: #fff;
@@ -84,7 +84,7 @@
   position: absolute;
   left: 6cqw;
   right: 6cqw;
-  top: 40cqh;
+  top: 38cqh;
   display: flex;
   flex-direction: column;
   align-items: center;
