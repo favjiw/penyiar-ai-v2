@@ -1,6 +1,6 @@
 # Tahap 0: Uji kelayakan
 
-Skrip dan halaman uji untuk gerbang Tahap 0 (PRD §13). Hasil mentah ditulis ke `tahap0/out/` (tidak di-commit); ringkasan dan keputusan ditulis ke `tahap0/HASIL.md` lalu ke PRD §15.
+Skrip dan halaman uji untuk gerbang Tahap 0 (PRD §13). Hasil mentah ditulis ke `tahap0/out/` (tidak di-commit); ringkasan dan keputusan ditulis ke [`HASIL.md`](HASIL.md) lalu ke PRD §15.
 
 ## Persiapan
 
@@ -15,8 +15,16 @@ cp .env.example .env   # isi GEMINI_API_KEY dan GEMINI_MODEL_TTS
 | Uji | Alat | Status |
 |---|---|---|
 | Kuota free tier | `quota.md` + `quota_calc.py` | Belum |
-| TTS Gemini vs Edge | `tts_bench.py` + `data/tts_sentences.txt` | Belum |
+| TTS Gemini vs Edge | `tts_bench.py` + `data/tts_sentences.txt` | Edge selesai; Gemini menunggu API key |
 | STT Web Speech vs faster-whisper | `stt_webspeech.html`, `stt_bench.py` + `data/stt_sentences.txt` | Belum |
 | Avatar T1 crossfade | `crossfade_test.html` | Belum |
 | Avatar T2 RTF | `t2_rtf.py` | Belum |
 | Keputusan gerbang | `HASIL.md` → PRD §15 | Belum |
+
+## Menjalankan halaman uji
+
+```bash
+python -m http.server -d tahap0 8800
+```
+
+Lalu buka `http://localhost:8800/stt_webspeech.html` atau `http://localhost:8800/crossfade_test.html` di Chrome.
