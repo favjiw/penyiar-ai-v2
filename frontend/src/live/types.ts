@@ -19,6 +19,13 @@ export interface TurnEvent extends TranscriptEntry {
   audio_url: string | null
   duration_s: number
   playback_id: string
+  parts?: number // mode A: jumlah bagian kalimat; bagian 2..n datang lewat audio_part
+}
+
+export interface TopicPoint {
+  id: string
+  text: string
+  covered: boolean
 }
 
 export interface OnAirTopic {
@@ -28,6 +35,7 @@ export interface OnAirTopic {
 }
 
 export interface ShowrunnerDecision {
+  advisory?: boolean // mode A: saran untuk penyiar, tidak memindah topik
   turn: number
   topic_id: string
   points_covered: string[]
@@ -69,6 +77,12 @@ export interface ShowSnapshot {
   coverage?: Record<string, { covered: string[]; total: number }>
   tts?: { primary: string; fallback: string | null; breaker_open: boolean; credits_used: number }
   error?: string | null
+  // mode A
+  human?: { id: string; name: string }
+  ai_persona?: string
+  busy?: boolean
+  topic_points?: TopicPoint[]
+  fillers_ready?: number
 }
 
 export interface OutputStatus {

@@ -15,14 +15,28 @@ export interface LiveSession {
   output: OutputStatus | null
   speaking: string | null
   alerts: { stage: string; message: string; turn: number }[]
+  sttPartial: string
   audioBlocked: boolean
   unlockAudio: () => void
+  send: (action: string, data?: Record<string, unknown>) => void
+}
+
+/** Satu hal yang diputar berurutan: filler, atau giliran AI yang bisa terdiri dari beberapa bagian kalimat. */
+interface PlayItem {
+  id: string
+  persona: string
+  urls: (string | null | undefined)[] // undefined = bagian belum tiba; null = TTS bagian itu gagal (dilewati)
+  total: number
+  idx: number
+  report: boolean // giliran dilaporkan ke server; filler tidak
+  started: boolean
 }
 
 /**
  * Sambungan /ws/session dengan sambung ulang otomatis (PRD §8). Bila klien ini
- * pemilik audio, giliran diputar di sini dan selesai-putarnya dilaporkan ke
- * server supaya Show Engine tahu kapan memutar giliran berikutnya.
+ * pemilik audio, audio diputar di sini lewat antrean (filler → giliran → bagian
+ * kalimat berikutnya) dan selesai-putar tiap giliran dilaporkan ke server supaya
+ * Show Engine tahu kapan lanjut.
  */
 export function useLiveSession(role: Role): LiveSession {
   const [connected, setConnected] = useState(false)
@@ -33,12 +47,14 @@ export function useLiveSession(role: Role): LiveSession {
   const [output, setOutput] = useState<OutputStatus | null>(null)
   const [speaking, setSpeaking] = useState<string | null>(null)
   const [alerts, setAlerts] = useState<LiveSession['alerts']>([])
+  const [sttPartial, setSttPartial] = useState('')
   const [audioBlocked, setAudioBlocked] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
   const ownerRef = useRef(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const pendingRef = useRef<TurnEvent | null>(null)
+  const queueRef = useRef<PlayItem[]>([])
+  const playingRef = useRef(false)
   const sessionRef = useRef<string | undefined>()
 
   const send = useCallback((action: string, data: Record<string, unknown> = {}) => {
@@ -52,56 +68,79 @@ export function useLiveSession(role: Role): LiveSession {
       a.onended = a.onerror = null
       a.pause()
     }
-    pendingRef.current = null
+    queueRef.current = []
+    playingRef.current = false
   }, [])
 
-  const play = useCallback(
-    (turn: TurnEvent) => {
-      stopAudio()
-      if (!turn.audio_url) return
-      const a = audioRef.current ?? (audioRef.current = new Audio())
-      const report = (status: 'started' | 'ended' | 'error') => send('playback', { playback_id: turn.playback_id, status, persona: turn.persona })
-      a.src = turn.audio_url
-      a.onended = () => {
-        setSpeaking(null)
-        report('ended')
-      }
-      a.onerror = () => {
-        setSpeaking(null)
-        report('error')
-      }
-      a.play()
-        .then(() => {
-          setAudioBlocked(false)
-          send('audio_state', { blocked: false })
-          setSpeaking(turn.persona)
+  /** Putar bagian berikutnya dari item terdepan antrean; berhenti menunggu bila bagiannya belum tiba. */
+  const pump = useCallback(() => {
+    if (playingRef.current) return
+    const item = queueRef.current[0]
+    if (!item) return
+    const report = (status: 'started' | 'ended' | 'error') =>
+      item.report && send('playback', { playback_id: item.id, status, persona: item.persona })
+    const finish = (status: 'ended' | 'error') => {
+      queueRef.current.shift()
+      setSpeaking(null)
+      report(status)
+      pump()
+    }
+    while (item.idx < item.total && item.urls[item.idx] === null) item.idx++ // bagian yang TTS-nya gagal
+    if (item.idx >= item.total) return finish('ended')
+    const url = item.urls[item.idx]
+    if (url === undefined) return // tunggu audio_part
+    if (url === null) return finish('error')
+    const a = audioRef.current ?? (audioRef.current = new Audio())
+    playingRef.current = true
+    a.src = url
+    a.onended = () => {
+      playingRef.current = false
+      item.idx++
+      if (item.idx >= item.total) finish('ended')
+      else pump()
+    }
+    a.onerror = () => {
+      playingRef.current = false
+      finish('error')
+    }
+    a.play()
+      .then(() => {
+        setAudioBlocked(false)
+        send('audio_state', { blocked: false })
+        setSpeaking(item.persona)
+        if (!item.started) {
+          item.started = true
           report('started')
-        })
-        .catch((err: DOMException) => {
-          if (err.name === 'NotAllowedError') {
-            // Autoplay diblokir browser: tunggu operator mengklik halaman.
-            pendingRef.current = turn
-            setAudioBlocked(true)
-            send('audio_state', { blocked: true })
-          } else {
-            report('error')
-          }
-        })
+        }
+      })
+      .catch((err: DOMException) => {
+        playingRef.current = false
+        if (err.name === 'NotAllowedError') {
+          // Autoplay diblokir browser: item tetap di antrean sampai operator mengklik halaman.
+          setAudioBlocked(true)
+          send('audio_state', { blocked: true })
+        } else finish('error')
+      })
+  }, [send])
+
+  const enqueue = useCallback(
+    (item: Omit<PlayItem, 'idx' | 'started'>) => {
+      queueRef.current.push({ ...item, idx: 0, started: false })
+      pump()
     },
-    [send, stopAudio],
+    [pump],
   )
 
   const unlockAudio = useCallback(() => {
-    const pending = pendingRef.current
-    if (pending) play(pending)
+    if (queueRef.current.length) pump()
     else {
       // Gestur pengguna membuka izin autoplay untuk giliran berikutnya.
       const a = audioRef.current ?? (audioRef.current = new Audio())
       a.play().catch(() => undefined)
-      setAudioBlocked(false)
-      send('audio_state', { blocked: false })
     }
-  }, [play, send])
+    setAudioBlocked(false)
+    send('audio_state', { blocked: false })
+  }, [pump, send])
 
   useEffect(() => {
     let closed = false
@@ -142,10 +181,32 @@ export function useLiveSession(role: Role): LiveSession {
           case 'turn': {
             const turn = data as TurnEvent
             setTranscript((t) => (t.some((x) => x.turn === turn.turn) ? t : [...t, turn].slice(-KEEP)))
-            if (ownerRef.current) play(turn)
-            else setSpeaking(turn.persona)
+            if (ownerRef.current) {
+              const total = turn.parts ?? 1
+              const urls: (string | null | undefined)[] = Array(total).fill(undefined)
+              urls[0] = turn.audio_url
+              enqueue({ id: turn.playback_id, persona: turn.persona, urls, total, report: true })
+            } else setSpeaking(turn.persona)
             break
           }
+          case 'audio_part': {
+            const item = queueRef.current.find((i) => i.id === data.playback_id)
+            if (item) {
+              item.urls[data.index] = data.audio_url ?? null
+              pump()
+            }
+            break
+          }
+          case 'filler':
+            if (ownerRef.current && data.audio_url) enqueue({ id: `filler:${Date.now()}`, persona: data.persona, urls: [data.audio_url], total: 1, report: false })
+            break
+          case 'human_turn':
+            setTranscript((t) => [...t, data].slice(-KEEP))
+            setSttPartial('')
+            break
+          case 'stt_partial':
+            setSttPartial(data.final ? '' : data.text)
+            break
           case 'speaking':
             if (!ownerRef.current) setSpeaking(data.persona ?? null)
             break
@@ -182,7 +243,7 @@ export function useLiveSession(role: Role): LiveSession {
       stopAudio()
       wsRef.current?.close()
     }
-  }, [role, play, send, stopAudio])
+  }, [role, enqueue, pump, send, stopAudio])
 
-  return { connected, snapshot, transcript, showrunner, supervisor, output, speaking, alerts, audioBlocked, unlockAudio }
+  return { connected, snapshot, transcript, showrunner, supervisor, output, speaking, alerts, sttPartial, audioBlocked, unlockAudio, send }
 }
