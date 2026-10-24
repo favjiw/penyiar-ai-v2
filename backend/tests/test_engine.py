@@ -122,3 +122,22 @@ def test_requires_locked_blocker(tmp_path):
     b.locked = False
     with pytest.raises(ValueError):
         ShowEngine(Settings(_env_file=None), MockLLMClient(), FailoverTTS(MockTTSProvider()), b, load_personas(), None, tmp_path)
+
+
+async def test_report_summarizes_session(tmp_path):
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from report import summarize, transcript_md
+
+    engine, _ = make_engine(tmp_path)
+    engine.start()
+    await wait_end(engine)
+    lines = list(read_log(engine.log.path))
+    s = summarize(lines)
+    assert s["end_reason"] == "completed" and s["turns"] == len([l for l in lines if l["type"] == "turn"])
+    assert set(s["topics"]) == {"t1", "t2"} and s["topics"]["t1"]["coverage"] == "3/3"
+    assert s["topics"]["t1"]["ended_by"] == "transition" and s["topics"]["t2"]["ended_by"] == "close"
+    md = transcript_md(lines)
+    assert "## Topik 1" in md and "**Raka:**" in md
