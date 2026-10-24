@@ -37,3 +37,6 @@ tahap0/out/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Data runtime (blocker tersimpan, dll.)
+backend/data/
