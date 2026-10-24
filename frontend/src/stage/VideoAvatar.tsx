@@ -91,7 +91,10 @@ export function VideoAvatar({ persona, mode, emotion, turnKey, fadeMs = 200, onU
     back.loop = loop
     back.onended = onEnd ?? null
     back.src = base + clip.file
+    let swapped = false
     const swap = () => {
+      if (swapped) return
+      swapped = true
       back.style.opacity = '1'
       cur.style.opacity = '0'
       front.current = 1 - front.current
@@ -104,7 +107,12 @@ export function VideoAvatar({ persona, mode, emotion, turnKey, fadeMs = 200, onU
     }
     back
       .play()
-      .then(() => (back.requestVideoFrameCallback ? back.requestVideoFrameCallback(() => swap()) : swap()))
+      .then(() => {
+        if (!back.requestVideoFrameCallback) return swap()
+        back.requestVideoFrameCallback(() => swap())
+        // Jendela yang tidak sedang dirender tidak memanggil callback frame; jangan biarkan avatar kosong.
+        window.setTimeout(swap, 300)
+      })
       .catch(() => undefined) // autoplay video bisu jarang diblokir; klip berikutnya mencoba lagi
   }
 
