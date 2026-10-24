@@ -71,7 +71,7 @@ def main() -> None:
     total_ref = sum(len(r["ref"].split()) for r in rows)
     weighted = sum(r["wer"] * len(r["ref"].split()) for r in rows) / total_ref
     lat = sorted(r["latency_s"] for r in rows)
-    print(f"\nAkurasi kata ≈ {(1 - weighted) * 100:.1f}% (target ≥90%)")
+    print(f"\nAkurasi kata ~ {(1 - weighted) * 100:.1f}% (target >=90%)")
     print(f"Latensi p50 {lat[len(lat) // 2]:.2f}s, maks {lat[-1]:.2f}s")
     print(f"Tersimpan: {path}")
 
