@@ -804,7 +804,7 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 
 | Tahap | Status | Tanggal | Catatan |
 |---|---|---|---|
-| 0 Uji kelayakan | Berjalan | 24 Okt 2026 | Alat uji di `tahap0/` siap. Edge TTS terukur. Menunggu: API key Gemini, klip Flow, PC lab. Lihat `tahap0/HASIL.md`. |
+| 0 Uji kelayakan | Berjalan | 24 Okt 2026 | Alat uji di `tahap0/` siap. TTS terukur: Edge, Gemini (free tier 3 RPM, terlalu lambat untuk live), ElevenLabs flash (p50 0,55 s; berbayar, bertentangan dengan §2.3/§8, menunggu keputusan [F]). Menunggu: penilaian dengar TTS, rekaman STT, kuota AI Studio, klip Flow, PC lab. Lihat `tahap0/HASIL.md`. |
 | 1 Fondasi + Blocker | Belum | | |
 | 2 Mode B inti | Belum | | |
 | 3 Avatar T1 + OBS | Belum | | |
