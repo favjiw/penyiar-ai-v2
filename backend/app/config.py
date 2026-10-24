@@ -93,7 +93,8 @@ class Settings(BaseSettings):
     LOG_DIR: str = str(BACKEND_ROOT / "logs")
     CACHE_DIR: str = str(BACKEND_ROOT / "cache")
 
-    model_config = {"env_file": str(REPO_ROOT / ".env"), "env_file_encoding": "utf-8", "extra": "ignore"}
+    # Variabel kosong (mis. `GEMINI_RPM_PERSONA=` di .env.example) berarti pakai default.
+    model_config = {"env_file": str(REPO_ROOT / ".env"), "env_file_encoding": "utf-8", "extra": "ignore", "env_ignore_empty": True}
 
     def rpm_for(self, role: str) -> int:
         """RPM untuk satu peran (blocker, persona, ...); 0 berarti pakai default."""
