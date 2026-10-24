@@ -1,0 +1,19 @@
+# Daftar awal kata terlarang untuk aturan cepat Supervisor (FR-5).
+# Satu kata/frasa per baris, dicocokkan sebagai kata utuh, tanpa beda huruf besar.
+# Kategori: kasar berat, seksual, politik praktis. Kata ambigu (mis. "anjing" sebagai hewan)
+# sengaja tidak dimasukkan; itu tugas pemeriksaan LLM di mode full.
+bangsat
+bajingan
+kontol
+memek
+ngentot
+jancok
+jancuk
+pelacur
+lonte
+capres
+cawapres
+pilpres
+pemilu
+kampanye
+partai politik
