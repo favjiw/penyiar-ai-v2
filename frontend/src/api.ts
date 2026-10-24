@@ -1,0 +1,36 @@
+import type { Blocker, GenerateRequest, GenerateResponse, RegenerateResponse } from './types'
+
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number, readonly issues: string[] = []) {
+    super(message)
+  }
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(path, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...init?.headers },
+  })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    // FastAPI: detail berupa string, atau daftar galat validasi (422)
+    const detail = Array.isArray(body.detail)
+      ? body.detail.map((d: { msg: string }) => d.msg).join('; ')
+      : body.detail ?? res.statusText
+    throw new ApiError(detail, res.status, body.issues ?? [])
+  }
+  return body as T
+}
+
+const post = <T>(path: string, data?: unknown) =>
+  request<T>(path, { method: 'POST', body: data === undefined ? undefined : JSON.stringify(data) })
+
+export const api = {
+  generate: (req: GenerateRequest) => post<GenerateResponse>('/api/blocker/generate', req),
+  regenerate: (id: string, hindari: string[]) => post<RegenerateResponse>(`/api/blocker/${id}/regenerate`, { hindari }),
+  save: (b: Blocker) => request<Blocker>(`/api/blocker/${b.id}`, { method: 'PUT', body: JSON.stringify(b) }),
+  lock: (id: string) => post<Blocker>(`/api/blocker/${id}/lock`),
+  newVersion: (id: string) => post<Blocker>(`/api/blocker/${id}/version`),
+  lockedList: () => request<Blocker[]>('/api/blockers?locked=true'),
+  health: () => request<{ llm_mode: string; tts_mode: string; models: Record<string, string> }>('/api/health'),
+}
