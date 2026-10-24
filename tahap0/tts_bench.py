@@ -4,7 +4,7 @@ Contoh:
     python tahap0/tts_bench.py                 # kedua provider, suara pria + wanita
     python tahap0/tts_bench.py --provider edge
 
-Output: tahap0/out/tts/<provider>_<gender>_<nn>.{wav,mp3} dan tts_results.csv
+Output: tahap0/out/tts/<provider>_<gender>_<nn>.{wav,mp3} dan tts_results[_<tag>].csv
 (latensi, durasi audio, RTF). Kolom `skor_robot` diisi manual oleh penilai (1-5).
 """
 
@@ -190,7 +190,7 @@ async def main() -> None:
         w = csv.DictWriter(f, fieldnames=list(rows[0]))
         w.writeheader()
         w.writerows(rows)
-    print(f"\nTersimpan: {OUT / 'tts_results.csv'}")
+    print(f"\nTersimpan: {OUT / f'tts_results{tag}.csv'}")
 
 
 if __name__ == "__main__":
