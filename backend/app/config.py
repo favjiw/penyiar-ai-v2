@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     GEMINI_RPM_TTS: int = 0
     GEMINI_RPM_DEFAULT: int = 5
 
+    # Endpoint kompatibel OpenAI (opsional): dipakai lewat model `compat:<nama>` di GEMINI_MODEL_*
+    OPENAI_COMPAT_BASE_URL: str = ""
+    OPENAI_COMPAT_API_KEY: str = ""
+    OPENAI_COMPAT_REASONING_EFFORT: str = "none"  # kosong = default endpoint
+
     # TTS
     TTS_PRIMARY: Literal["elevenlabs", "edge", "gemini"] = "elevenlabs"
     TTS_FALLBACK: Literal["edge", "none"] = "edge"

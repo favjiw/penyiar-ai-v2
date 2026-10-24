@@ -13,10 +13,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Callable, Type
+from typing import Any, Callable, Optional, Type
 
 from pydantic import BaseModel
 
@@ -166,12 +167,122 @@ class GeminiLLMClient(LLMClient):
         raise LLMError(f"Panggilan LLM gagal: {last_error}") from last_error
 
 
+# ── Endpoint kompatibel OpenAI (opsional) ────────────────────────────────────
+
+COMPAT_PREFIX = "compat:"
+_FENCE = re.compile(r"^```(?:json)?\s*|\s*```$")
+
+
+class OpenAICompatLLMClient(LLMClient):
+    """Endpoint /chat/completions bergaya OpenAI (mis. proxy yang menyediakan Gemini).
+
+    Dipakai lewat awalan model `compat:` di GEMINI_MODEL_* supaya bisa dipilih per
+    peran. Reasoning dimatikan secara default: dengan reasoning, satu giliran persona
+    butuh 8–18 s; tanpa reasoning ±3 s.
+    """
+
+    MAX_RETRIES = 3
+    BASE_BACKOFF_SEC = 1.0
+
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        limiters: RateLimiterRegistry,
+        reasoning_effort: str = "none",
+        timeout_sec: float = 30.0,
+        transport=None,  # httpx transport untuk tes
+    ):
+        self._url = base_url.rstrip("/") + "/chat/completions"
+        self._key = api_key
+        self.limiters = limiters
+        self._reasoning = reasoning_effort
+        self._timeout = timeout_sec
+        self._transport = transport
+        self.cost_usd = 0.0  # akumulasi `usage.cost` bila endpoint melaporkannya
+
+    async def generate(self, prompt, *, model, system_instruction="", response_schema=None, temperature=1.0):
+        import httpx
+
+        body: dict[str, Any] = {
+            "model": model,
+            "messages": ([{"role": "system", "content": system_instruction}] if system_instruction else []) + [{"role": "user", "content": prompt}],
+            "temperature": temperature,
+        }
+        if self._reasoning:
+            body["reasoning_effort"] = self._reasoning
+        if response_schema:
+            body["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {"name": response_schema.__name__, "schema": response_schema.model_json_schema()},
+            }
+
+        last_error: Exception | None = None
+        async with httpx.AsyncClient(timeout=self._timeout, transport=self._transport) as client:
+            for attempt in range(self.MAX_RETRIES):
+                await self.limiters.get(f"{COMPAT_PREFIX}{model}").acquire()
+                start = time.perf_counter()
+                try:
+                    resp = await client.post(self._url, headers={"Authorization": f"Bearer {self._key}"}, json=body)
+                except httpx.HTTPError as e:
+                    last_error = e
+                else:
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        raw = _FENCE.sub("", (data["choices"][0]["message"].get("content") or "").strip())
+                        usage = data.get("usage") or {}
+                        self.cost_usd += float(usage.get("cost") or 0)
+                        parsed: Any = {}
+                        parse_error = ""
+                        if response_schema:
+                            try:
+                                parsed = response_schema.model_validate_json(raw).model_dump(mode="json")
+                            except Exception as e:
+                                parse_error = str(e)[:500]
+                        return LLMResponse(
+                            raw=raw,
+                            parsed=parsed,
+                            model=f"{COMPAT_PREFIX}{model}",
+                            latency_ms=int((time.perf_counter() - start) * 1000),
+                            input_tokens=usage.get("prompt_tokens", 0),
+                            output_tokens=usage.get("completion_tokens", 0),
+                            parse_error=parse_error,
+                        )
+                    last_error = RuntimeError(f"HTTP {resp.status_code}: {resp.text[:300]}")
+                    if resp.status_code not in (429, 500, 502, 503, 504):
+                        break
+                if attempt < self.MAX_RETRIES - 1:
+                    await asyncio.sleep(self.BASE_BACKOFF_SEC * (2**attempt))
+        raise LLMError(f"Panggilan LLM (compat) gagal: {last_error}") from last_error
+
+
+class RouterLLMClient(LLMClient):
+    """Pilih klien dari nama model: `compat:<model>` → endpoint kompatibel OpenAI, selain itu Gemini."""
+
+    def __init__(self, gemini: Optional[LLMClient], compat: Optional[OpenAICompatLLMClient], limiters: RateLimiterRegistry):
+        self._gemini, self._compat = gemini, compat
+        self.limiters = limiters
+
+    async def generate(self, prompt, *, model, **kw):
+        if model.startswith(COMPAT_PREFIX):
+            if self._compat is None:
+                raise LLMError("Model compat: dipakai tetapi OPENAI_COMPAT_BASE_URL/API_KEY kosong")
+            return await self._compat.generate(prompt, model=model[len(COMPAT_PREFIX):], **kw)
+        if self._gemini is None:
+            raise LLMError("GEMINI_API_KEY kosong; isi atau pakai model compat:")
+        return await self._gemini.generate(prompt, model=model, **kw)
+
+
 def create_llm_client(settings) -> LLMClient:
     if settings.LLM_MODE == "mock":
         return MockLLMClient()
-    if not settings.GEMINI_API_KEY:
-        raise ValueError("GEMINI_API_KEY wajib bila LLM_MODE=live")
     limiters = RateLimiterRegistry(default_rpm=settings.GEMINI_RPM_DEFAULT)
     for role in ("blocker", "persona", "supervisor", "showrunner"):
         limiters.set_limit(settings.model_for(role), settings.rpm_for(role))
-    return GeminiLLMClient(settings.GEMINI_API_KEY, limiters, fail_inject="llm" in settings.FAIL_INJECT)
+    compat = None
+    if settings.OPENAI_COMPAT_BASE_URL and settings.OPENAI_COMPAT_API_KEY:
+        compat = OpenAICompatLLMClient(settings.OPENAI_COMPAT_BASE_URL, settings.OPENAI_COMPAT_API_KEY, limiters, settings.OPENAI_COMPAT_REASONING_EFFORT)
+    gemini = GeminiLLMClient(settings.GEMINI_API_KEY, limiters, fail_inject="llm" in settings.FAIL_INJECT) if settings.GEMINI_API_KEY else None
+    if gemini is None and compat is None:
+        raise ValueError("LLM_MODE=live butuh GEMINI_API_KEY atau OPENAI_COMPAT_BASE_URL + OPENAI_COMPAT_API_KEY")
+    return RouterLLMClient(gemini, compat, limiters)
