@@ -1,0 +1,6 @@
+# Dependensi skrip Tahap 0 (terpisah dari backend)
+google-genai>=1.14.0
+edge-tts>=7.3.1
+python-dotenv>=1.0.0
+# STT lokal (jalankan di PC lab GTX 1080)
+faster-whisper>=1.1.0
