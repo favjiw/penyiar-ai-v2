@@ -98,8 +98,8 @@ class ShowEngine:
         has_audio_owner: Callable[[], bool] = lambda: False,
         time_scale: float = 1.0,
     ):
-        if mode != "B":
-            raise ValueError("Mode A dikerjakan di Tahap 4")
+        if mode == "A" and type(self) is ShowEngine:
+            raise ValueError("Mode A memakai ModeAEngine (app/show/mode_a.py)")
         if not blocker.locked:
             raise ValueError("Blocker harus dikunci sebelum live")
         self.settings, self.blocker, self.mode = settings, blocker, mode

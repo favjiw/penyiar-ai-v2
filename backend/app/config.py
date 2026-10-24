@@ -67,6 +67,7 @@ class Settings(BaseSettings):
     SUPERVISOR_MODE: Literal["off", "rules", "full"] = "full"
     SUPERVISOR_MAX_REGEN: int = 1
     SUPERVISOR_TIMEOUT_MS: int = 5000
+    SUPERVISOR_TIMEOUT_MS_MODE_A: int = 2500  # mode A lebih ketat: penyiar menunggu jawaban
     PERSONA_TIMEOUT_MS: int = 10000  # lewat batas → kalimat aman, supaya tidak ada siaran hening panjang
     SHOWRUNNER_TIMEOUT_MS: int = 6000  # lewat batas → keputusan fixed_turns
     PERSONA_FAILURES_BEFORE_WRAP: int = 3  # persona gagal beruntun sebanyak ini...
