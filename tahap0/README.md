@@ -15,7 +15,7 @@ cp .env.example .env   # isi GEMINI_API_KEY dan GEMINI_MODEL_TTS
 | Uji | Alat | Status |
 |---|---|---|
 | Kuota free tier | `quota.md` + `quota_calc.py` | Belum |
-| TTS Gemini vs Edge | `tts_bench.py` + `data/tts_sentences.txt` | Edge selesai; Gemini menunggu API key |
+| TTS Gemini vs Edge | `tts_bench.py` + `data/tts_sentences.txt` | Terukur; menunggu penilaian kualitas |
 | STT Web Speech vs faster-whisper | `stt_webspeech.html`, `stt_bench.py` + `data/stt_sentences.txt` | Belum |
 | Avatar T1 crossfade | `crossfade_test.html` | Belum |
 | Avatar T2 RTF | `t2_rtf.py` | Belum |

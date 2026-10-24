@@ -16,9 +16,22 @@ Ringkasan per uji. Angka mentah ada di `tahap0/out/` (lokal, tidak di-commit).
 - Semua 20 kalimat berhasil setelah `aiohttp` dipaksa memakai resolver DNS sistem. Tanpa itu sebagian besar request menggantung (aiodns timeout); perbaikan ini wajib ikut ke `tts/provider.py` di Tahap 1.
 - Skor "robot atau tidak": belum dinilai.
 
-### Gemini TTS
+### Gemini TTS (24 Okt 2026, `gemini-3.8-flash-tts`, key free tier dari repo lama)
 
-Belum: perlu `GEMINI_API_KEY` dan `GEMINI_MODEL_TTS` di `.env`.
+Suara pria `Puck`. Suara wanita (`Kore`) belum sempat dibuat.
+
+| Hasil | Angka |
+|---|---|
+| Berhasil | 7 dari 7 request pertama (pria 01–07) |
+| Latensi | 3,7 / 3,7 / 4,7 / 12,7 / 17,4 / 27,1 / 28,0 s (p50 12,7 s) |
+| Durasi audio | 3,9–5,8 s, RTF p50 2,35 (lebih lambat dari waktu nyata) |
+| Batas kuota | **3 RPM per model** (`GenerateRequestsPerMinutePerProjectPerModel-FreeTier`, quotaValue 3). Request ke-8 langsung 429. |
+| Percobaan ulang dengan laju 2,8 RPM | 9 request berturut-turut timeout di 40 s, tanpa audio |
+
+Kesimpulan sementara [C]:
+- Gemini TTS free tier **tidak layak sebagai TTS utama live**. Mode B butuh sekitar 6,7 request TTS per menit (lebih dari 2× batas), dan latensinya sering di atas batas jeda p95 ≤4 s.
+- Usulan: **Edge TTS sebagai utama**. Gemini TTS dipakai offline untuk bank filler dan klip yang di-cache, bila kualitasnya dinilai jauh lebih baik.
+- Masih perlu: penilaian "robot atau tidak" atas `gemini_male_01..07.wav` dibanding `edge_male_01..07.mp3`, serta pengecekan RPD di AI Studio.
 
 ## STT
 
@@ -48,6 +61,6 @@ Belum: perlu PC lab. Ukur dengan `t2_rtf.py`. Catatan: di laptop MX250, `nvidia-
 | Keputusan | Pilihan | Alasan |
 |---|---|---|
 | STT | | |
-| TTS utama | | |
+| TTS utama | Usulan: Edge (Gemini untuk cache offline) | Gemini free tier 3 RPM, latensi p50 12,7 s; menunggu penilaian kualitas dan keputusan Favian |
 | T2 | | |
 | `PIPELINE_DEPTH` | | |
