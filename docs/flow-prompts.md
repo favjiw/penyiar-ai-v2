@@ -73,3 +73,16 @@ Vertical 9:16 video, medium close-up, chest-up framing. A fictional young Indone
 ## Uji minimum (Tahap 0)
 
 Bila ingin mencoba dulu sebelum membuat semua: `idle_1`, `listen_1`, `talk_calm_1` untuk tiap karakter (6 klip), dengan manifest berisi ketiga klip itu saja. Pemutar sudah menangani state yang kosong: tanpa klip `talk_hype` dipakai `talk_calm`, tanpa klip `react_*` reaksi dilewati.
+
+## Catatan hasil Raka (25 Okt 2026)
+
+15 klip Raka sudah terpasang di `assets/avatar/raka/` (audio dibuang, `focus_y` 0,3) dan diuji di stage dengan show mock.
+
+- **Wajah, baju, dan neon konsisten.** Framing pas di panel 9:8: neon di atas, wajah di tengah, mic di bawah.
+- **Posisi mic tidak sama antarklip.** Klip `talk_*` dan `react_*` seragam (mic dari kanan, dekat mulut). Klip `idle_*` dan `listen_*` berbeda-beda (mic di kiri atau tengah, zoom sedikit lain). Akibatnya mic terlihat pindah saat crossfade antara mendengarkan dan berbicara.
+- **Frame awal dan akhir tidak sama** (PSNR 20–34 dB). Karena itu pemutar tidak lagi me-loop klip, tetapi berganti klip dengan crossfade setiap kali klip habis.
+- **Durasi 10 s**, di luar spesifikasi 4–8 s, tetapi tidak masalah untuk pemutar.
+
+**Saran perbaikan (opsional):** buat ulang `idle_1..3` dan `listen_1..3` dengan *Frames to Video* memakai frame awal `talk_calm_1` sebagai frame pertama, supaya mic dan zoom sama dengan klip bicara.
+
+**Untuk Salsa:** buat semua 15 klip dari satu frame awal yang sama sejak awal.
