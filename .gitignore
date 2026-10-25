@@ -43,3 +43,6 @@ backend/data/
 
 # Manifest klip dummy (dibuat assets/make_dummy_clips.py). Manifest klip Flow asli: git add -f
 assets/avatar/*/manifest.json
+
+# avatar T2: material avatar hasil prepare (besar, dibuat ulang dari klip)
+avatar-worker/avatars/
