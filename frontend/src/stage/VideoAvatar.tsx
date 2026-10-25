@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react'
  * - tidak ada yang bicara → klip idle; lawan bicara bicara → klip mendengarkan
  *   (acak, tanpa klip yang sama berturut-turut);
  * - persona ini mulai bicara → klip reaksi sesuai emosi (opsional, maks 1,5 s),
- *   lalu klip bicara diulang sampai audio selesai;
+ *   lalu klip bicara bergantian sampai audio selesai;
  * - energi klip bicara: emosi excited/happy/surprised → "hype", selain itu "calm".
  *   (PRD menyebut energi audio RMS; emosi giliran dipakai dulu karena audio diputar
  *   oleh pemilik audio, yang belum tentu halaman ini.)
@@ -83,12 +83,11 @@ export function VideoAvatar({ persona, mode, emotion, turnKey, fadeMs = 200, onU
   }, [base])
 
   /** Putar klip di elemen belakang; crossfade setelah frame pertamanya siap (tanpa kedip hitam). */
-  const show = (clip: Clip, loop: boolean, onEnd?: () => void) => {
+  const show = (clip: Clip, onEnd?: () => void) => {
     const back = vids[1 - front.current].current
     const cur = vids[front.current].current
     if (!back || !cur) return
     last.current = clip.code
-    back.loop = loop
     back.onended = onEnd ?? null
     back.src = base + clip.file
     let swapped = false
@@ -116,13 +115,15 @@ export function VideoAvatar({ persona, mode, emotion, turnKey, fadeMs = 200, onU
       .catch(() => undefined) // autoplay video bisu jarang diblokir; klip berikutnya mencoba lagi
   }
 
-  /** Klip idle/listen bergantian (tanpa loop) supaya tidak terlihat berulang; talk diulang. */
+  /**
+   * Setiap mode berganti klip lewat crossfade saat klip habis, tidak di-loop: frame awal dan
+   * akhir klip Flow tidak sama persis, jadi loop keras terlihat melompat.
+   */
   const playMode = (m: Mode, emo?: string | null) => {
     if (!manifest) return
     const clip = pickClip(manifest.clips, m, { emotion: emo, last: last.current })
     if (!clip) return
-    if (m === 'talk') show(clip, true)
-    else show(clip, false, () => want.current.mode === m && playMode(m))
+    show(clip, () => want.current.mode === m && playMode(m, want.current.emotion))
   }
 
   // Mode berubah (atau giliran baru) → reaksi singkat bila ada, lalu klip mode itu.
@@ -137,7 +138,7 @@ export function VideoAvatar({ persona, mode, emotion, turnKey, fadeMs = 200, onU
           window.clearTimeout(reactTimer.current)
           if (want.current.mode === 'talk') playMode('talk', want.current.emotion)
         }
-        show(react, false, toTalk)
+        show(react, toTalk)
         reactTimer.current = window.setTimeout(toTalk, REACT_MAX_MS)
         return
       }
