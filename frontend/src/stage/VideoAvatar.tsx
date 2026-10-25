@@ -5,8 +5,10 @@ import { useEffect, useRef, useState } from 'react'
  *
  * - tidak ada yang bicara → klip idle; lawan bicara bicara → klip mendengarkan
  *   (acak, tanpa klip yang sama berturut-turut);
- * - persona ini mulai bicara → klip reaksi sesuai emosi (opsional, maks 1,5 s),
- *   lalu klip bicara bergantian sampai audio selesai;
+ * - persona ini mulai bicara → langsung klip bicara, bergantian sampai audio selesai
+ *   (klip reaksi tidak diputar sebelum bicara: menunda gerak mulut sampai 1,5 s);
+ * - semua klip diunduh sekali menjadi blob saat manifest dimuat, supaya pergantian
+ *   klip tidak menunggu jaringan;
  * - energi klip bicara: emosi excited/happy/surprised → "hype", selain itu "calm".
  *   (PRD menyebut energi audio RMS; emosi giliran dipakai dulu karena audio diputar
  *   oleh pemilik audio, yang belum tentu halaman ini.)
@@ -35,13 +37,11 @@ interface Props {
   persona: string
   mode: Mode
   emotion?: string | null
-  turnKey?: number | null // berubah setiap giliran baru persona ini → reaksi
   fadeMs?: number
   onUnavailable?: () => void
 }
 
 const HYPE = new Set(['excited', 'happy', 'surprised'])
-const REACT_MAX_MS = 1500
 
 export function pickClip(clips: Clip[], mode: Mode | 'react', opts: { emotion?: string | null; last?: string } = {}): Clip | null {
   let pool: Clip[]
@@ -59,13 +59,13 @@ export function pickClip(clips: Clip[], mode: Mode | 'react', opts: { emotion?: 
   return fresh[Math.floor(Math.random() * fresh.length)]
 }
 
-export function VideoAvatar({ persona, mode, emotion, turnKey, fadeMs = 200, onUnavailable }: Props) {
+export function VideoAvatar({ persona, mode, emotion, fadeMs = 200, onUnavailable }: Props) {
   const [manifest, setManifest] = useState<Manifest | null>(null)
   const vids = [useRef<HTMLVideoElement>(null), useRef<HTMLVideoElement>(null)]
   const front = useRef(0)
   const last = useRef<string | undefined>()
   const want = useRef<{ mode: Mode; emotion?: string | null }>({ mode })
-  const reactTimer = useRef<number>()
+  const blobs = useRef<Record<string, string>>({})
   const base = `/avatar-assets/${persona}/`
 
   // Callback di ref: induk biasa mengirim fungsi baru tiap render, dan manifest cukup diambil sekali.
@@ -73,12 +73,29 @@ export function VideoAvatar({ persona, mode, emotion, turnKey, fadeMs = 200, onU
   unavailable.current = onUnavailable
   useEffect(() => {
     let alive = true
+    const urls: string[] = []
     fetch(`${base}manifest.json`)
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-      .then((m: Manifest) => alive && (m.clips?.length ? setManifest(m) : unavailable.current?.()))
+      .then((m: Manifest) => {
+        if (!alive) return
+        if (!m.clips?.length) return unavailable.current?.()
+        setManifest(m)
+        for (const c of m.clips)
+          fetch(base + c.file)
+            .then((r) => (r.ok ? r.blob() : Promise.reject(r.status)))
+            .then((b) => {
+              if (!alive) return
+              const u = URL.createObjectURL(b)
+              urls.push(u)
+              blobs.current[c.file] = u
+            })
+            .catch(() => undefined) // klip tetap diputar langsung dari server
+      })
       .catch(() => alive && unavailable.current?.())
     return () => {
       alive = false
+      urls.forEach((u) => URL.revokeObjectURL(u))
+      blobs.current = {}
     }
   }, [base])
 
@@ -89,7 +106,7 @@ export function VideoAvatar({ persona, mode, emotion, turnKey, fadeMs = 200, onU
     if (!back || !cur) return
     last.current = clip.code
     back.onended = onEnd ?? null
-    back.src = base + clip.file
+    back.src = blobs.current[clip.file] ?? base + clip.file
     let swapped = false
     const swap = () => {
       if (swapped) return
@@ -110,7 +127,7 @@ export function VideoAvatar({ persona, mode, emotion, turnKey, fadeMs = 200, onU
         if (!back.requestVideoFrameCallback) return swap()
         back.requestVideoFrameCallback(() => swap())
         // Jendela yang tidak sedang dirender tidak memanggil callback frame; jangan biarkan avatar kosong.
-        window.setTimeout(swap, 300)
+        window.setTimeout(swap, 150)
       })
       .catch(() => undefined) // autoplay video bisu jarang diblokir; klip berikutnya mencoba lagi
   }
@@ -126,28 +143,13 @@ export function VideoAvatar({ persona, mode, emotion, turnKey, fadeMs = 200, onU
     show(clip, () => want.current.mode === m && playMode(m, want.current.emotion))
   }
 
-  // Mode berubah (atau giliran baru) → reaksi singkat bila ada, lalu klip mode itu.
+  // Mode berubah → langsung klip mode itu. Giliran baru saat masih bicara (filler → jawaban) tidak mengganti klip.
   useEffect(() => {
     want.current = { mode, emotion }
-    window.clearTimeout(reactTimer.current)
     if (!manifest) return
-    if (mode === 'talk' && emotion && emotion !== 'neutral') {
-      const react = pickClip(manifest.clips, 'react', { emotion })
-      if (react) {
-        const toTalk = () => {
-          window.clearTimeout(reactTimer.current)
-          if (want.current.mode === 'talk') playMode('talk', want.current.emotion)
-        }
-        show(react, toTalk)
-        reactTimer.current = window.setTimeout(toTalk, REACT_MAX_MS)
-        return
-      }
-    }
     playMode(mode, emotion)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [manifest, mode, turnKey])
-
-  useEffect(() => () => window.clearTimeout(reactTimer.current), [])
+  }, [manifest, mode])
 
   const focus = Math.min(1, Math.max(0, manifest?.focus_y ?? 0.35))
   const style = { transition: `opacity ${fadeMs}ms linear`, objectPosition: `50% ${focus * 100}%` }

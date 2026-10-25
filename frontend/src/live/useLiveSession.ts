@@ -81,7 +81,8 @@ export function useLiveSession(role: Role): LiveSession {
       item.report && send('playback', { playback_id: item.id, status, persona: item.persona })
     const finish = (status: 'ended' | 'error') => {
       queueRef.current.shift()
-      setSpeaking(null)
+      // Filler lalu jawaban persona yang sama: jangan sempat kembali ke klip mendengarkan.
+      if (queueRef.current[0]?.persona !== item.persona) setSpeaking(null)
       report(status)
       pump()
     }
@@ -93,6 +94,7 @@ export function useLiveSession(role: Role): LiveSession {
     const a = audioRef.current ?? (audioRef.current = new Audio())
     playingRef.current = true
     a.src = url
+    setSpeaking(item.persona) // avatar mulai berganti klip selagi audio dimuat
     a.onended = () => {
       playingRef.current = false
       item.idx++
@@ -115,6 +117,7 @@ export function useLiveSession(role: Role): LiveSession {
       })
       .catch((err: DOMException) => {
         playingRef.current = false
+        setSpeaking(null)
         if (err.name === 'NotAllowedError') {
           // Autoplay diblokir browser: item tetap di antrean sampai operator mengklik halaman.
           setAudioBlocked(true)
