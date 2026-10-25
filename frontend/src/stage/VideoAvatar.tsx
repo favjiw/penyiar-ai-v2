@@ -13,6 +13,9 @@ import { useEffect, useRef, useState } from 'react'
  *   (PRD menyebut energi audio RMS; emosi giliran dipakai dulu karena audio diputar
  *   oleh pemilik audio, yang belum tentu halaman ini.)
  * Gerak bibir tidak sinkron per kata: batasan tingkat T1 yang diakui di PRD.
+ *
+ * T2 (FR-9): bila giliran membawa video lip-sync MuseTalk (`lipsync`), video itu yang
+ * diputar selama audionya, disamakan ke posisi audio; habis → kembali ke klip bicara T1.
  */
 
 export interface Clip {
@@ -38,6 +41,7 @@ interface Props {
   mode: Mode
   emotion?: string | null
   fadeMs?: number
+  lipsync?: { url: string; key: string; clock: () => number } | null
   onUnavailable?: () => void
 }
 
@@ -59,7 +63,7 @@ export function pickClip(clips: Clip[], mode: Mode | 'react', opts: { emotion?: 
   return fresh[Math.floor(Math.random() * fresh.length)]
 }
 
-export function VideoAvatar({ persona, mode, emotion, fadeMs = 200, onUnavailable }: Props) {
+export function VideoAvatar({ persona, mode, emotion, fadeMs = 200, lipsync, onUnavailable }: Props) {
   const [manifest, setManifest] = useState<Manifest | null>(null)
   const vids = [useRef<HTMLVideoElement>(null), useRef<HTMLVideoElement>(null)]
   const front = useRef(0)
@@ -99,18 +103,20 @@ export function VideoAvatar({ persona, mode, emotion, fadeMs = 200, onUnavailabl
     }
   }, [base])
 
-  /** Putar klip di elemen belakang; crossfade setelah frame pertamanya siap (tanpa kedip hitam). */
-  const show = (clip: Clip, onEnd?: () => void) => {
+  /** Putar video di elemen belakang; crossfade setelah frame pertamanya siap (tanpa kedip hitam). */
+  const showSrc = (src: string, onEnd?: () => void, clock?: () => number) => {
     const back = vids[1 - front.current].current
     const cur = vids[front.current].current
     if (!back || !cur) return
-    last.current = clip.code
     back.onended = onEnd ?? null
-    back.src = blobs.current[clip.file] ?? base + clip.file
+    back.src = src
     let swapped = false
     const swap = () => {
       if (swapped) return
       swapped = true
+      // Lip-sync: video mulai sedikit setelah audio; lompat ke posisi audio supaya bibir pas.
+      const t = clock?.() ?? 0
+      if (t > 0.08 && t < back.duration) back.currentTime = t
       back.style.opacity = '1'
       cur.style.opacity = '0'
       front.current = 1 - front.current
@@ -132,6 +138,11 @@ export function VideoAvatar({ persona, mode, emotion, fadeMs = 200, onUnavailabl
       .catch(() => undefined) // autoplay video bisu jarang diblokir; klip berikutnya mencoba lagi
   }
 
+  const show = (clip: Clip, onEnd?: () => void) => {
+    last.current = clip.code
+    showSrc(blobs.current[clip.file] ?? base + clip.file, onEnd)
+  }
+
   /**
    * Setiap mode berganti klip lewat crossfade saat klip habis, tidak di-loop: frame awal dan
    * akhir klip Flow tidak sama persis, jadi loop keras terlihat melompat.
@@ -144,12 +155,23 @@ export function VideoAvatar({ persona, mode, emotion, fadeMs = 200, onUnavailabl
   }
 
   // Mode berubah → langsung klip mode itu. Giliran baru saat masih bicara (filler → jawaban) tidak mengganti klip.
+  const lip = useRef(lipsync)
+  lip.current = lipsync
   useEffect(() => {
     want.current = { mode, emotion }
     if (!manifest) return
+    if (mode === 'talk' && lip.current) return // video lip-sync yang diputar (efek di bawah)
     playMode(mode, emotion)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manifest, mode])
+
+  // Bagian audio baru dengan video lip-sync → putar video itu.
+  useEffect(() => {
+    if (!lipsync) return
+    last.current = undefined
+    showSrc(lipsync.url, () => want.current.mode === 'talk' && playMode('talk', want.current.emotion), lipsync.clock)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lipsync?.key])
 
   const focus = Math.min(1, Math.max(0, manifest?.focus_y ?? 0.35))
   const style = { transition: `opacity ${fadeMs}ms linear`, objectPosition: `50% ${focus * 100}%` }

@@ -14,6 +14,8 @@ export interface LiveSession {
   supervisor: SupervisorEvent[]
   output: OutputStatus | null
   speaking: string | null
+  /** Video lip-sync (T2) untuk audio yang sedang diputar; `clock` = posisi audio (detik) untuk sinkron. */
+  lipsync: LipSync | null
   alerts: { stage: string; message: string; turn: number }[]
   sttPartial: string
   audioBlocked: boolean
@@ -21,11 +23,19 @@ export interface LiveSession {
   send: (action: string, data?: Record<string, unknown>) => void
 }
 
+export interface LipSync {
+  persona: string
+  url: string
+  key: string
+  clock: () => number
+}
+
 /** Satu hal yang diputar berurutan: filler, atau giliran AI yang bisa terdiri dari beberapa bagian kalimat. */
 interface PlayItem {
   id: string
   persona: string
   urls: (string | null | undefined)[] // undefined = bagian belum tiba; null = TTS bagian itu gagal (dilewati)
+  videos?: (string | null | undefined)[] // video lip-sync per bagian (T2), bila ada
   total: number
   idx: number
   report: boolean // giliran dilaporkan ke server; filler tidak
@@ -46,6 +56,7 @@ export function useLiveSession(role: Role): LiveSession {
   const [supervisor, setSupervisor] = useState<SupervisorEvent[]>([])
   const [output, setOutput] = useState<OutputStatus | null>(null)
   const [speaking, setSpeaking] = useState<string | null>(null)
+  const [lipsync, setLipsync] = useState<LipSync | null>(null)
   const [alerts, setAlerts] = useState<LiveSession['alerts']>([])
   const [sttPartial, setSttPartial] = useState('')
   const [audioBlocked, setAudioBlocked] = useState(false)
@@ -70,6 +81,7 @@ export function useLiveSession(role: Role): LiveSession {
     }
     queueRef.current = []
     playingRef.current = false
+    setLipsync(null)
   }, [])
 
   /** Putar bagian berikutnya dari item terdepan antrean; berhenti menunggu bila bagiannya belum tiba. */
@@ -83,6 +95,7 @@ export function useLiveSession(role: Role): LiveSession {
       queueRef.current.shift()
       // Filler lalu jawaban persona yang sama: jangan sempat kembali ke klip mendengarkan.
       if (queueRef.current[0]?.persona !== item.persona) setSpeaking(null)
+      setLipsync(null)
       report(status)
       pump()
     }
@@ -95,6 +108,8 @@ export function useLiveSession(role: Role): LiveSession {
     playingRef.current = true
     a.src = url
     setSpeaking(item.persona) // avatar mulai berganti klip selagi audio dimuat
+    const video = item.videos?.[item.idx]
+    setLipsync(video ? { persona: item.persona, url: video, key: `${item.id}:${item.idx}`, clock: () => a.currentTime } : null)
     a.onended = () => {
       playingRef.current = false
       item.idx++
@@ -188,7 +203,9 @@ export function useLiveSession(role: Role): LiveSession {
               const total = turn.parts ?? 1
               const urls: (string | null | undefined)[] = Array(total).fill(undefined)
               urls[0] = turn.audio_url
-              enqueue({ id: turn.playback_id, persona: turn.persona, urls, total, report: true })
+              const videos: (string | null | undefined)[] = Array(total).fill(undefined)
+              videos[0] = turn.video_url ?? null
+              enqueue({ id: turn.playback_id, persona: turn.persona, urls, videos, total, report: true })
             } else setSpeaking(turn.persona)
             break
           }
@@ -196,6 +213,7 @@ export function useLiveSession(role: Role): LiveSession {
             const item = queueRef.current.find((i) => i.id === data.playback_id)
             if (item) {
               item.urls[data.index] = data.audio_url ?? null
+              if (item.videos) item.videos[data.index] = data.video_url ?? null
               pump()
             }
             break
@@ -248,5 +266,5 @@ export function useLiveSession(role: Role): LiveSession {
     }
   }, [role, enqueue, pump, send, stopAudio])
 
-  return { connected, snapshot, transcript, showrunner, supervisor, output, speaking, alerts, sttPartial, audioBlocked, unlockAudio, send }
+  return { connected, snapshot, transcript, showrunner, supervisor, output, speaking, lipsync, alerts, sttPartial, audioBlocked, unlockAudio, send }
 }

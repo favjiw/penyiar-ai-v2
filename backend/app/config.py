@@ -82,6 +82,7 @@ class Settings(BaseSettings):
     # Avatar
     AVATAR_TIER: Literal["t1", "t2"] = "t1"
     AVATAR_WORKER_URL: str = ""
+    AVATAR_RENDER_TIMEOUT_MS: int = 20000  # render T2 lebih lama dari ini → giliran memakai klip T1
 
     # Skripsi
     COMMENTS_ENABLED: bool = False

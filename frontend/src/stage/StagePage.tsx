@@ -49,6 +49,7 @@ export function StagePage() {
                   // Mode A: penyiar manusia yang banyak bicara, jadi AI terlihat mendengarkan saat diam.
                   mode={speaking === id ? 'talk' : speaking || modeA ? 'listen' : 'idle'}
                   emotion={lastTurn?.persona === id ? lastTurn.emotion : null}
+                  lipsync={live.lipsync?.persona === id ? live.lipsync : null}
                   onUnavailable={() => markNoVideo(id)}
                 />
               )}
