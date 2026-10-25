@@ -1,5 +1,3 @@
-import httpx
-
 from app.avatar.t2_client import RenderResult, T2Client
 from app.config import Settings
 from tests.test_mode_a import make, settle
