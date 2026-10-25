@@ -30,9 +30,11 @@ Sumber: https://github.com/TMElyralab/MuseTalk
 |---|---|---|---|---|---|
 | Raka, ElevenLabs | fp16 | 2,59 s | 1.089 s | 421 | 2,77 GB |
 | Raka, ElevenLabs | fp16 | 4,08 s | 1.664 s | 408 | 2,77 GB |
+| Raka, ElevenLabs | fp32 | 2,59 s | 1.764 s | 682 | 4,97 GB |
 
 - Memuat model butuh 69 s. Menyiapkan avatar (125 frame) butuh ±5,7 menit.
-- Kebutuhan VRAM (2,77 GB) melebihi 2 GB, sehingga Windows memindahkan sebagian ke RAM bersama. Ditambah fp16 yang sangat lambat di Pascal, hasilnya RTF ±400. **Tidak bisa dipakai di laptop ini**, baik live maupun pra-render.
+- fp32 lebih lambat lagi di MX250 karena VRAM yang dibutuhkan (4,97 GB) makin jauh di atas 2 GB. Di GTX 1080, 4,97 GB masih muat dalam 8 GB, jadi fp32 tetap pilihan yang tepat di sana.
+- Kebutuhan VRAM fp16 (2,77 GB) melebihi 2 GB, sehingga Windows memindahkan sebagian ke RAM bersama. Ditambah fp16 yang sangat lambat di Pascal, hasilnya RTF ±400. **Tidak bisa dipakai di laptop ini**, baik live maupun pra-render.
 
 **Kualitas** (contoh `docs/kt/raka-musetalk-contoh.mp4`, lokal dan tidak di-commit):
 - Bentuk mulut membuka dan menutup mengikuti suku kata.
