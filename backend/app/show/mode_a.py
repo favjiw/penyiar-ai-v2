@@ -326,7 +326,7 @@ class HumanLedEngine(ShowEngine):
         self.transcript.append(entry)
         self._remember(HistoryEntry(speaker.id, speaker.name, reviewed.text))
         self.on_air["speaking"] = speaker.id
-        self._thinking = None
+        await self._set_thinking(None)  # siarkan: klien tidak boleh menyimpan "thinking" basi selama suara diputar
         total = sum(len(p.split()) for p in parts) / 3.0
         t_start, completed = wall_clock(), False
         durations = [first["duration_s"] if first else 0.0]

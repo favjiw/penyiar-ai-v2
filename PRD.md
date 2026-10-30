@@ -259,8 +259,8 @@ IDLE → BLOCKER_LOCKED → READY → LIVE{ OPENING → TOPIC(1..n) → CLOSING 
 ### 6.4 API REST (minimal) [C]
 - `POST /api/blocker/generate {tema, catatan?, jumlah_topik≤3, jumlah_varian 2..3}` → daftar varian.
 - `PUT /api/blocker/{id}` simpan editan; `POST /api/blocker/{id}/lock`.
-- `POST /api/show/start {blocker_id, mode, ai_persona?}`; `POST /api/show/next`; `POST /api/show/pause|resume|stop`.
-- `POST /api/ptt/turn {text}` (bila STT di browser) atau `POST /api/ptt/audio` (bila STT di server).
+- `POST /api/show/start {blocker_id, mode: A|B|C, ai_persona?, human_name?}` (mode A: `ai_persona`; mode C: semua AI); `POST /api/show/next`; `POST /api/show/pause|resume|stop`.
+- `POST /api/ptt/turn {text, stt_ms?, speech_ms?}` (mode A dan C; bila STT di browser) atau `POST /api/ptt/audio` (bila STT di server).
 - `GET /api/logs/{session_id}`; `GET /api/health` (status kuota, TTS, STT, avatar).
 
 ---
@@ -309,9 +309,12 @@ Format setiap FR: deskripsi → aturan → kriteria terima (KT).
   - memori koreksi Supervisor (bila ada).
 - **Pipelining mode B:** buat giliran n+1 (teks, Supervisor, TTS, dan render T2 bila aktif) selagi giliran n diputar. Kedalaman buffer `PIPELINE_DEPTH` default 1; 2–3 bila memakai T2.
 - **Pemilihan pembicara mode B:**
-  - default bergantian;
+  - default bergantian menurut daftar peserta AI (bukan pasangan tetap; lebih dari dua AI cukup menambah daftar);
   - boleh Showrunner `steer` dengan `next_speaker`;
   - hindari satu persona bicara >2 kali berturut-turut.
+- **Peserta berupa daftar [F, 30 Okt 2026]:** mode hanya mengubah isi daftar dan aturan giliran (A: manusia + 1 AI; B: semua AI; C: manusia + semua AI). Mode B memakai `ShowEngine`; mode A dan C memakai `HumanLedEngine`, turunan yang berbagi state machine, Supervisor, TTS, pemutaran, ringkasan, dan log.
+- **Aturan giliran mode A/C:** ucapan manusia (PTT) → satu AI menjawab (mode C: yang disapa namanya; "kalian" menyapa semua; tanpa sapaan bergantian). Mode C: AI lain boleh menimpali (`MODE_C_CHIME_PROBABILITY`, wajib bila manusia menyapa lebih dari satu AI) dengan batas `MODE_C_MAX_AI_STREAK` (default 2) giliran AI berturut-turut sebelum kembali ke manusia. Hanya manusia yang menekan "next topik". Ucapan manusia baru memotong jawaban AI yang sedang berjalan.
+- **Ringkasan obrolan:** giliran yang keluar dari jendela 12 giliran dirangkum di latar belakang tiap `SUMMARY_EVERY_TURNS` (default 10) lewat LLM peran Showrunner; bila gagal, kutipan ekstraktif. Ringkasan masuk prompt persona.
 - **KT:**
   - mode B 20 menit berjalan tanpa crash dan tanpa intervensi;
   - jeda antargiliran p50 ≤1,5 s dan p95 ≤4 s (T1);
@@ -386,9 +389,10 @@ Kode Supervisor di repo lama masih **stub**: prompt satu baris, tanpa koreksi da
 - **Ledger:** klaim faktual tiap persona disimpan per sesi (contoh: "Raka suka kopi hitam") untuk cek konsistensi berikutnya.
 - **Mode A:** ucapan penyiar manusia **tidak** diperiksa (bukan wewenang sistem), tetapi dipakai sebagai konteks.
 - **Kondisi eksperimen:**
-  - `SUPERVISOR_MODE=off` (baseline);
+  - `SUPERVISOR_MODE=off` (baseline; **default sejak 30 Okt 2026**, hook `supervisor.check` pass-through);
   - `rules` (aturan saja);
   - `full` (aturan + LLM).
+- **Hook:** `Supervisor.check(...)` berada di antara Persona dan TTS pada semua mode dan mengembalikan `teruskan | koreksi | ganti` (`Reviewed.hook`); implementasi FR-5 penuh tetap ada dan menyala dengan `rules` atau `full`.
 - **KT:**
   - di set uji pelanggaran yang disuntikkan (≥30 kasus), recall ≥0,8 untuk pelanggaran keamanan;
   - overhead latensi p50 ≤1,5 s;
@@ -515,6 +519,7 @@ Kode Supervisor di repo lama masih **stub**: prompt satu baris, tanpa koreksi da
   - semua kontrol bisa dioperasikan tanpa mouse (pintasan keyboard).
 
 ### FR-12 Logging
+- **Log giliran riset [F, 30 Okt 2026]:** `sessions/<session_id>/turns.jsonl`, satu baris per giliran (manusia dan AI) dengan medan `session_id, mode, turn_idx, speaker, is_human, topic_idx, text, t_start, t_end, latency_asr_ms, latency_llm_ms, latency_tts_ms, model, tts_chars, filler_used` (plus nama, segmen, `raw_text`, verdict Supervisor, provider TTS, `tts_fallback_used`, `interrupted`). Blocker terkunci disalin ke `sessions/<session_id>/blocker.json`. `t_start`/`t_end` = detik epoch: audio mulai dan selesai diputar (AI), tombol bicara ditekan dan dilepas (manusia). `latency_asr_ms` pada giliran AI pertama sesudah manusia = ASR ucapan yang memicunya.
 - Satu JSONL per sesi (`logs/{session_id}.jsonl`) dengan event bertipe:
   - `session_start`, `turn`, `showrunner`, `supervisor`, `topic_change`, `operator_action`, `stt`, `error`, `quota`, `session_end`.
 - `turn` memuat:
@@ -845,7 +850,7 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 | 4 Mode A | Berjalan | 25 Okt 2026 | FR-7 (PTT Web Speech di prompter), FR-11 prompter, bank filler, ModeAEngine (TTS per kalimat, penyiar boleh memotong, Showrunner mode saran); 93 tes lulus; uji browser mock lulus (`docs/kt/tahap4-mode-a.md`). Probe latensi live tidak mewakili (Gemini 4–6 s per panggilan saat diuji). Menunggu: uji STT nyata, ukur ulang latensi, sesi 15 menit bersama penyiar. |
 | 5 Avatar T2 | Ditunda (diarsipkan) | 30 Okt 2026 | MuseTalk 1.5 jalan untuk Raka (bibir mengikuti suku kata) tetapi RTF ±410 di MX250; belum diukur di GTX 1080. Kode, hasil uji, dan catatan ada di branch `archive/avatar-dan-komentar` (`docs/kt/avatar-t2-musetalk.md`). |
 | 6 Tambahan skripsi | Belum | | FR-13 (komentar) ditunda. |
-| 3b Strip + Orb + TTS + Mode C | Berjalan | 30 Okt 2026 | Fase 1 selesai (avatar, stage, T2, dan setelan komentar dihapus; audit di `docs/AUDIT-STRIP.md`; 92 tes lulus, show mock mode B berjalan di konsol). Fase 2 (orb, transkrip), 2b (lapisan TTS Edge/ElevenLabs/gTTS), dan 3 (retry parse 2×, aturan kunci 3-5 poin, `sessions/<id>/blocker.json`, rundown di prompter) selesai; 116 tes lulus. Menunggu: mode C dan log `sessions/` (4). |
+| 3b Strip + Orb + TTS + Mode C | Berjalan | 30 Okt 2026 | Fase 1 selesai (avatar, stage, T2, dan setelan komentar dihapus; audit di `docs/AUDIT-STRIP.md`; 92 tes lulus, show mock mode B berjalan di konsol). Fase 2 (orb, transkrip), 2b (lapisan TTS Edge/ElevenLabs/gTTS), dan 3 (retry parse 2×, aturan kunci 3-5 poin, `sessions/<id>/blocker.json`, rundown di prompter) selesai; 116 tes lulus. Fase 4 (mode A/B/C satu kerangka berdaftar peserta, mode C, `turns.jsonl`, ringkasan obrolan, hook Supervisor default off) selesai; lihat `docs/CATATAN-PROGRES.md` untuk hasil uji. |
 | 7 Eksperimen | Belum | | |
 
 ## 17. Riwayat
@@ -868,6 +873,7 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 - **v2.5 (30 Okt 2026):** fokus ke kualitas percakapan [F] (§1.3.1; FR-6 diubah menjadi lapisan provider):
   - FR-8, FR-9, FR-10, FR-13, Lampiran A, Tahap 3 dan 5 ditunda; kode diarsipkan di branch `archive/avatar-dan-komentar`;
   - ditambah Mode C (§3) dan FR-15 (orb); TTS memakai lapisan provider (Edge default, ElevenLabs untuk demo);
+  - Fase 4: peserta berupa daftar, mode C, `sessions/<id>/turns.jsonl`, ringkasan obrolan, Supervisor default off dengan hook `check` (FR-2, FR-5, FR-12);
   - bagian arsitektur (§6.1, §6.3, §11) dan Lampiran B masih memuat stage/avatar/komentar sebagai rujukan sejarah; dibersihkan setelah Fase 2–4 selesai.
 
 ---
@@ -924,6 +930,6 @@ STT_PROVIDER=webspeech|faster_whisper|gemini   FASTER_WHISPER_URL=
 # Agen
 SHOWRUNNER_POLICY=llm|fixed_turns|coverage_only
 SHOWRUNNER_EVERY_K=3   MIN_TURNS_PER_TOPIC=6   MAX_TURNS_PER_TOPIC=40   FIXED_TURNS_PER_TOPIC=
-SUPERVISOR_MODE=off|rules|full   SUPERVISOR_MAX_REGEN=1   SUPERVISOR_TIMEOUT_MS=5000
+SUPERVISOR_MODE=off|rules|full (default off)   SUPERVISOR_MAX_REGEN=1   SUPERVISOR_TIMEOUT_MS=5000
 PIPELINE_DEPTH=1
 ```

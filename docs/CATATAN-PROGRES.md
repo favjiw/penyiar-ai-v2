@@ -81,6 +81,38 @@ Sebagian besar sudah ada dari FR-1 (Tahap 1) dan dipertahankan: tema → 3 varia
 - Konsol belum menampilkan peringatan khusus untuk poin `perlu_cek` selain konfirmasi saat mengunci (perilaku lama).
 - Blocker lama yang sudah terkunci dengan kurang dari 3 poin tetap bisa dipakai (aturan hanya berlaku saat mengunci).
 
+## Fase 4: mode A / B / C, log riset, hook Supervisor (30 Okt 2026)
+
+**Keputusan desain: satu kerangka, dua kelas.** Spesifikasi meminta satu engine bersama dengan daftar peserta. Saya tidak menulis ulang `ShowEngine` (pipelining, skip, kuota, batas waktu mode B sudah teruji 21 menit) dan memilih:
+- `ShowEngine` (mode B) dan `HumanLedEngine` (mode A dan C, di `show/mode_a.py`) **berbagi** state machine, konteks persona, hook Supervisor, TTS, pemutaran, ringkasan obrolan, dan log.
+- Peserta berupa daftar (`show/participants.py`: `Participant`, `build_participants`, `addressed_ais`). Kode tidak lagi menyebut "raka" atau "salsa" di jalur giliran; `_pick_speaker` bergilir menurut daftar, dan tes mode B dengan tiga AI lulus.
+- Yang belum satu kelas: loop otomatis (B) dan pertukaran dipicu manusia (A/C) tetap dua implementasi giliran. Menyatukannya menunggu alasan nyata (mis. mode dengan manusia yang bisa diam lama).
+
+**Mode**
+- **A:** manusia + 1 AI pilihan operator. PTT → filler → jawaban singkat; manusia menekan "Topik berikutnya". (Perilaku sebelumnya, kini lewat kerangka bersama.)
+- **B:** AI bergantian otomatis; Showrunner memutuskan. Antarmuka keputusan: `continue/steer` = `lanjut`, `transition` = `pindah_topik`, `close` = `tutup` (medan `aksi` di keputusan dan log); override operator = tombol Next/Stop.
+- **C:** manusia + Raka + Salsa. AI yang disapa namanya menjawab ("kalian" menyapa keduanya; tanpa sapaan bergantian). AI lain boleh menimpali (peluang `MODE_C_CHIME_PROBABILITY=0.6`, wajib bila dua AI disapa), maksimal `MODE_C_MAX_AI_STREAK=2` giliran AI berturut-turut, lalu kembali ke manusia. Hanya manusia yang memindah topik. Selagi menunggu manusia kedua orb `listening`; orb `thinking` hanya untuk AI yang sedang membuat jawaban (`snapshot.thinking`, bukan tebakan sisi klien lagi).
+
+**Prompt persona** (`persona-v2`): daftar peserta lain dengan perannya, ringkasan obrolan sebelumnya, instruksi menimpali (mode C), dan tanpa rujukan ke komentar. Panjang jawaban mode A dan C 1-3 kalimat (menimpali 1-2).
+
+**Ringkasan obrolan** (`agents/summary.py`, prompt `summary-v1`): giliran yang keluar dari jendela 12 giliran dirangkum di latar belakang tiap 10 giliran dengan model peran Showrunner (tidak menahan giliran). LLM gagal → kutipan ekstraktif. Ini biaya +1 panggilan LLM per 10 giliran.
+
+**Supervisor:** `Supervisor.check()` berada di antara LLM dan TTS pada semua mode, kosakata `teruskan | koreksi | ganti`. `SUPERVISOR_MODE` kini default **`off`** (pass-through). Isi lengkap FR-5 tetap ada dan menyala dengan `rules` atau `full`; tidak dihapus karena itu inti skripsi.
+
+**Log riset** `sessions/<id>/turns.jsonl` (manusia dan AI): medan wajib `session_id, mode, turn_idx, speaker, is_human, topic_idx, text, t_start, t_end, latency_asr_ms, latency_llm_ms, latency_tts_ms, model, tts_chars, filler_used`, ditambah nama, segmen, `raw_text`, `latency_supervisor_ms`, `gap_before_play_ms`, `supervisor_action`, `tts_provider`, `tts_fallback_used`, `dialog_act`, `interrupted`. Arti waktu: AI = audio mulai dan selesai diputar; manusia = tombol bicara ditekan dan dilepas (`speech_ms` dari prompter). `latency_asr_ms` pada giliran AI pertama sesudah manusia = ASR ucapan pemicunya. `tts_chars` = jumlah karakter yang dikirim ke TTS (jumlah bagian kalimat). `topic_idx` berbasis 0, `null` di Opening/Closing. Log event lengkap tetap di `logs/<id>.jsonl`.
+
+**Filler:** bank disiapkan paralel (4 sekaligus) untuk semua AI. Sebelumnya berurutan: dengan Edge, 36 filler butuh lebih dari satu menit, dan ucapan pertama penyiar di mode C sempat tidak mendapat filler untuk AI kedua.
+
+**Diverifikasi**
+- 139 tes backend lulus (turunan: peserta, sapaan, urutan AI, batas streak, "kalian", prompt menimpali, `thinking` di snapshot, interupsi, `turns.jsonl` manusia + AI + mode B, hook, ringkasan sukses dan gagal, tiga AI di mode B, API mode C).
+- Browser dengan Gemini dan Edge asli: mode C dipilih di UI (dua orb, indikator mikrofon, tombol prompter), "Salsa, menurut lo ospek itu seru atau malah bikin capek?" dijawab Salsa (orb `thinking` ±8 s, lalu `speaking`), Raka menimpali ("Ciee yang tebar pesona..."), streak berhenti di 2 dan kedua orb kembali `listening`; `turns.jsonl` berisi tiga baris (manusia 350 ms ASR, Salsa, Raka) dengan semua medan wajib.
+- Probe headless mode C (`scripts/mode_a_probe.py --mode C`) dengan LLM tiruan.
+
+**Catatan dari uji**
+- **Edge TTS lambat untuk mode A/C:** jawaban tiga kalimat Salsa butuh TTS 11,3 s (sekitar 3-4 s per kalimat) dan jeda lepas-tombol sampai suara 7,7 s. Ini batas Edge dari laptop ini, bukan engine; ElevenLabs sebelumnya p50 0,55 s. Untuk uji latensi FR-7 pakai `TTS_PROVIDER=elevenlabs`.
+- Pembukaan "kita berdua penyiar AI HITS" muncul pada jawaban pertama di segmen Opening karena instruksi pengungkapan AI; ini membuat jawaban pertama lebih dari 1-3 kalimat.
+- AI yang menimpali mengutip rekannya dengan baik, tetapi persona di prompt masih mengandalkan "live TikTok HITS" sebagai konteks program (belum diubah).
+
 ## Masih terbuka
 
 - Fase 4: mode C, daftar peserta di engine, log `sessions/<id>/turns.jsonl`, hook `supervisor.check()` default nonaktif.
