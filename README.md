@@ -1,6 +1,6 @@
 # penyiar-ai-v2
 
-Penyiar AI co-host untuk live TikTok HITS Unikom Radio: obrolan ala podcast, mode manusia + AI (A) dan AI + AI (B).
+Penyiar AI co-host untuk program HITS Unikom Radio: obrolan ala podcast (Opening, maksimal 3 topik, Closing) dengan mode manusia + AI (A) dan AI + AI (B). Fokus saat ini: kualitas percakapan; avatar, komentar, dan live TikTok ditunda (arsip: branch `archive/avatar-dan-komentar`).
 
 Acuan tunggal kebutuhan, arsitektur, dan tahapan: [PRD.md](PRD.md). Status pengerjaan: PRD §16.
 
@@ -24,9 +24,9 @@ Frontend (dari folder `frontend/`), lalu buka http://localhost:5173:
 npx vite --port 5173
 ```
 
-Live mode B dari konsol: kunci blocker di tab **Blocker**, buka tab **Live**, klik **Cek pra-live**, **Buka Stage** (popup 9:16 untuk OBS), lalu **Mulai mode B**. Pintasan: `P` pause/lanjut, `N` next topik, `S` stop. Stage: `/stage?clean=1` untuk OBS, `/stage?zones=1` menampilkan zona yang tertutup UI TikTok.
+Live mode B dari konsol: kunci blocker di tab **Blocker**, buka tab **Live**, klik **Cek pra-live**, lalu **Mulai mode B**. Pintasan: `P` pause/lanjut, `N` next topik, `S` stop. Audio diputar di tab konsol.
 
-Mode A (penyiar + AI): di tab **Live** pilih *Mode A*, persona AI, dan nama penyiar, lalu **Mulai**. Penyiar memakai **Prompter** (`/prompter`, Chrome): tahan `Spasi` untuk bicara, `Esc` batal, `N` next topik. Di mode A, stage menyisakan panel atas transparan untuk kamera studio di OBS.
+Mode A (penyiar + AI): di tab **Live** pilih *Mode A*, persona AI, dan nama penyiar, lalu **Mulai**. Penyiar memakai **Prompter** (`/prompter`, Chrome): tahan `Spasi` untuk bicara, `Esc` batal, `N` next topik.
 
 Sesi tanpa browser (uji/eksperimen) dan ringkasannya:
 
@@ -53,6 +53,6 @@ cd frontend && npm run typecheck
 | `backend/app/agents/` | Persona, Supervisor, Showrunner |
 | `backend/app/show/` | Show Engine (mode B) dan API live + WebSocket |
 | `backend/scripts/` | `blocker_kt.py` (KT FR-1), `run_show.py` (sesi headless), `report.py` (ringkasan log), `mode_a_probe.py` (latensi mode A) |
-| `frontend/src/` | Konsol operator dan stage 9:16 (React + Vite + TypeScript) |
+| `frontend/src/` | Konsol operator dan prompter penyiar (React + Vite + TypeScript) |
 | `tahap0/` | Alat dan hasil uji kelayakan Tahap 0 |
 | `docs/` | Transkrip/analisis live HITS 20 Okt dan laporan KT |

@@ -30,11 +30,11 @@ LINES = [
     "Halo Sobat Hits, hari ini gue ditemenin {ai}. Halo {ai}, apa kabar?",
     "Oke, kita langsung masuk ya. {ai}, lo pernah punya pengalaman aneh soal ini?",
     "Wah serius? Terus abis itu gimana?",
-    "Ada komentar nih dari penonton, katanya mereka juga pernah ngalamin. Menurut lo kenapa ya?",
+    "Gue yakin banyak yang pernah ngalamin juga. Menurut lo kenapa ya?",
     "Hmm, tapi gue agak beda pendapat sih. Menurut gue itu tergantung orangnya.",
     "Oke, kalau lo harus kasih satu tips buat penonton, apa?",
     "Haha, bener juga. Ada yang mau lo tambahin sebelum kita lanjut?",
-    "Sip. Sobat Hits, tulis pengalaman kalian di kolom komentar ya.",
+    "Sip. Sobat Hits, ceritain pengalaman kalian ke teman sebelah ya.",
 ]
 
 

@@ -216,7 +216,7 @@ def _mock_drafts(prompt: str, call_no: int) -> dict:
                 "variant_label": label,
                 "opening": {"hook": f"Sobat Hits, ngomongin {tema.lower()} yuk!", "poin": ["sapa penonton", "kenalin tema"]},
                 "topics": topics,
-                "closing": {"rangkuman": f"{tema} ternyata seru dibahas", "ajakan": "tulis pendapat kalian di komentar"},
+                "closing": {"rangkuman": f"{tema} ternyata seru dibahas", "ajakan": "ceritain pendapat kalian ke teman sebelah"},
             }
         )
     return {"variants": variants}

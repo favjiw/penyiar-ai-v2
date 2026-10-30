@@ -3,7 +3,7 @@
 Tidak ada loop otomatis. Setiap ucapan penyiar (transkrip PTT dari prompter):
 1. filler pendek AI langsung diputar dari bank (tanpa LLM);
 2. persona menjawab singkat → Supervisor (batas SUPERVISOR_TIMEOUT_MS_MODE_A) →
-   TTS dipecah per kalimat: kalimat pertama dikirim ke stage begitu siap, sisanya
+   TTS dipecah per kalimat: kalimat pertama dikirim ke pemutar begitu siap, sisanya
    menyusul sebagai `audio_part`;
 3. Showrunner hanya memberi saran (prompter/konsol) dan `steer_hint` untuk AI.
 

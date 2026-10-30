@@ -26,7 +26,7 @@ cache/
 backend/cache/
 tahap0/out/
 
-# Large media (aset avatar dikelola terpisah)
+# Media (audio hasil TTS dan rekaman uji tidak disimpan di git)
 *.mp4
 *.wav
 *.mp3
@@ -40,9 +40,3 @@ desktop.ini
 
 # Data runtime (blocker tersimpan, dll.)
 backend/data/
-
-# Manifest klip dummy (dibuat assets/make_dummy_clips.py). Manifest klip Flow asli: git add -f
-assets/avatar/*/manifest.json
-
-# avatar T2: material avatar hasil prepare (besar, dibuat ulang dari klip)
-avatar-worker/avatars/

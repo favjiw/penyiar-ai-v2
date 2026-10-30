@@ -36,7 +36,6 @@ class PersonaCard(BaseModel):
     background_facts: list[str] = Field(default_factory=list)
     do_not: list[str] = Field(default_factory=list)
     opinions: list[str] = Field(default_factory=list)
-    clips: str = ""
     filler_bank: str = ""
 
 

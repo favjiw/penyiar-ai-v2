@@ -8,7 +8,6 @@ def test_personas_load_with_voices_and_assets():
     assert personas["raka"].gender == "male" and personas["salsa"].gender == "female"
     for p in personas.values():
         assert p.voices["elevenlabs"] and p.voices["edge"].startswith("id-ID-")
-        assert p.clips.endswith("manifest.json")
         assert not any("lagu" in d for d in p.do_not)
 
 

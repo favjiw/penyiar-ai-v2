@@ -34,7 +34,7 @@ DIALOG_ACT_HINTS = {
     "personal_question": "tanyakan hal personal yang ringan ke lawan bicara",
     "tease": "goda lawan bicara secara ringan dan ramah",
     "short_react": "beri reaksi singkat satu kalimat",
-    "audience": "lempar pertanyaan ke penonton supaya mereka nulis di komentar",
+    "audience": "lempar pertanyaan ke penonton supaya mereka ikut membayangkan atau menjawab dalam hati",
 }
 OPENING_AI_DISCLOSURE = "Di pembukaan ini sebutkan dengan santai bahwa kalian berdua penyiar AI HITS."
 
@@ -275,7 +275,7 @@ _MOCK_LINES = [
     "Eh tapi menurut gue nggak selalu gitu sih, tergantung orangnya.",
     "Hmm, lu pernah ngalamin sendiri nggak?",
     "Haha, gue jadi inget pas zaman awal kuliah dulu.",
-    "Sobat Hits, kalian tim yang mana nih? Tulis di komentar ya.",
+    "Sobat Hits, kalian tim yang mana nih? Pikirin dulu jawabannya ya.",
     "Oke, bener juga, jatuhnya jadi kebiasaan ya.",
     "Serius? Gue malah kebalikannya, santai aja.",
     "Nah itu dia yang bikin seru dibahas.",

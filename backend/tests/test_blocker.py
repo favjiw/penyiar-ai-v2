@@ -48,7 +48,7 @@ async def test_generate_mock_returns_distinct_valid_variants(store):
     assert [t.id for t in b.topics] == ["t1", "t2"]
     assert b.topics[1].poin[0].id == "t2p1"
     assert not b.locked and b.versi == 1 and b.id.startswith("blk_") and "zodiak" in b.id
-    assert meta.prompt_version == "blocker-v2" and meta.attempts == 1
+    assert meta.prompt_version == "blocker-v3" and meta.attempts == 1
     assert store.get(b.id) == b
 
 
