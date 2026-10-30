@@ -13,6 +13,7 @@ export interface TranscriptEntry {
   supervisor: 'forward' | 'regenerate' | 'fallback'
   tts_provider: string
   gap_ms: number
+  ts?: number // detik epoch, dari server
 }
 
 export interface TurnEvent extends TranscriptEntry {

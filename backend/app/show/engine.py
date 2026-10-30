@@ -21,6 +21,7 @@ import logging
 import random
 import secrets
 import time
+from time import time as wall_clock  # waktu dinding untuk cap transkrip; tes mengganti `time.monotonic`
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
@@ -501,7 +502,7 @@ class ShowEngine:
         self.log.event("turn", t.record)
         entry = {"turn": t.turn, "persona": t.persona.id, "name": t.persona.name, "text": t.text, "emotion": t.emotion.value,
                  "segment": t.segment, "topic_id": t.topic.id if t.topic else None, "supervisor": t.record.supervisor.action,
-                 "tts_provider": t.record.tts_provider, "gap_ms": gap}
+                 "tts_provider": t.record.tts_provider, "gap_ms": gap, "ts": round(wall_clock(), 1)}
         self.transcript.append(entry)
         self.on_air["speaking"] = t.persona.id
 

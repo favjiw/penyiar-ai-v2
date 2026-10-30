@@ -16,6 +16,12 @@ export interface LiveSession {
   speaking: string | null
   alerts: { stage: string; message: string; turn: number }[]
   sttPartial: string
+  /** Ucapan penyiar manusia sudah diterima dan jawaban AI belum mulai (LLM/TTS berjalan). */
+  awaiting: boolean
+  /** Mikrofon penyiar manusia sedang ditahan (push-to-talk di prompter). */
+  micActive: boolean
+  /** Amplitudo audio yang sedang diputar, 0..1; null bila klien ini bukan pemilik audio. */
+  level: () => number | null
   audioBlocked: boolean
   unlockAudio: () => void
   send: (action: string, data?: Record<string, unknown>) => void
@@ -48,11 +54,16 @@ export function useLiveSession(role: Role): LiveSession {
   const [speaking, setSpeaking] = useState<string | null>(null)
   const [alerts, setAlerts] = useState<LiveSession['alerts']>([])
   const [sttPartial, setSttPartial] = useState('')
+  const [micActive, setMicActive] = useState(false)
+  const [awaiting, setAwaiting] = useState(false)
   const [audioBlocked, setAudioBlocked] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
   const ownerRef = useRef(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const ctxRef = useRef<AudioContext | null>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const samplesRef = useRef<Uint8Array | null>(null)
   const queueRef = useRef<PlayItem[]>([])
   const playingRef = useRef(false)
   const sessionRef = useRef<string | undefined>()
@@ -60,6 +71,42 @@ export function useLiveSession(role: Role): LiveSession {
   const send = useCallback((action: string, data: Record<string, unknown> = {}) => {
     const ws = wsRef.current
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ action, data }))
+  }, [])
+
+  /** Satu elemen audio, dialirkan lewat Web Audio supaya amplitudonya bisa dibaca orb. */
+  const getAudio = useCallback((): HTMLAudioElement => {
+    let a = audioRef.current
+    if (!a) {
+      a = new Audio()
+      audioRef.current = a
+      try {
+        const ctx = new AudioContext()
+        const analyser = ctx.createAnalyser()
+        analyser.fftSize = 512
+        const src = ctx.createMediaElementSource(a)
+        src.connect(analyser)
+        analyser.connect(ctx.destination)
+        ctxRef.current = ctx
+        analyserRef.current = analyser
+        samplesRef.current = new Uint8Array(analyser.fftSize)
+      } catch {
+        // Tanpa Web Audio audio tetap diputar lewat elemen; orb jatuh ke animasi bicara tanpa amplitudo.
+      }
+    }
+    return a
+  }, [])
+
+  const level = useCallback((): number | null => {
+    const analyser = analyserRef.current
+    const samples = samplesRef.current
+    if (!analyser || !samples || !ownerRef.current) return null
+    analyser.getByteTimeDomainData(samples)
+    let sum = 0
+    for (const v of samples) {
+      const x = (v - 128) / 128
+      sum += x * x
+    }
+    return Math.min(1, Math.sqrt(sum / samples.length) * 3.2)
   }, [])
 
   const stopAudio = useCallback(() => {
@@ -91,7 +138,7 @@ export function useLiveSession(role: Role): LiveSession {
     const url = item.urls[item.idx]
     if (url === undefined) return // tunggu audio_part
     if (url === null) return finish('error')
-    const a = audioRef.current ?? (audioRef.current = new Audio())
+    const a = getAudio()
     playingRef.current = true
     a.src = url
     setSpeaking(item.persona) // indikator mulai berganti selagi audio dimuat
@@ -105,7 +152,17 @@ export function useLiveSession(role: Role): LiveSession {
       playingRef.current = false
       finish('error')
     }
-    a.play()
+    // AudioContext yang masih suspended membisukan elemen tanpa galat; perlakukan sebagai audio diblokir.
+    const begin = async () => {
+      const ctx = ctxRef.current
+      const running = () => ctx?.state === 'running'
+      if (ctx && !running()) {
+        await Promise.race([ctx.resume().catch(() => undefined), new Promise((r) => window.setTimeout(r, 250))])
+        if (!running()) throw new DOMException('AudioContext suspended', 'NotAllowedError')
+      }
+      await a.play()
+    }
+    begin()
       .then(() => {
         setAudioBlocked(false)
         send('audio_state', { blocked: false })
@@ -124,7 +181,7 @@ export function useLiveSession(role: Role): LiveSession {
           send('audio_state', { blocked: true })
         } else finish('error')
       })
-  }, [send])
+  }, [send, getAudio])
 
   const enqueue = useCallback(
     (item: Omit<PlayItem, 'idx' | 'started'>) => {
@@ -135,15 +192,28 @@ export function useLiveSession(role: Role): LiveSession {
   )
 
   const unlockAudio = useCallback(() => {
+    // Gestur pengguna membuka izin autoplay untuk giliran berikutnya.
+    getAudio()
+    void ctxRef.current?.resume().catch(() => undefined)
     if (queueRef.current.length) pump()
-    else {
-      // Gestur pengguna membuka izin autoplay untuk giliran berikutnya.
-      const a = audioRef.current ?? (audioRef.current = new Audio())
-      a.play().catch(() => undefined)
-    }
     setAudioBlocked(false)
     send('audio_state', { blocked: false })
-  }, [pump, send])
+  }, [pump, send, getAudio])
+
+  // Klik atau tombol pertama (mis. "Mulai") menyiapkan Web Audio sebelum giliran pertama tiba.
+  useEffect(() => {
+    if (role !== 'console') return
+    const arm = () => {
+      getAudio()
+      void ctxRef.current?.resume().catch(() => undefined)
+    }
+    window.addEventListener('pointerdown', arm)
+    window.addEventListener('keydown', arm)
+    return () => {
+      window.removeEventListener('pointerdown', arm)
+      window.removeEventListener('keydown', arm)
+    }
+  }, [role, getAudio])
 
   useEffect(() => {
     let closed = false
@@ -178,11 +248,15 @@ export function useLiveSession(role: Role): LiveSession {
               setAlerts([])
             }
             if (snap.transcript) setTranscript(snap.transcript)
-            if (snap.state === 'ended') stopAudio()
+            if (snap.state === 'ended') {
+              stopAudio()
+              setAwaiting(false)
+            }
             break
           }
           case 'turn': {
             const turn = data as TurnEvent
+            setAwaiting(false)
             setTranscript((t) => (t.some((x) => x.turn === turn.turn) ? t : [...t, turn].slice(-KEEP)))
             if (ownerRef.current) {
               const total = turn.parts ?? 1
@@ -204,10 +278,12 @@ export function useLiveSession(role: Role): LiveSession {
             if (ownerRef.current && data.audio_url) enqueue({ id: `filler:${Date.now()}`, persona: data.persona, urls: [data.audio_url], total: 1, report: false })
             break
           case 'human_turn':
+            setAwaiting(true)
             setTranscript((t) => [...t, data].slice(-KEEP))
             setSttPartial('')
             break
           case 'stt_partial':
+            if (typeof data.active === 'boolean') setMicActive(data.active)
             setSttPartial(data.final ? '' : data.text)
             break
           case 'speaking':
@@ -233,6 +309,7 @@ export function useLiveSession(role: Role): LiveSession {
           case 'stop_audio':
             stopAudio()
             setSpeaking(null)
+            setAwaiting(false)
             break
         }
       }
@@ -248,5 +325,5 @@ export function useLiveSession(role: Role): LiveSession {
     }
   }, [role, enqueue, pump, send, stopAudio])
 
-  return { connected, snapshot, transcript, showrunner, supervisor, output, speaking, alerts, sttPartial, audioBlocked, unlockAudio, send }
+  return { connected, snapshot, transcript, showrunner, supervisor, output, speaking, alerts, sttPartial, micActive, awaiting, level, audioBlocked, unlockAudio, send }
 }

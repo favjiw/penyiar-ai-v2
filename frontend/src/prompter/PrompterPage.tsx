@@ -46,6 +46,12 @@ export function PrompterPage() {
     onFinal: (text, sttMs) => void sendTurn(text, sttMs),
   })
 
+  // Konsol menyalakan indikator mikrofon selama tombol bicara ditahan.
+  const { send } = live
+  useEffect(() => {
+    send('stt_partial', { text: '', active: ptt.listening })
+  }, [ptt.listening, send])
+
   const next = async () => {
     try {
       await api.control('next')

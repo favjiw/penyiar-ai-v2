@@ -159,6 +159,7 @@ button.danger { border-color: var(--err-fg); color: var(--err-fg); }
 
 .transcript { max-height: 70vh; overflow-y: auto; }
 .transcript .line { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.transcript .line .meta { display: block; font-size: 0.78rem; color: var(--muted); }
 .transcript .line.now { background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .who { font-weight: 700; margin-right: 4px; }
 .who.raka { color: #3b82f6; }

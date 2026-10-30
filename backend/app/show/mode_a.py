@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import re
 import time
+from time import time as wall_clock
 from typing import Any, Optional
 
 from app.agents.persona import HistoryEntry, TurnContext
@@ -64,6 +65,7 @@ class ModeAEngine(ShowEngine):
         self._supervisor_mode = self.settings.SUPERVISOR_MODE
         self.fillers = FillerBank(self.tts, self.audio_dir)
         self._reply: Optional[asyncio.Task] = None
+        self._answering = False  # jawaban AI sedang berjalan; False sebelum snapshot terakhir dari blok finally
         self._human_turns_in_topic = 0
 
     # ── Status ───────────────────────────────────────────────────────────────
@@ -72,7 +74,7 @@ class ModeAEngine(ShowEngine):
         snap = super().snapshot()
         snap["human"] = {"id": HUMAN_ID, "name": self.human_name}
         snap["ai_persona"] = self.ai.id
-        snap["busy"] = self._reply is not None and not self._reply.done()
+        snap["busy"] = self._answering
         snap["topic_points"] = self._topic_points()
         snap["fillers_ready"] = len(self.fillers._bank.get(self.ai.id, []))
         return snap
@@ -181,7 +183,7 @@ class ModeAEngine(ShowEngine):
 
         self.turn_no += 1
         entry = {"turn": self.turn_no, "persona": HUMAN_ID, "name": self.human_name, "text": text, "emotion": "neutral",
-                 "segment": self.plan.segment, "topic_id": self._topic_id(), "supervisor": "forward", "tts_provider": "", "gap_ms": 0}
+                 "segment": self.plan.segment, "topic_id": self._topic_id(), "supervisor": "forward", "tts_provider": "", "gap_ms": 0, "ts": round(wall_clock(), 1)}
         self.history.append(HistoryEntry(HUMAN_ID, self.human_name, text))
         self.transcript.append(entry)
         self.log.event("stt", turn=self.turn_no, text=text, stt_ms=stt_ms, segment=self.plan.segment, topic_id=self._topic_id())
@@ -197,6 +199,7 @@ class ModeAEngine(ShowEngine):
         return self.blocker.topics[self.plan.topic_idx].id if self.plan.segment == "topic" else None
 
     async def _answer(self, received: float, filler: Optional[str], stt_ms: int) -> None:
+        self._answering = True
         try:
             await self._resume.wait()
             speaker = self.ai
@@ -221,7 +224,7 @@ class ModeAEngine(ShowEngine):
             self._playback_done.clear()
             entry = {"turn": turn, "persona": speaker.id, "name": speaker.name, "text": reviewed.text, "emotion": reviewed.emotion.value,
                      "segment": ctx.segment, "topic_id": ctx.topic.id if ctx.topic else None, "supervisor": reviewed.verdict.action,
-                     "tts_provider": first["provider"] if first else "", "gap_ms": latency.gap_before_play}
+                     "tts_provider": first["provider"] if first else "", "gap_ms": latency.gap_before_play, "ts": round(wall_clock(), 1)}
             self.transcript.append(entry)
             self.history.append(HistoryEntry(speaker.id, speaker.name, reviewed.text))
             self.on_air["speaking"] = speaker.id
@@ -261,6 +264,7 @@ class ModeAEngine(ShowEngine):
         except Exception as e:
             await self._alert("engine", f"Jawaban AI gagal: {type(e).__name__}: {e}")
         finally:
+            self._answering = False
             self.on_air["speaking"] = None
             await self._broadcast_state()
 

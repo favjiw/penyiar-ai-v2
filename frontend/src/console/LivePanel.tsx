@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
 import type { LiveSession } from '../live/useLiveSession'
 import type { Blocker } from '../types'
+import { VoiceStage } from './VoiceStage'
 
 const fmtElapsed = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
+const fmtClock = (ts?: number) => (ts ? new Date(ts * 1000).toLocaleTimeString('id-ID', { hour12: false }) : '')
 const isTyping = (el: Element | null) => !!el && ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)
 
 interface Props {
@@ -12,7 +14,15 @@ interface Props {
   onRefreshBlockers: () => void
 }
 
-/** Kontrol dan pemantauan siaran mode B (FR-11, bagian Tahap 2). */
+/** Judul segmen untuk satu giliran: Opening, Closing, atau judul topik (id `t2` = topik kedua). */
+function segmentLabel(t: { segment: string; topic_id: string | null }, topics: string[]): string {
+  if (t.segment === 'opening') return 'Opening'
+  if (t.segment === 'closing') return 'Closing'
+  const i = t.topic_id ? Number(t.topic_id.replace(/\D/g, '')) - 1 : -1
+  return topics[i] ?? 'Topik'
+}
+
+/** Kontrol dan pemantauan siaran (FR-11): orb giliran bicara, transkrip, dan panel agen. */
 export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
   const { snapshot: snap, transcript, showrunner, supervisor, output } = live
   const [blockerId, setBlockerId] = useState('')
@@ -183,12 +193,17 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
       )}
       {!live.connected && <div className="error">Tersambung ulang ke server…</div>}
 
+      <VoiceStage live={live} previewMode={mode} previewAi={aiPersona} previewHuman={humanName} />
+
       <div className="live-grid">
         <section className="panel transcript">
           <h2>Transkrip</h2>
           {transcript.length === 0 && <p className="empty">Belum ada giliran.</p>}
           {transcript.map((t) => (
             <div key={t.turn} className={`line ${live.speaking === t.persona && t === transcript[transcript.length - 1] ? 'now' : ''}`}>
+              <span className="meta">
+                {fmtClock(t.ts)} · {segmentLabel(t, topics)}
+              </span>
               <span className={`who ${t.persona}`}>{t.name}</span> {t.text}
               {t.supervisor !== 'forward' && <span className="badge">{t.supervisor}</span>}
               {t.tts_provider && t.tts_provider !== 'elevenlabs' && t.tts_provider !== 'mock' && <span className="badge">TTS {t.tts_provider}</span>}

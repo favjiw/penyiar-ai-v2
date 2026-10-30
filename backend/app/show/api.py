@@ -160,7 +160,7 @@ async def ws_session(ws: WebSocket, role: str = "console"):
                     await manager.broadcast("speaking", {"persona": data.get("persona")})
             elif action == "stt_partial":
                 # Transkrip sementara dari prompter, diteruskan ke konsol (FR-7)
-                await manager.broadcast("stt_partial", {"text": str(data.get("text", ""))[:500], "final": bool(data.get("final"))})
+                await manager.broadcast("stt_partial", {"text": str(data.get("text", ""))[:500], "final": bool(data.get("final")), "active": data.get("active")})
             elif action == "audio_state":
                 blocked = bool(data.get("blocked"))
                 (manager.audio_blocked.add if blocked else manager.audio_blocked.discard)(ws)
