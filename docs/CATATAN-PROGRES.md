@@ -108,6 +108,29 @@ Sebagian besar sudah ada dari FR-1 (Tahap 1) dan dipertahankan: tema → 3 varia
 - Browser dengan Gemini dan Edge asli: mode C dipilih di UI (dua orb, indikator mikrofon, tombol prompter), "Salsa, menurut lo ospek itu seru atau malah bikin capek?" dijawab Salsa (orb `thinking` ±8 s, lalu `speaking`), Raka menimpali ("Ciee yang tebar pesona..."), streak berhenti di 2 dan kedua orb kembali `listening`; `turns.jsonl` berisi tiga baris (manusia 350 ms ASR, Salsa, Raka) dengan semua medan wajib.
 - Probe headless mode C (`scripts/mode_a_probe.py --mode C`) dengan LLM tiruan.
 
+**Uji mode B panjang (headless, real time, Gemini `gemini-3.5-flash-lite` dan Edge asli, blocker Ospek 3 topik)**
+
+| | Sesi 1 | Sesi 2 |
+|---|---|---|
+| Konfigurasi | `PERSONA_TIMEOUT_MS=10000`, `MAX_TURNS_PER_TOPIC=40`, target 34 menit | `PERSONA_TIMEOUT_MS=20000`, `MAX_TURNS_PER_TOPIC=40`, target 42 menit |
+| Hasil | selesai, tanpa crash | selesai, tanpa crash |
+| Durasi | **28,5 menit**, 127 giliran | **34,2 menit**, 127 giliran |
+| Giliran berupa kalimat kaleng (persona timeout) | **21 dari 127 (16,5%)** | 3 dari 127 (2,4%) |
+| Giliran dengan suara cadangan gTTS | 9 | **25 (20%)** |
+| Giliran tanpa suara sama sekali | 1 (Edge dan gTTS sama-sama timeout) | 0 |
+| Latensi persona p50 / p95 / maks | 2,3 s / 8,1 s / 9,4 s (hanya yang berhasil) | 3,1 s / 16,0 s / 19,9 s |
+| TTS p50 / p95 / maks | 3,6 s / 9,7 s / 11,5 s | 3,7 s / 9,7 s / 11,7 s |
+| Jeda sebelum suara p50 / p95 / maks | 0 / 11,9 s / 24,0 s | 0,3 s / 17,5 s / 23,1 s |
+| `turns.jsonl` | 127 baris, 0 terpotong | 127 baris, 0 terpotong, span 34,0 menit |
+| Keputusan Showrunner | 42 (budget 1+) | 42: lanjut 12, arahkan 27, pindah 2, tutup 1 |
+
+Temuan:
+- **Syarat 30 menit tercapai pada sesi 2** (34,2 menit); sesi 1 berhenti di 28,5 menit karena target 34 menit habis lebih cepat dari jatah topik.
+- **Batas 40 giliran per topik (`MAX_TURNS_PER_TOPIC`) membatasi sesi.** Pada sesi 2 ketiga topik berhenti di 41 giliran (3 transisi `forced`), padahal jatah waktu belum habis. Dengan sekitar 15 s per giliran, 40 giliran × 3 topik hanya muat ±34 menit. Default dinaikkan ke **60** supaya target 40+ menit mungkin.
+- **Persona timeout 10 s terlalu ketat untuk Gemini free tier hari ini:** 16,5% giliran menjadi kalimat kaleng ("Oke, lanjut."), yang merusak transkrip riset. Default dinaikkan ke **20 s** (sesi 2: 2,4%). Konsekuensinya jeda sunyi bisa sampai ±23 s di sesi yang tidak ditonton; untuk demo langsung pakai nilai lebih kecil atau model lain.
+- **Edge TTS dari laptop ini tidak stabil:** 20% giliran sesi 2 diputar dengan gTTS karena Edge timeout 12 s dua kali beruntun (breaker 60 s). gTTS satu suara untuk dua persona, jadi dua penyiar terdengar sama pada giliran itu. Untuk uji dengar atau demo pakai ElevenLabs; untuk sesi Edge yang panjang pertimbangkan `TTS_TIMEOUT_SEC=20`.
+- Tidak ada galat engine, kuota harian tidak habis (tanpa pindah model), 0 giliran terpotong.
+
 **Catatan dari uji**
 - **Edge TTS lambat untuk mode A/C:** jawaban tiga kalimat Salsa butuh TTS 11,3 s (sekitar 3-4 s per kalimat) dan jeda lepas-tombol sampai suara 7,7 s. Ini batas Edge dari laptop ini, bukan engine; ElevenLabs sebelumnya p50 0,55 s. Untuk uji latensi FR-7 pakai `TTS_PROVIDER=elevenlabs`.
 - Pembukaan "kita berdua penyiar AI HITS" muncul pada jawaban pertama di segmen Opening karena instruksi pengungkapan AI; ini membuat jawaban pertama lebih dari 1-3 kalimat.
@@ -115,6 +138,10 @@ Sebagian besar sudah ada dari FR-1 (Tahap 1) dan dipertahankan: tema → 3 varia
 
 ## Masih terbuka
 
-- Fase 4: mode C, daftar peserta di engine, log `sessions/<id>/turns.jsonl`, hook `supervisor.check()` default nonaktif.
+- Uji mode A dan C dengan **mikrofon dan Web Speech nyata** di Chrome (yang diuji: `/api/ptt/turn` dengan teks dan sinyal mikrofon simulasi).
+- Sesi mode A/C yang panjang (hanya mode B yang diuji 30+ menit). Showrunner mode saran di C menghitung satu pertukaran sebagai 1 + jumlah giliran AI; belum dikalibrasi.
+- Kualitas percakapan itu sendiri: belum ada penilaian terhadap transkrip 34 menit (pengulangan, konsistensi persona, keterkaitan dengan blocker, efek ringkasan). Transkripnya ada di `backend/sessions/show_20261030_113137_5204/turns.jsonl`; log riset sudah lengkap untuk itu.
+- Persona di mode C yang menimpali kadang terlalu panjang atau mengulang rekannya; belum diukur.
+- Mode B dengan tiga AI hanya diuji di level unit (belum ada kartu persona ketiga).
 - Prompt persona, Showrunner, dan Supervisor masih menyebut "live TikTok HITS" sebagai konteks program; belum diubah supaya versi prompt tidak bergeser.
 - Bagian PRD §6.1, §6.3, §11, dan Lampiran B masih memuat stage/avatar/komentar sebagai rujukan sejarah.

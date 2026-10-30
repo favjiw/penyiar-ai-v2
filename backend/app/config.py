@@ -71,13 +71,13 @@ class Settings(BaseSettings):
     SHOWRUNNER_POLICY: Literal["llm", "fixed_turns", "coverage_only"] = "llm"
     SHOWRUNNER_EVERY_K: int = 3
     MIN_TURNS_PER_TOPIC: int = 6
-    MAX_TURNS_PER_TOPIC: int = 40
+    MAX_TURNS_PER_TOPIC: int = 60  # batas keras; 40 membatasi sesi tiga topik ke ±34 menit (uji 30 Okt), padahal target 40+ menit
     FIXED_TURNS_PER_TOPIC: int = 0
     SUPERVISOR_MODE: Literal["off", "rules", "full"] = "off"  # hook supervisor.check: nonaktif (pass-through) kecuali dinyalakan
     SUPERVISOR_MAX_REGEN: int = 1
     SUPERVISOR_TIMEOUT_MS: int = 5000
     SUPERVISOR_TIMEOUT_MS_MODE_A: int = 2500  # mode A lebih ketat: penyiar menunggu jawaban
-    PERSONA_TIMEOUT_MS: int = 10000  # lewat batas → kalimat aman, supaya tidak ada siaran hening panjang
+    PERSONA_TIMEOUT_MS: int = 20000  # lewat batas → kalimat aman, supaya tidak ada siaran hening panjang. Sesi 28 menit dengan 10 s: 21 dari 127 giliran jadi kalimat kaleng
     SHOWRUNNER_TIMEOUT_MS: int = 6000  # lewat batas → keputusan fixed_turns
     PERSONA_FAILURES_BEFORE_WRAP: int = 3  # persona gagal beruntun sebanyak ini...
     PERSONA_FAILURE_WRAP_SEC: int = 90  # ...dan selama ini (detik) → ke Closing; gangguan jaringan sesaat tidak menutup siaran

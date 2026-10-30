@@ -238,7 +238,7 @@ IDLE → BLOCKER_LOCKED → READY → LIVE{ OPENING → TOPIC(1..n) → CLOSING 
 | OPENING → TOPIC_1 | Penyiar menekan "next" | Showrunner `transition` (atau batas lunak Opening) |
 | TOPIC_i → TOPIC_i+1 | Penyiar menekan "next" | Showrunner `transition` |
 | TOPIC_n → CLOSING | Penyiar menekan "next" / "closing" | Showrunner `close` |
-| Batas keras | Tidak ada | `MAX_TURNS_PER_TOPIC` (default 40) memaksa transisi; tercatat sebagai `forced` |
+| Batas keras | Tidak ada | `MAX_TURNS_PER_TOPIC` (default 60; 40 membatasi tiga topik ke ±34 menit pada uji 30 Okt) memaksa transisi; tercatat sebagai `forced` |
 | Override operator | skip / pause / stop | skip / pause / stop |
 
 ### 6.3 Event WebSocket (minimal) [C]
@@ -850,7 +850,7 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 | 4 Mode A | Berjalan | 25 Okt 2026 | FR-7 (PTT Web Speech di prompter), FR-11 prompter, bank filler, ModeAEngine (TTS per kalimat, penyiar boleh memotong, Showrunner mode saran); 93 tes lulus; uji browser mock lulus (`docs/kt/tahap4-mode-a.md`). Probe latensi live tidak mewakili (Gemini 4–6 s per panggilan saat diuji). Menunggu: uji STT nyata, ukur ulang latensi, sesi 15 menit bersama penyiar. |
 | 5 Avatar T2 | Ditunda (diarsipkan) | 30 Okt 2026 | MuseTalk 1.5 jalan untuk Raka (bibir mengikuti suku kata) tetapi RTF ±410 di MX250; belum diukur di GTX 1080. Kode, hasil uji, dan catatan ada di branch `archive/avatar-dan-komentar` (`docs/kt/avatar-t2-musetalk.md`). |
 | 6 Tambahan skripsi | Belum | | FR-13 (komentar) ditunda. |
-| 3b Strip + Orb + TTS + Mode C | Berjalan | 30 Okt 2026 | Fase 1 selesai (avatar, stage, T2, dan setelan komentar dihapus; audit di `docs/AUDIT-STRIP.md`; 92 tes lulus, show mock mode B berjalan di konsol). Fase 2 (orb, transkrip), 2b (lapisan TTS Edge/ElevenLabs/gTTS), dan 3 (retry parse 2×, aturan kunci 3-5 poin, `sessions/<id>/blocker.json`, rundown di prompter) selesai; 116 tes lulus. Fase 4 (mode A/B/C satu kerangka berdaftar peserta, mode C, `turns.jsonl`, ringkasan obrolan, hook Supervisor default off) selesai; lihat `docs/CATATAN-PROGRES.md` untuk hasil uji. |
+| 3b Strip + Orb + TTS + Mode C | Berjalan | 30 Okt 2026 | Fase 1 selesai (avatar, stage, T2, dan setelan komentar dihapus; audit di `docs/AUDIT-STRIP.md`; 92 tes lulus, show mock mode B berjalan di konsol). Fase 2 (orb, transkrip), 2b (lapisan TTS Edge/ElevenLabs/gTTS), dan 3 (retry parse 2×, aturan kunci 3-5 poin, `sessions/<id>/blocker.json`, rundown di prompter) selesai; 116 tes lulus. Fase 4 (mode A/B/C satu kerangka berdaftar peserta, mode C, `turns.jsonl`, ringkasan obrolan, hook Supervisor default off) selesai; mode B real time 34,2 menit tanpa crash (127 giliran, `docs/CATATAN-PROGRES.md`). Default berubah dari uji itu: `MAX_TURNS_PER_TOPIC` 60, `PERSONA_TIMEOUT_MS` 20000. |
 | 7 Eksperimen | Belum | | |
 
 ## 17. Riwayat
@@ -929,7 +929,7 @@ EDGE_RATE_RAKA=+4%   EDGE_PITCH_RAKA=-2Hz   EDGE_RATE_SALSA=+6%   EDGE_PITCH_SAL
 STT_PROVIDER=webspeech|faster_whisper|gemini   FASTER_WHISPER_URL=
 # Agen
 SHOWRUNNER_POLICY=llm|fixed_turns|coverage_only
-SHOWRUNNER_EVERY_K=3   MIN_TURNS_PER_TOPIC=6   MAX_TURNS_PER_TOPIC=40   FIXED_TURNS_PER_TOPIC=
+SHOWRUNNER_EVERY_K=3   MIN_TURNS_PER_TOPIC=6   MAX_TURNS_PER_TOPIC=60   FIXED_TURNS_PER_TOPIC=
 SUPERVISOR_MODE=off|rules|full (default off)   SUPERVISOR_MAX_REGEN=1   SUPERVISOR_TIMEOUT_MS=5000
 PIPELINE_DEPTH=1
 ```
