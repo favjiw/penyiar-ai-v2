@@ -94,10 +94,15 @@ class Settings(BaseSettings):
     # Penyimpanan
     DATA_DIR: str = str(BACKEND_ROOT / "data")
     LOG_DIR: str = str(BACKEND_ROOT / "logs")
+    SESSIONS_DIR: str = ""  # kosong = folder `sessions` di samping LOG_DIR; isi per sesi: sessions/<session_id>/
     CACHE_DIR: str = str(BACKEND_ROOT / "cache")
 
     # Variabel kosong (mis. `GEMINI_RPM_PERSONA=` di .env.example) berarti pakai default.
     model_config = {"env_file": str(REPO_ROOT / ".env"), "env_file_encoding": "utf-8", "extra": "ignore", "env_ignore_empty": True}
+
+    @property
+    def sessions_path(self) -> Path:
+        return Path(self.SESSIONS_DIR) if self.SESSIONS_DIR else Path(self.LOG_DIR).parent / "sessions"
 
     def tts_fallbacks(self) -> list[str]:
         """Daftar cadangan TTS dari TTS_FALLBACK; 'none' atau kosong berarti tanpa cadangan."""

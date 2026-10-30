@@ -59,13 +59,21 @@ async def test_retry_once_after_parse_error_then_succeeds(store):
     assert "ditolak" in llm.prompts[1]
 
 
-async def test_fails_after_two_bad_answers(store):
+async def test_retries_up_to_twice_then_succeeds(store):
+    llm = _Scripted("bukan json", _good(topik=1), _good())
+    blockers, meta = await BlockerGenerator(llm, "m", store).generate(GenerateBlockerRequest(tema="Kopi"))
+    assert meta.attempts == 3 and len(blockers) == 3 and not llm.answers
+    assert "JSON tidak sesuai skema" in llm.prompts[1] and "diminta 3" in llm.prompts[2]  # tiap ulang memuat alasan penolakan terbaru
+    assert meta.issues_first_attempt
+
+
+async def test_fails_after_three_bad_answers(store):
     too_few_topics = _good(topik=1)
+    llm = _Scripted(too_few_topics, too_few_topics, too_few_topics)
     with pytest.raises(BlockerGenerationError) as err:
-        await BlockerGenerator(_Scripted(too_few_topics, too_few_topics), "m", store).generate(
-            GenerateBlockerRequest(tema="Kopi", jumlah_topik=3)
-        )
+        await BlockerGenerator(llm, "m", store).generate(GenerateBlockerRequest(tema="Kopi", jumlah_topik=3))
     assert any("diminta 3" in i for i in err.value.issues)
+    assert "3 percobaan" in str(err.value) and not llm.answers  # tepat 3 panggilan, tidak lebih
 
 
 async def test_duplicate_labels_rejected(store):
@@ -73,7 +81,7 @@ async def test_duplicate_labels_rejected(store):
     for v in dup["variants"]:
         v["variant_label"] = "Sama"
     with pytest.raises(BlockerGenerationError):
-        await BlockerGenerator(_Scripted(dup, dup), "m", store).generate(GenerateBlockerRequest(tema="Kopi"))
+        await BlockerGenerator(_Scripted(dup, dup, dup), "m", store).generate(GenerateBlockerRequest(tema="Kopi"))
 
 
 async def test_extra_points_trimmed_and_digits_flagged(store):

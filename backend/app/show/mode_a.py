@@ -92,6 +92,7 @@ class ModeAEngine(ShowEngine):
     def start(self) -> None:
         self.state = ShowState.LIVE
         self.started_at = time.monotonic()
+        self.save_session_blocker()
         self._task = asyncio.create_task(self._open(), name=self.session_id)
 
     async def _open(self) -> None:

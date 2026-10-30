@@ -1,7 +1,7 @@
 """Generator Blocker (FR-1): tema → 2–3 varian rundown Opening, 1–3 topik, Closing.
 
 Keluaran LLM divalidasi terhadap aturan FR-1. Bila parsing atau validasi gagal,
-permintaan diulang sekali dengan daftar masalahnya; gagal lagi → galat ke UI.
+permintaan diulang (maksimal MAX_RETRIES kali) dengan daftar masalahnya; tetap gagal → galat ke UI.
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ from app.schemas import (
 logger = logging.getLogger(__name__)
 
 MIN_POINTS, MAX_POINTS = 3, 5
+MAX_RETRIES = 2  # ulang parse atau validasi; total percobaan = 1 + MAX_RETRIES
 MAX_OPENING_POINTS = 3
 # Angka di poin hampir selalu klaim spesifik (tahun, persen, harga): tandai untuk dicek operator.
 _DIGIT = re.compile(r"\d")
@@ -133,7 +134,7 @@ class BlockerGenerator:
         start = time.perf_counter()
         issues: list[str] = []
         first_issues: list[str] = []
-        for attempt in (1, 2):
+        for attempt in range(1, MAX_RETRIES + 2):
             resp = await self._llm.generate(
                 build_prompt(req, hindari, issues),
                 model=self._model,
@@ -153,8 +154,9 @@ class BlockerGenerator:
                     return drafts, meta
             if attempt == 1:
                 first_issues = issues
-                logger.warning("Blocker '%s' ditolak, ulang sekali: %s", req.tema, issues)
-        raise BlockerGenerationError("Generator blocker gagal dua kali; coba lagi atau ubah tema", issues)
+            if attempt <= MAX_RETRIES:
+                logger.warning("Blocker '%s' ditolak (percobaan %d/%d), ulang: %s", req.tema, attempt, MAX_RETRIES + 1, issues)
+        raise BlockerGenerationError(f"Generator blocker gagal setelah {MAX_RETRIES + 1} percobaan; coba lagi atau ubah tema", issues)
 
     async def generate(self, req: GenerateBlockerRequest) -> tuple[list[Blocker], GenerationMeta]:
         try:

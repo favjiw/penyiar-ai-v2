@@ -175,6 +175,7 @@ class ShowEngine:
             "state": self.state.value,
             "mode": self.mode,
             "blocker": {"id": self.blocker.id, "tema": self.blocker.tema, "variant_label": self.blocker.variant_label, "topics": [t.judul for t in self.blocker.topics]},
+            "rundown": self._rundown(),
             "personas": [{"id": p.id, "name": p.name} for p in self.personas],
             "segment": self.on_air["segment"],
             "topic": topic,
@@ -188,14 +189,43 @@ class ShowEngine:
             "error": self.error,
         }
 
+    def _rundown(self) -> dict[str, Any]:
+        """Blocker terkunci apa adanya, untuk prompter penyiar manusia."""
+        b = self.blocker
+        return {
+            "opening": {"hook": b.opening.hook, "poin": b.opening.poin},
+            "topics": [
+                {
+                    "id": t.id, "judul": t.judul, "sudut_pandang": t.sudut_pandang,
+                    "poin": [{"id": p.id, "text": p.text} for p in t.poin],
+                    "pertanyaan_penonton": t.pertanyaan_penonton, "transisi": t.transisi,
+                }
+                for t in b.topics
+            ],
+            "closing": {"rangkuman": b.closing.rangkuman, "ajakan": b.closing.ajakan},
+        }
+
     async def _broadcast_state(self) -> None:
         await self._emit("state", self.snapshot())
 
     # ── Kontrol operator ─────────────────────────────────────────────────────
 
+    @property
+    def session_dir(self) -> Path:
+        return self.settings.sessions_path / self.session_id
+
+    def save_session_blocker(self) -> None:
+        """Salin blocker terkunci ke sessions/<session_id>/blocker.json (bahan riset: apa yang dibaca AI dan penyiar)."""
+        try:
+            self.session_dir.mkdir(parents=True, exist_ok=True)
+            (self.session_dir / "blocker.json").write_text(self.blocker.model_dump_json(indent=2), encoding="utf-8")
+        except OSError as e:
+            self.log.event("error", stage="session_blocker", message=str(e)[:300])
+
     def start(self) -> None:
         self.state = ShowState.LIVE
         self.started_at = time.monotonic()
+        self.save_session_blocker()
         self._task = asyncio.create_task(self._run(), name=self.session_id)
 
     async def pause(self) -> None:

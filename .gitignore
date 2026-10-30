@@ -40,3 +40,6 @@ desktop.ini
 
 # Data runtime (blocker tersimpan, dll.)
 backend/data/
+
+# Sesi (blocker.json per sesi; log JSONL menyusul di Fase 4)
+backend/sessions/
