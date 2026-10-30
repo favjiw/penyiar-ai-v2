@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     TTS_PROVIDER: Literal["edge", "elevenlabs"] = "edge"  # Edge (gratis) untuk pengembangan; elevenlabs untuk demo
     TTS_FALLBACK: str = "gtts"  # cadangan berurutan, dipisah koma: edge | gtts | elevenlabs | none
     TTS_RETRIES: int = 1  # ulang provider utama sebelum pindah ke cadangan
-    TTS_TIMEOUT_SEC: float = 8.0
+    TTS_TIMEOUT_SEC: float = 12.0  # Edge dari laptop ini sering 3-8 s per kalimat; pindah suara di tengah siaran lebih buruk daripada menunggu
     ELEVENLABS_API_KEY: str = ""
     ELEVENLABS_MODEL: str = ""
     ELEVENLABS_VOICE_MALE: str = ""

@@ -395,19 +395,27 @@ Kode Supervisor di repo lama masih **stub**: prompt satu baris, tanpa koreksi da
   - semua verdict tercatat di log.
 
 ### FR-6 TTS
-- **Utama [F]:** ElevenLabs, model `eleven_flash_v2_5` (diatur lewat `ELEVENLABS_MODEL`, tidak di-hard-code), endpoint streaming.
+- **Lapisan provider [F, 30 Okt 2026]:** semua pemanggilan suara di engine lewat `TTSProvider.synthesize(text, persona) -> AudioResult` (bytes, format, durasi). Provider dipilih lewat `.env`:
+  - `TTS_PROVIDER=edge` (default, gratis, tanpa key) untuk pengembangan dan uji panjang; `elevenlabs` untuk demo ke pembimbing, cukup mengganti satu baris;
+  - `TTS_FALLBACK` = daftar cadangan berurutan, dipisah koma (`gtts` default; untuk demo `edge,gtts`);
+  - provider utama diulang **sekali** bila galat, timeout (`TTS_TIMEOUT_SEC`, default 12 s), atau audio kosong; lalu cadangan; setiap kejadian dicatat (`tts_fallback_used`, `tts_fallback_reason`) dan operator melihat peringatan. Bila semua gagal, giliran tanpa suara memunculkan peringatan, bukan diam;
+  - `TTS_PROVIDER=elevenlabs` tanpa key: peringatan jelas di konsol dan jatuh ke Edge, bukan crash;
+  - Edge: Raka `id-ID-ArdiNeural`, Salsa `id-ID-GadisNeural`, dengan rate dan pitch per persona (`EDGE_RATE_*`, `EDGE_PITCH_*`); gTTS (`id`) satu suara untuk semua persona;
+  - label provider aktif tampil di header konsol, dan audio apa pun diputar lewat jalur Web Audio yang sama (orb bereaksi ke amplitudo);
+  - uji: `backend/scripts/test_tts.py` (audio tidak kosong, durasi > 0, suara Raka dan Salsa berbeda).
+- **ElevenLabs [F]:** ElevenLabs, model `eleven_flash_v2_5` (diatur lewat `ELEVENLABS_MODEL`, tidak di-hard-code), endpoint streaming.
   - Raka: suara **Pratama** (`q8qwd1jY2jS3AWOBeq25`); cadangan Ginanjar (`JjCMg2oeB7ExbMJUJHSK`).
   - Salsa: suara **Aita** (`ffTJE9l3Kt2ipEM32UOc`); cadangan Kira (`gmnazjXOFoOcWA59sd5m`).
   - Voice ID diatur lewat `ELEVENLABS_VOICE_*` / kartu persona.
   - Alasan (Tahap 0, `tahap0/HASIL.md`): latensi p50 0,55 s dan byte pertama ±0,45 s; transkrip setia teks. Gemini TTS free tier hanya 3 RPM dengan latensi p50 12,7 s, jadi tidak layak untuk live.
   - Suara library kadang cold start 15–20 s pada request pertama: cek pra-live wajib memanaskan (warm-up) kedua suara.
   - Pemakaian kredit dipantau (header `character-cost`, ±0,2 kredit/karakter di flash) dan ditampilkan di konsol bersama status kuota.
-- **Failover [F]:** Edge TTS (pustaka tidak resmi `edge-tts`), gratis:
+- **Edge TTS (pustaka tidak resmi `edge-tts`), gratis:**
   - pria `id-ID-ArdiNeural`;
   - wanita `id-ID-GadisNeural`.
 
   Konfigurasi lama memakai `su-ID-TutiNeural` (Sunda); ganti.
-- **Failover otomatis** ke Edge bila ElevenLabs galat, timeout, atau kredit habis (breaker seperti di repo lama). `aiohttp` untuk Edge memakai resolver DNS sistem (temuan Tahap 0).
+- **Breaker:** provider yang gagal beruntun dilewati selama masa jeda, supaya giliran berikutnya tidak menunggu timeout lagi. `aiohttp` untuk Edge memakai resolver DNS sistem (temuan Tahap 0).
 - **Dipecah per kalimat untuk mode A:** kalimat pertama di-TTS dan diputar sambil sisanya dibuat.
 - **Bank filler per persona:** 15–25 klip pendek ("hmm", "wah", "iya juga ya", tawa kecil, "bentar-bentar"), dibuat sekali lalu di-cache.
 - Gemini TTS tidak dipakai di jalur live; boleh dipakai offline untuk bank filler bila kualitasnya lebih disukai. VoiceStudio tidak dipakai.
@@ -837,7 +845,7 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 | 4 Mode A | Berjalan | 25 Okt 2026 | FR-7 (PTT Web Speech di prompter), FR-11 prompter, bank filler, ModeAEngine (TTS per kalimat, penyiar boleh memotong, Showrunner mode saran); 93 tes lulus; uji browser mock lulus (`docs/kt/tahap4-mode-a.md`). Probe latensi live tidak mewakili (Gemini 4–6 s per panggilan saat diuji). Menunggu: uji STT nyata, ukur ulang latensi, sesi 15 menit bersama penyiar. |
 | 5 Avatar T2 | Ditunda (diarsipkan) | 30 Okt 2026 | MuseTalk 1.5 jalan untuk Raka (bibir mengikuti suku kata) tetapi RTF ±410 di MX250; belum diukur di GTX 1080. Kode, hasil uji, dan catatan ada di branch `archive/avatar-dan-komentar` (`docs/kt/avatar-t2-musetalk.md`). |
 | 6 Tambahan skripsi | Belum | | FR-13 (komentar) ditunda. |
-| 3b Strip + Orb + TTS + Mode C | Berjalan | 30 Okt 2026 | Fase 1 selesai (avatar, stage, T2, dan setelan komentar dihapus; audit di `docs/AUDIT-STRIP.md`; 92 tes lulus, show mock mode B berjalan di konsol). Menunggu: orb dan transkrip (Fase 2), lapisan TTS Edge/ElevenLabs/gTTS (2b), Blocker 3 varian (3), mode C dan log `sessions/` (4). |
+| 3b Strip + Orb + TTS + Mode C | Berjalan | 30 Okt 2026 | Fase 1 selesai (avatar, stage, T2, dan setelan komentar dihapus; audit di `docs/AUDIT-STRIP.md`; 92 tes lulus, show mock mode B berjalan di konsol). Fase 2 (orb, transkrip) dan 2b (lapisan TTS Edge/ElevenLabs/gTTS) selesai; 107 tes lulus. Menunggu: Blocker 3 varian (3), mode C dan log `sessions/` (4). |
 | 7 Eksperimen | Belum | | |
 
 ## 17. Riwayat
@@ -857,7 +865,7 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 - **v2.4 (24 Okt 2026):** LLM cadangan berbiaya kecil [F]:
   - `compat:gemini-3.8-flash` (endpoint cosmoshub) sebagai cadangan persona saat kuota harian Gemini habis dan untuk eksperimen offline FR-14;
   - pengecualian biaya di §1.3, §2.3, §8; FR-14, §15.1, dan Lampiran B disesuaikan.
-- **v2.5 (30 Okt 2026):** fokus ke kualitas percakapan [F] (§1.3.1):
+- **v2.5 (30 Okt 2026):** fokus ke kualitas percakapan [F] (§1.3.1; FR-6 diubah menjadi lapisan provider):
   - FR-8, FR-9, FR-10, FR-13, Lampiran A, Tahap 3 dan 5 ditunda; kode diarsipkan di branch `archive/avatar-dan-komentar`;
   - ditambah Mode C (§3) dan FR-15 (orb); TTS memakai lapisan provider (Edge default, ElevenLabs untuk demo);
   - bagian arsitektur (§6.1, §6.3, §11) dan Lampiran B masih memuat stage/avatar/komentar sebagai rujukan sejarah; dibersihkan setelah Fase 2–4 selesai.
@@ -906,10 +914,11 @@ OPENAI_COMPAT_BASE_URL=https://api.cosmoshub.tech/v1   OPENAI_COMPAT_API_KEY=   
 GEMINI_MODEL_SUPERVISOR=  GEMINI_MODEL_TTS=   GEMINI_MODEL_JUDGE=
 GEMINI_RPM_PERSONA=  GEMINI_RPM_SUPERVISOR=  GEMINI_RPM_SHOWRUNNER=  GEMINI_RPM_TTS=
 # TTS
-TTS_PRIMARY=elevenlabs   TTS_FALLBACK=edge
+TTS_PROVIDER=edge|elevenlabs   TTS_FALLBACK=gtts   TTS_RETRIES=1   TTS_TIMEOUT_SEC=12
 ELEVENLABS_API_KEY=   ELEVENLABS_MODEL=eleven_flash_v2_5
 ELEVENLABS_VOICE_MALE=q8qwd1jY2jS3AWOBeq25   ELEVENLABS_VOICE_FEMALE=ffTJE9l3Kt2ipEM32UOc
 EDGE_VOICE_MALE=id-ID-ArdiNeural   EDGE_VOICE_FEMALE=id-ID-GadisNeural
+EDGE_RATE_RAKA=+4%   EDGE_PITCH_RAKA=-2Hz   EDGE_RATE_SALSA=+6%   EDGE_PITCH_SALSA=+2Hz
 # STT (mode A)
 STT_PROVIDER=webspeech|faster_whisper|gemini   FASTER_WHISPER_URL=
 # Agen
