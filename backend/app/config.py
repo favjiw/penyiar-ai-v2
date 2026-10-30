@@ -79,15 +79,6 @@ class Settings(BaseSettings):
     PERSONA_TEMPERATURE: float = 0.9
     HUMAN_HOST_NAME: str = ""  # mode A (Tahap 4); keputusan terbuka PRD §15.2 #2
 
-    # Avatar
-    AVATAR_TIER: Literal["t1", "t2"] = "t1"
-    AVATAR_WORKER_URL: str = ""
-    AVATAR_RENDER_TIMEOUT_MS: int = 20000  # render T2 lebih lama dari ini → giliran memakai klip T1
-
-    # Skripsi
-    COMMENTS_ENABLED: bool = False
-    TIKTOK_USERNAME: str = ""
-
     # Uji: "llm" dan/atau "tts" untuk mensimulasikan galat
     FAIL_INJECT: str = ""
 
@@ -95,7 +86,6 @@ class Settings(BaseSettings):
     DATA_DIR: str = str(BACKEND_ROOT / "data")
     LOG_DIR: str = str(BACKEND_ROOT / "logs")
     CACHE_DIR: str = str(BACKEND_ROOT / "cache")
-    AVATAR_DIR: str = str(REPO_ROOT / "assets" / "avatar")  # klip + manifest.json per persona (FR-8)
 
     # Variabel kosong (mis. `GEMINI_RPM_PERSONA=` di .env.example) berarti pakai default.
     model_config = {"env_file": str(REPO_ROOT / ".env"), "env_file_encoding": "utf-8", "extra": "ignore", "env_ignore_empty": True}

@@ -5,7 +5,7 @@ dibuat selagi audio giliran n diputar (pipelining, pola dari clock_runner repo
 lama tanpa TalkBudget). Segmen: Opening (OPENING_TURNS giliran) → Topik 1..n
 (Showrunner memutuskan transisi) → Closing (CLOSING_TURNS giliran).
 
-Pemutaran: pemilik audio (stage, atau konsol bila stage belum ada) memutar
+Pemutaran: pemilik audio (konsol) memutar
 `turn` dan melapor `ended`. Tanpa pemilik audio (mis. uji tanpa browser),
 engine menunggu sepanjang durasi audio (headless).
 
@@ -27,7 +27,6 @@ from typing import Any, Awaitable, Callable, Optional
 
 from app.agents.persona import HistoryEntry, PersonaAgent, PersonaResult, TurnContext
 from app.agents.showrunner import Showrunner, TopicProgress
-from app.avatar.t2_client import RenderResult, T2Client
 from app.agents.supervisor import Supervisor
 from app.config import Settings
 from app.llm import LLMClient, LLMError, LLMQuotaExhausted
@@ -109,7 +108,6 @@ class ShowEngine:
         rng = random.Random(self.seed)
         self.personas = [personas["raka"], personas["salsa"]]
         self.tts = tts
-        self.t2 = T2Client(settings)
         self._emit_raw = emit
         self._has_owner = has_audio_owner
         self._time_scale = time_scale  # headless: 0 = tanpa menunggu (tes, harness FR-14)
@@ -383,8 +381,6 @@ class ShowEngine:
             duration, tts_provider, tts_reason, credits = result.duration_s, result.provider, result.fallback_reason, result.credit_cost
         except (TTSError, Exception) as e:
             self.log.event("error", stage="tts", turn=turn, message=str(e)[:300])
-        video = await self._render_avatar(speaker, audio_path, turn)
-        latency.avatar_render = video.render_ms if video else 0
 
         record = TurnRecord(
             session_id=self.session_id,
@@ -403,7 +399,6 @@ class ShowEngine:
             tts_provider=tts_provider,
             tts_fallback_reason=tts_reason,
             audio_url=f"/audio/{audio_path.name}" if audio_path else None,
-            video_url=f"/audio/{video.path.name}" if video else None,
             duration_s=round(duration, 2),
             credit_cost=credits,
             seed=self.seed,
@@ -416,16 +411,6 @@ class ShowEngine:
         prepared = PreparedTurn(epoch, turn, speaker, ctx.segment, ctx.topic, reviewed.text, reviewed.emotion, record, audio_path, duration, starts_topic, starts_closing)
         await self._after_turn(ctx, prepared, reviewed.verdict)
         return prepared
-
-    async def _render_avatar(self, speaker: PersonaCard, audio_path: Optional[Path], turn: int) -> Optional[RenderResult]:
-        """Avatar T2 (FR-9): video lip-sync untuk audio ini; None → stage memakai klip T1."""
-        if audio_path is None or not self.t2.enabled:
-            return None
-        video = await self.t2.render(speaker.id, audio_path)
-        if video is None and self.t2.last_error:
-            self.log.event("error", stage="avatar_render", turn=turn, message=self.t2.last_error[:300])
-            self.t2.last_error = ""
-        return video
 
     async def _after_turn(self, ctx: TurnContext, prepared: PreparedTurn, verdict: SupervisorVerdict) -> None:
         """Perbarui rencana setelah giliran dibuat; panggil Showrunner bila waktunya."""
@@ -522,8 +507,7 @@ class ShowEngine:
 
         self._playback_id = f"{self.session_id}:{t.turn}"
         self._playback_done.clear()
-        await self._emit("turn", {**entry, "audio_url": t.record.audio_url, "video_url": t.record.video_url, "duration_s": t.duration_s,
-                                  "playback_id": self._playback_id})
+        await self._emit("turn", {**entry, "audio_url": t.record.audio_url, "duration_s": t.duration_s, "playback_id": self._playback_id})
         if t.record.audio_url and self._has_owner():
             try:
                 await asyncio.wait_for(self._playback_done.wait(), t.duration_s + PLAYBACK_GRACE_SEC)

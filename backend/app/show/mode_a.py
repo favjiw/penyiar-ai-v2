@@ -216,7 +216,6 @@ class ModeAEngine(ShowEngine):
             parts = split_sentences(reviewed.text)
             first = await self._tts_part(speaker, parts[0], turn, 0)
             latency.tts = first["latency_ms"] if first else 0
-            latency.avatar_render = first["render_ms"] if first else 0
             latency.gap_before_play = int((time.monotonic() - received) * 1000)  # lepas PTT → jawaban mulai dikirim
             self._playback_id = f"{self.session_id}:{turn}"
             self._playback_done.clear()
@@ -227,8 +226,7 @@ class ModeAEngine(ShowEngine):
             self.history.append(HistoryEntry(speaker.id, speaker.name, reviewed.text))
             self.on_air["speaking"] = speaker.id
             total = sum(len(p.split()) for p in parts) / 3.0
-            await self._emit("turn", {**entry, "audio_url": first["url"] if first else None,
-                                      "video_url": first["video_url"] if first else None, "parts": len(parts),
+            await self._emit("turn", {**entry, "audio_url": first["url"] if first else None, "parts": len(parts),
                                       "duration_s": round(total, 1), "playback_id": self._playback_id})
 
             durations = [first["duration_s"] if first else 0.0]
@@ -240,8 +238,7 @@ class ModeAEngine(ShowEngine):
                     durations.append(nxt["duration_s"])
                     providers.add(nxt["provider"])
                     credits += nxt["credits"]
-                await self._emit("audio_part", {"playback_id": self._playback_id, "index": i, "audio_url": nxt["url"] if nxt else None,
-                                                "video_url": nxt["video_url"] if nxt else None})
+                await self._emit("audio_part", {"playback_id": self._playback_id, "index": i, "audio_url": nxt["url"] if nxt else None})
 
             record = TurnRecord(
                 session_id=self.session_id, mode="A", segment=ctx.segment, topic_id=entry["topic_id"], turn=turn, persona=speaker.id,
@@ -249,7 +246,6 @@ class ModeAEngine(ShowEngine):
                 supervisor=reviewed.verdict, latency_ms=latency,
                 models={"persona": candidate.model, "supervisor": self.supervisor._model if self.supervisor.mode == "full" else ""},
                 tts_provider=",".join(sorted(providers)), audio_url=first["url"] if first else None,
-                video_url=first["video_url"] if first else None,
                 duration_s=round(sum(durations), 2), credit_cost=credits, filler=filler, seed=self.seed,
             )
             self.log.event("turn", record)
@@ -285,9 +281,7 @@ class ModeAEngine(ShowEngine):
             return None
         path = self.audio_dir / f"{self.session_id}_{turn:04d}_{index}.{r.ext}"
         path.write_bytes(r.audio)
-        video = await self._render_avatar(speaker, path, turn)
-        return {"url": f"/audio/{path.name}", "video_url": f"/audio/{video.path.name}" if video else None,
-                "render_ms": video.render_ms if video else 0,
+        return {"url": f"/audio/{path.name}",
                 "duration_s": r.duration_s, "provider": r.provider, "latency_ms": r.latency_ms, "credits": r.credit_cost}
 
     async def _wait_playback(self, duration_s: float) -> None:

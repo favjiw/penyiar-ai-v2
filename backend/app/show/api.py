@@ -95,7 +95,7 @@ async def ptt_turn(req: PTTTurnRequest, request: Request):
 
 @router.post("/api/precheck")
 async def precheck(request: Request):
-    """Cek pra-live (§5.1): model terisi, TTS dipanaskan (cold start suara library), stage tersambung."""
+    """Cek pra-live (§5.1): model terisi, TTS dipanaskan (cold start suara library)."""
     app = request.app
     s = app.state.settings
     personas = load_personas()

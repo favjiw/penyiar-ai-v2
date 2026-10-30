@@ -62,7 +62,6 @@ class LatencyMs(BaseModel):
     persona: int = 0
     supervisor: int = 0
     tts: int = 0
-    avatar_render: int = 0
     gap_before_play: int = 0
 
 
@@ -250,7 +249,6 @@ class TurnRecord(BaseModel):
     tts_provider: str = ""
     tts_fallback_reason: str = ""
     audio_url: Optional[str] = None
-    video_url: Optional[str] = None  # avatar T2 (lip-sync), FR-9
     duration_s: float = 0.0
     credit_cost: int = 0
     filler: Optional[str] = None

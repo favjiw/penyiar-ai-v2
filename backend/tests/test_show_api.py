@@ -14,9 +14,9 @@ def test_start_requires_locked_blocker(client):
     assert client.post("/api/show/pause").status_code == 409
 
 
-def test_stage_plays_whole_show_over_websocket(client):
+def test_console_plays_whole_show_over_websocket(client):
     blocker = locked_blocker(client)
-    with client.websocket_connect("/ws/session?role=stage") as stage:
+    with client.websocket_connect("/ws/session?role=console") as stage:
         assert stage.receive_json()["type"] == "state"
         started = client.post("/api/show/start", json={"blocker_id": blocker["id"], "seed": 3})
         assert started.status_code == 200
@@ -35,7 +35,6 @@ def test_stage_plays_whole_show_over_websocket(client):
             if msg["type"] == "state" and msg["data"]["state"] == "ended":
                 break
         assert {"topic_change", "showrunner", "speaking", "output_status"} <= seen
-        assert "supervisor" not in seen  # event Supervisor hanya untuk konsol
         assert turns[0]["segment"] == "opening" and turns[-1]["segment"] == "closing"
 
     session_id = started.json()["session_id"]

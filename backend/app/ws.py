@@ -1,9 +1,9 @@
 """Manajer WebSocket /ws/session (PRD §6.3), pola dari main.py repo lama.
 
-Setiap klien menyatakan role: `console` (konsol operator), `prompter`
-(Tahap 4), atau `stage` (output OBS). Hanya satu klien yang memutar audio
-(pemilik audio): stage pertama yang tersambung, atau konsol bila belum ada
-stage. Hanya laporan pemutaran dari pemilik audio yang dipakai Show Engine.
+Setiap klien menyatakan role: `console` (konsol operator) atau `prompter`
+(penyiar manusia, mode A dan C). Hanya satu klien yang memutar audio
+(pemilik audio): konsol pertama yang tersambung. Hanya laporan pemutaran dari
+pemilik audio yang dipakai Show Engine.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from typing import Any, Optional
 from fastapi import WebSocket
 
 logger = logging.getLogger(__name__)
-ROLES = ("console", "prompter", "stage")
+ROLES = ("console", "prompter")
 
 # Event yang dikirim ke role tertentu saja; selain ini dikirim ke semua.
 EVENT_ROLES: dict[str, tuple[str, ...]] = {
@@ -39,10 +39,9 @@ class ConnectionManager:
         self.clients.pop(ws, None)
 
     def audio_owner(self) -> Optional[WebSocket]:
-        for role in ("stage", "console"):
-            for ws, r in self.clients.items():
-                if r == role:
-                    return ws
+        for ws, r in self.clients.items():
+            if r == "console":
+                return ws
         return None
 
     def output_status(self, ws: WebSocket | None = None) -> dict[str, Any]:
@@ -51,8 +50,7 @@ class ConnectionManager:
         return {
             "is_audio_owner": ws is not None and ws is owner,
             "audio_owner_role": self.clients.get(owner) if owner else None,
-            "stage_connected": "stage" in roles,
-            "audio_blocked": any(self.clients.get(w) == "stage" for w in self.audio_blocked),
+            "audio_blocked": any(self.clients.get(w) == "console" for w in self.audio_blocked),
             "clients": {r: roles.count(r) for r in ROLES},
         }
 
