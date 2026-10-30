@@ -60,7 +60,7 @@ async def test_prompt_names_human_and_stays_short(tmp_path):
     engine, _ = make(tmp_path)
     ctx = engine._context(engine.ai)
     prompt = engine.persona_agent.turn_prompt(engine.ai, ctx, None, engine.persona_agent._sample_length(ctx), None, None)
-    assert "penyiar manusia bernama Kak Dimas" in prompt and "1 sampai 3 kalimat" in prompt
+    assert "Kak Dimas penyiar manusia yang memandu" in prompt and "1 sampai 3 kalimat" in prompt
 
 
 async def test_next_topic_is_manual_and_showrunner_only_advises(tmp_path):

@@ -73,7 +73,7 @@ class Settings(BaseSettings):
     MIN_TURNS_PER_TOPIC: int = 6
     MAX_TURNS_PER_TOPIC: int = 40
     FIXED_TURNS_PER_TOPIC: int = 0
-    SUPERVISOR_MODE: Literal["off", "rules", "full"] = "full"
+    SUPERVISOR_MODE: Literal["off", "rules", "full"] = "off"  # hook supervisor.check: nonaktif (pass-through) kecuali dinyalakan
     SUPERVISOR_MAX_REGEN: int = 1
     SUPERVISOR_TIMEOUT_MS: int = 5000
     SUPERVISOR_TIMEOUT_MS_MODE_A: int = 2500  # mode A lebih ketat: penyiar menunggu jawaban
@@ -86,6 +86,9 @@ class Settings(BaseSettings):
     CLOSING_TURNS: int = 2
     SESSION_TARGET_MIN: int = 0  # petunjuk lunak durasi total untuk Showrunner; 0 = tanpa
     PERSONA_TEMPERATURE: float = 0.9
+    MODE_C_MAX_AI_STREAK: int = 2  # giliran AI berturut-turut sebelum giliran wajib kembali ke manusia (mode C)
+    MODE_C_CHIME_PROBABILITY: float = 0.6  # peluang AI lain menimpali setelah AI pertama menjawab (mode C)
+    SUMMARY_EVERY_TURNS: int = 10  # ringkasan obrolan diperbarui tiap sekian giliran yang keluar dari jendela riwayat; 0 = mati
     HUMAN_HOST_NAME: str = ""  # mode A (Tahap 4); keputusan terbuka PRD §15.2 #2
 
     # Uji: "llm" dan/atau "tts" untuk mensimulasikan galat

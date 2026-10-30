@@ -91,7 +91,7 @@ async def test_guard_regenerates_once():
 async def test_mode_a_prompt_is_short_and_names_human():
     llm = _Echo(["Iya kak."])
     await PersonaAgent(llm, "m", random.Random(1)).generate(load_personas()["salsa"], ctx(mode="A", human_name="Amar"))
-    assert "penyiar manusia bernama Amar" in llm.prompts[0][1] and "1 sampai 3 kalimat" in llm.prompts[0][1]
+    assert "Amar penyiar manusia yang memandu" in llm.prompts[0][1] and "1 sampai 3 kalimat" in llm.prompts[0][1]
 
 
 async def test_mock_persona_has_no_markdown():

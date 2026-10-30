@@ -62,8 +62,14 @@ class TurnContext:
     to_closing: bool = False  # giliran ini mengantar ke penutup
     closing_final: bool = False  # giliran terakhir siaran
     topics_done: list[str] = field(default_factory=list)
-    mode: str = "B"
+    mode: str = "B"  # A: manusia + 1 AI, B: AI + AI, C: manusia + 2 AI
     human_name: str = ""
+    others: list[tuple[str, str]] = field(default_factory=list)  # peserta lain: (nama, peran)
+    summary: str = ""  # ringkasan obrolan di luar jendela riwayat
+    chime_after: str = ""  # nama AI yang baru bicara; tidak kosong = giliran ini menimpali, bukan menjawab manusia
+
+
+HUMAN_LED_MODES = ("A", "C")
 
 
 @dataclass
@@ -148,14 +154,16 @@ class PersonaAgent:
         if ctx.segment != "topic" or ctx.transition_to or ctx.to_closing:
             return None
         choices = [a for a in DIALOG_ACT_HINTS if a != self._last_act]
-        if ctx.mode == "A":
+        if ctx.mode in HUMAN_LED_MODES:
             choices = [a for a in choices if a != "audience"]  # penyiar manusia yang memandu penonton
         act = self._rng.choice(choices)
         self._last_act = act
         return act
 
     def _sample_length(self, ctx: TurnContext) -> str:
-        if ctx.mode == "A":
+        if ctx.chime_after:
+            return "1 sampai 2 kalimat pendek; cukup menimpali"
+        if ctx.mode in HUMAN_LED_MODES:
             return "1 sampai 3 kalimat pendek; beri ruang penyiar manusia memandu"
         roll = self._rng.random()
         if roll < 0.4:
@@ -201,11 +209,22 @@ class PersonaAgent:
         else:
             parts.append(f"SEGMEN: Closing. Rangkuman: {b.closing.rangkuman}. Ajakan ke penonton: {b.closing.ajakan}")
 
-        if ctx.mode == "A":
-            parts.append(f"Lawan bicaramu penyiar manusia bernama {ctx.human_name}. Jawab singkat, beri ruang dia memandu.")
-        else:
+        if ctx.others:
+            parts.append("Peserta siaran lainnya: " + "; ".join(f"{name} ({role})" for name, role in ctx.others) + ".")
+        if ctx.mode in HUMAN_LED_MODES:
+            parts.append(f"{ctx.human_name} penyiar manusia yang memandu siaran. Jawab singkat, beri ruang dia memandu.")
+            if ctx.chime_after:
+                parts.append(
+                    f"Giliran ini MENIMPALI ucapan {ctx.chime_after} barusan (bukan menjawab {ctx.human_name} dari awal): "
+                    f"tanggapi atau tambahkan sudut lain, jangan mengulang isinya."
+                )
+            elif len(ctx.others) > 1:
+                parts.append(f"{ctx.human_name} baru bicara dan kamu yang menjawab; rekan AI-mu mungkin menimpali sesudahmu.")
+        elif not ctx.others:
             parts.append(f"Lawan bicaramu: {ctx.partner_name}.")
 
+        if ctx.summary:
+            parts.append("Ringkasan obrolan sebelumnya (sebelum giliran-giliran di bawah ini): " + ctx.summary)
         if ctx.history:
             parts.append("Obrolan terakhir:\n" + "\n".join(f"{h.name}: {h.text}" for h in ctx.history[-HISTORY_TURNS:]))
 

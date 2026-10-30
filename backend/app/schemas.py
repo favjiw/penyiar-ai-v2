@@ -9,7 +9,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 
 class Emotion(str, Enum):
@@ -144,7 +144,7 @@ class GenerateBlockerRequest(BaseModel):
 
 # ── Show Engine (Tahap 2: FR-2, FR-4, FR-5, FR-12) ───────────────────────────
 
-ShowMode = Literal["A", "B"]
+ShowMode = Literal["A", "B", "C"]
 Segment = Literal["opening", "topic", "closing"]
 SupervisorMode = Literal["off", "rules", "full"]
 ShowrunnerPolicy = Literal["llm", "fixed_turns", "coverage_only"]
@@ -160,14 +160,15 @@ class ShowState(str, Enum):
 class StartShowRequest(BaseModel):
     blocker_id: str
     mode: ShowMode = "B"
-    ai_persona: Optional[str] = None  # mode A: raka | salsa
-    human_name: str = ""  # mode A: nama tampilan penyiar manusia (§15.2 #2)
+    ai_persona: Optional[str] = None  # mode A: raka | salsa (mode C memakai semua AI)
+    human_name: str = ""  # mode A dan C: nama tampilan penyiar manusia (§15.2 #2)
     seed: Optional[int] = None
 
 
 class PTTTurnRequest(BaseModel):
     text: str = Field(min_length=1, max_length=1000)
     stt_ms: int = 0  # lepas tombol → transkrip final, diukur di browser
+    speech_ms: int = 0  # lama tombol bicara ditahan (untuk t_start/t_end di turns.jsonl)
 
 
 # Supervisor (FR-5)
@@ -226,6 +227,12 @@ class ShowrunnerDecision(BaseModel):
     policy: Literal["llm", "fixed_turns", "coverage_only", "budget"] = "llm"  # budget = cadangan berbasis jatah waktu
     forced: bool = False
     latency_ms: int = 0
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def aksi(self) -> Literal["lanjut", "pindah_topik", "tutup"]:
+        """Antarmuka mode B: continue/steer → lanjut, transition → pindah_topik, close → tutup."""
+        return {"continue": "lanjut", "steer": "lanjut", "transition": "pindah_topik", "close": "tutup"}[self.decision]
 
 
 # Log giliran (§9.4)

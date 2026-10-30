@@ -131,7 +131,7 @@ def settings(**kw):
 
 
 def test_voice_priority_env_then_card_then_gender_default():
-    personas = load_personas()
+    personas = {k: v.model_copy(deep=True) for k, v in load_personas().items()}  # load_personas() di-cache: jangan mengubah aslinya
     assert VoiceBook(settings(), personas).voice("edge", "raka") == personas["raka"].voices["edge"]
     assert VoiceBook(settings(EDGE_VOICE_RAKA="id-ID-Lain"), personas).voice("edge", "raka") == "id-ID-Lain"
     personas["raka"].voices.pop("edge")
