@@ -3,17 +3,6 @@ import { api, ApiError } from '../api'
 import type { LiveSession } from '../live/useLiveSession'
 import type { Blocker } from '../types'
 
-// Jendela stage untuk OBS: popup 9:16 tanpa tab, dibuka ulang di jendela bernama sama (dari repo lama).
-const STAGE_URL = '/stage?clean=1'
-const STAGE_WINDOW = 'hits-stage'
-const STAGE_FEATURES = 'popup=yes,width=540,height=960,left=40,top=40'
-
-function openStage() {
-  const win = window.open(STAGE_URL, STAGE_WINDOW, STAGE_FEATURES)
-  if (win) win.focus()
-  else window.open(STAGE_URL, '_blank')
-}
-
 const fmtElapsed = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 const isTyping = (el: Element | null) => !!el && ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)
 
@@ -77,7 +66,6 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
         [
           r.models_ok ? 'Model LLM ✓' : 'Model LLM belum diisi di .env ✗',
           r.tts_ok ? `TTS ✓ (pemanasan ${warm})` : `TTS ✗ ${r.tts_error ?? ''}`,
-          r.output.stage_connected ? 'Stage tersambung ✓' : 'Stage belum dibuka (audio diputar di konsol)',
         ].join(' · '),
       )
     })
@@ -169,9 +157,6 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
             </button>
           </>
         )}
-        <button onClick={openStage} title="Popup 9:16 untuk ditangkap OBS">
-          {output?.stage_connected ? 'Stage ✓' : 'Buka Stage'}
-        </button>
         {(mode === 'A' || snap.mode === 'A') && (
           <a className="button-link" href="/prompter" target="hits-prompter" title="Prompter untuk penyiar (tablet atau monitor kedua)">
             {output?.clients?.prompter ? 'Prompter ✓' : 'Buka Prompter'}

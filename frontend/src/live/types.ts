@@ -17,7 +17,6 @@ export interface TranscriptEntry {
 
 export interface TurnEvent extends TranscriptEntry {
   audio_url: string | null
-  video_url?: string | null // avatar T2 (lip-sync MuseTalk) untuk bagian pertama
   duration_s: number
   playback_id: string
   parts?: number // mode A: jumlah bagian kalimat; bagian 2..n datang lewat audio_part
@@ -89,7 +88,6 @@ export interface ShowSnapshot {
 export interface OutputStatus {
   is_audio_owner: boolean
   audio_owner_role: string | null
-  stage_connected: boolean
   audio_blocked: boolean
   clients: Record<string, number>
 }

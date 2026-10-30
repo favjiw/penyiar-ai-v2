@@ -38,7 +38,7 @@ export const api = {
   pttTurn: (text: string, stt_ms: number) => post<{ filler?: string | null }>('/api/ptt/turn', { text, stt_ms }),
   control: (action: 'pause' | 'resume' | 'next' | 'stop') => post<ShowSnapshot>(`/api/show/${action}`),
   precheck: () =>
-    post<{ models_ok: boolean; tts_ok: boolean; tts_error?: string; tts_warmup_ms?: Record<string, number>; output: { stage_connected: boolean }; models: Record<string, string> }>(
+    post<{ models_ok: boolean; tts_ok: boolean; tts_error?: string; tts_warmup_ms?: Record<string, number>; models: Record<string, string> }>(
       '/api/precheck',
     ),
   health: () => request<{ llm_mode: string; tts_mode: string; models: Record<string, string> }>('/api/health'),

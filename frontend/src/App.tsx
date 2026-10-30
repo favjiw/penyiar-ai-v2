@@ -4,7 +4,6 @@ import { BlockerStudio } from './console/BlockerStudio'
 import { LivePanel } from './console/LivePanel'
 import { useLiveSession } from './live/useLiveSession'
 import { PrompterPage } from './prompter/PrompterPage'
-import { StagePage } from './stage/StagePage'
 import type { Blocker } from './types'
 
 type Tab = 'blocker' | 'live'
@@ -21,7 +20,7 @@ function ModeBadge() {
 }
 
 function Console() {
-  // Konsol selalu tersambung: tetap memutar audio bila stage belum dibuka, di tab mana pun.
+  // Konsol selalu tersambung dan menjadi pemilik audio, di tab mana pun.
   const live = useLiveSession('console')
   const onAir = live.snapshot.state === 'live' || live.snapshot.state === 'paused'
   const [tab, setTab] = useState<Tab>('blocker')
@@ -56,7 +55,6 @@ function Console() {
 
 export function App() {
   const path = window.location.pathname
-  if (path.startsWith('/stage')) return <StagePage />
   if (path.startsWith('/prompter')) return <PrompterPage />
   return <Console />
 }
