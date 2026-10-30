@@ -247,6 +247,7 @@ class TurnRecord(BaseModel):
     models: dict[str, str] = Field(default_factory=dict)
     tts_provider: str = ""
     tts_fallback_reason: str = ""
+    tts_fallback_used: bool = False  # ada bagian audio giliran ini yang berasal dari cadangan
     audio_url: Optional[str] = None
     duration_s: float = 0.0
     credit_cost: int = 0

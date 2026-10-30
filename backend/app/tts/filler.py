@@ -45,11 +45,11 @@ class FillerBank:
         ready: list[Filler] = []
         for i, text in enumerate(self.phrases().get(persona.id, [])):
             try:
-                result = await self._tts.synthesize(text, persona.gender, persona.voices)
+                result = await self._tts.synthesize(text, persona.id)
             except Exception:
                 continue  # satu filler gagal tidak masalah; sisanya tetap dipakai
             path = self._dir / f"filler_{persona.id}_{i:02d}_{result.provider}.{result.ext}"
-            if not path.exists():
+            if not path.exists() or not result.cached:  # hasil baru menimpa file lama (suara atau prosodi bisa berubah)
                 path.write_bytes(result.audio)
             ready.append(Filler(text, f"/audio/{path.name}", result.duration_s, result.provider))
         self._bank[persona.id] = ready

@@ -10,7 +10,7 @@ from app.tts import FailoverTTS, MockTTSProvider
 from tests.test_persona import make_blocker
 
 
-def make(tmp_path, **overrides):
+def make(tmp_path, tts=None, **overrides):
     settings = Settings(LLM_MODE="mock", TTS_MODE="mock", LOG_DIR=str(tmp_path / "logs"), CACHE_DIR=str(tmp_path / "cache"),
                         SHOWRUNNER_EVERY_K=2, _env_file=None, **overrides)
     events = []
@@ -18,7 +18,7 @@ def make(tmp_path, **overrides):
     async def emit(t, d):
         events.append((t, d))
 
-    engine = ModeAEngine(settings, MockLLMClient(delay_sec=0), FailoverTTS(MockTTSProvider(delay_sec=0)), make_blocker(2),
+    engine = ModeAEngine(settings, MockLLMClient(delay_sec=0), tts or FailoverTTS(MockTTSProvider(delay_sec=0)), make_blocker(2),
                          emit=emit, audio_dir=tmp_path / "audio", personas=load_personas(), ai_persona="salsa",
                          human_name="Kak Dimas", seed=3, time_scale=0.0)
     return engine, events

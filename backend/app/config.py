@@ -43,16 +43,25 @@ class Settings(BaseSettings):
     OPENAI_COMPAT_REASONING_EFFORT: str = "none"  # kosong = default endpoint
 
     # TTS
-    TTS_PRIMARY: Literal["elevenlabs", "edge", "gemini"] = "elevenlabs"
-    TTS_FALLBACK: Literal["edge", "none"] = "edge"
+    TTS_PROVIDER: Literal["edge", "elevenlabs"] = "edge"  # Edge (gratis) untuk pengembangan; elevenlabs untuk demo
+    TTS_FALLBACK: str = "gtts"  # cadangan berurutan, dipisah koma: edge | gtts | elevenlabs | none
+    TTS_RETRIES: int = 1  # ulang provider utama sebelum pindah ke cadangan
+    TTS_TIMEOUT_SEC: float = 8.0
     ELEVENLABS_API_KEY: str = ""
     ELEVENLABS_MODEL: str = ""
     ELEVENLABS_VOICE_MALE: str = ""
     ELEVENLABS_VOICE_FEMALE: str = ""
-    GEMINI_VOICE_MALE: str = ""
-    GEMINI_VOICE_FEMALE: str = ""
+    ELEVENLABS_VOICE_RAKA: str = ""  # opsional: menimpa voice di kartu persona
+    ELEVENLABS_VOICE_SALSA: str = ""
     EDGE_VOICE_MALE: str = "id-ID-ArdiNeural"
     EDGE_VOICE_FEMALE: str = "id-ID-GadisNeural"
+    EDGE_VOICE_RAKA: str = ""
+    EDGE_VOICE_SALSA: str = ""
+    # Kecepatan dan nada Edge per persona (format Edge: "+5%", "-3Hz"). Titik awal; stel dengan didengar.
+    EDGE_RATE_RAKA: str = "+4%"
+    EDGE_PITCH_RAKA: str = "-2Hz"
+    EDGE_RATE_SALSA: str = "+6%"
+    EDGE_PITCH_SALSA: str = "+2Hz"
 
     # STT (mode A)
     STT_PROVIDER: Literal["webspeech", "faster_whisper", "gemini"] = "webspeech"
@@ -89,6 +98,14 @@ class Settings(BaseSettings):
 
     # Variabel kosong (mis. `GEMINI_RPM_PERSONA=` di .env.example) berarti pakai default.
     model_config = {"env_file": str(REPO_ROOT / ".env"), "env_file_encoding": "utf-8", "extra": "ignore", "env_ignore_empty": True}
+
+    def tts_fallbacks(self) -> list[str]:
+        """Daftar cadangan TTS dari TTS_FALLBACK; 'none' atau kosong berarti tanpa cadangan."""
+        names = [n.strip().lower() for n in self.TTS_FALLBACK.split(",") if n.strip()]
+        unknown = [n for n in names if n not in ("edge", "gtts", "elevenlabs", "none")]
+        if unknown:
+            raise ValueError(f"TTS_FALLBACK memuat provider tidak dikenal: {', '.join(unknown)}")
+        return [n for n in names if n != "none"]
 
     def rpm_for(self, role: str) -> int:
         """RPM untuk satu peran (blocker, persona, ...); 0 berarti pakai default."""

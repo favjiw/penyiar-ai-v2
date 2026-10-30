@@ -102,10 +102,12 @@ class ModeAEngine(ShowEngine):
             blocker=self.blocker.model_dump(mode="json"),
             personas=[self.ai.id],
             human_name=self.human_name,
-            config={k: getattr(self.settings, k) for k in ("LLM_MODE", "TTS_MODE", "TTS_PRIMARY", "SUPERVISOR_MODE", "SHOWRUNNER_POLICY", "SHOWRUNNER_EVERY_K", "SUPERVISOR_TIMEOUT_MS_MODE_A")},
+            config={k: getattr(self.settings, k) for k in ("LLM_MODE", "TTS_MODE", "TTS_PROVIDER", "TTS_FALLBACK", "SUPERVISOR_MODE", "SHOWRUNNER_POLICY", "SHOWRUNNER_EVERY_K", "SUPERVISOR_TIMEOUT_MS_MODE_A")},
             models={r: self.settings.model_for(r) for r in ("persona", "supervisor", "showrunner")},
             prompts={a.prompt.name: a.prompt.version for a in (self.persona_agent, self.supervisor, self.showrunner)},
         )
+        for warning in self.tts.warnings:  # mis. ELEVENLABS_API_KEY kosong → jatuh ke Edge
+            await self._alert("tts", warning)
         await self._broadcast_state()
         n = await self.fillers.prepare(self.ai)
         if n == 0:
@@ -235,12 +237,14 @@ class ModeAEngine(ShowEngine):
             durations = [first["duration_s"] if first else 0.0]
             providers = {first["provider"]} if first else set()
             credits = first["credits"] if first else 0
+            fallback_used = bool(first and first["fallback"])
             for i, part in enumerate(parts[1:], start=1):
                 nxt = await self._tts_part(speaker, part, turn, i)
                 if nxt:
                     durations.append(nxt["duration_s"])
                     providers.add(nxt["provider"])
                     credits += nxt["credits"]
+                    fallback_used = fallback_used or nxt["fallback"]
                 await self._emit("audio_part", {"playback_id": self._playback_id, "index": i, "audio_url": nxt["url"] if nxt else None})
 
             record = TurnRecord(
@@ -248,7 +252,7 @@ class ModeAEngine(ShowEngine):
                 raw_text=candidate.output.text, final_text=reviewed.text, emotion=reviewed.emotion, dialog_act=candidate.dialog_act,
                 supervisor=reviewed.verdict, latency_ms=latency,
                 models={"persona": candidate.model, "supervisor": self.supervisor._model if self.supervisor.mode == "full" else ""},
-                tts_provider=",".join(sorted(providers)), audio_url=first["url"] if first else None,
+                tts_provider=",".join(sorted(providers)), tts_fallback_used=fallback_used, audio_url=first["url"] if first else None,
                 duration_s=round(sum(durations), 2), credit_cost=credits, filler=filler, seed=self.seed,
             )
             self.log.event("turn", record)
@@ -279,13 +283,15 @@ class ModeAEngine(ShowEngine):
 
     async def _tts_part(self, speaker: PersonaCard, text: str, turn: int, index: int) -> Optional[dict[str, Any]]:
         try:
-            r = await self.tts.synthesize(text, speaker.gender, speaker.voices)
+            r = await self.tts.synthesize(text, speaker.id)
         except Exception as e:
-            self.log.event("error", stage="tts", turn=turn, message=str(e)[:300])
+            await self._alert("tts", f"Giliran {turn} bagian {index + 1} tanpa suara: {str(e)[:200]}")
             return None
+        if r.fallback_used:
+            await self._alert_once(f"tts_fallback:{r.provider}", f"TTS {self.tts.primary.name} gagal ({r.fallback_reason[:100]}); suara memakai {r.provider}")
         path = self.audio_dir / f"{self.session_id}_{turn:04d}_{index}.{r.ext}"
         path.write_bytes(r.audio)
-        return {"url": f"/audio/{path.name}",
+        return {"url": f"/audio/{path.name}", "fallback": r.fallback_used,
                 "duration_s": r.duration_s, "provider": r.provider, "latency_ms": r.latency_ms, "credits": r.credit_cost}
 
     async def _wait_playback(self, duration_s: float) -> None:

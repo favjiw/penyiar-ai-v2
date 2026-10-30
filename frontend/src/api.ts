@@ -1,4 +1,5 @@
 import type { ShowSnapshot } from './live/types'
+import type { TtsStatus } from './live/tts'
 import type { Blocker, GenerateRequest, GenerateResponse, RegenerateResponse } from './types'
 
 export class ApiError extends Error {
@@ -41,5 +42,5 @@ export const api = {
     post<{ models_ok: boolean; tts_ok: boolean; tts_error?: string; tts_warmup_ms?: Record<string, number>; models: Record<string, string> }>(
       '/api/precheck',
     ),
-  health: () => request<{ llm_mode: string; tts_mode: string; models: Record<string, string> }>('/api/health'),
+  health: () => request<{ llm_mode: string; tts_mode: string; models: Record<string, string>; tts?: TtsStatus }>('/api/health'),
 }

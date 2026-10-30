@@ -106,7 +106,7 @@ async def precheck(request: Request):
         "output": app.state.ws.output_status(),
     }
     try:
-        result["tts_warmup_ms"] = await app.state.tts.warm_up({p.gender: p.voices for p in personas.values()})
+        result["tts_warmup_ms"] = await app.state.tts.warm_up(list(personas))
         result["tts_ok"] = True
     except Exception as e:
         result["tts_ok"], result["tts_error"] = False, str(e)[:300]

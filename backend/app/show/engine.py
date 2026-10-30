@@ -109,6 +109,7 @@ class ShowEngine:
         rng = random.Random(self.seed)
         self.personas = [personas["raka"], personas["salsa"]]
         self.tts = tts
+        self._alerted: set[str] = set()
         self._emit_raw = emit
         self._has_owner = has_audio_owner
         self._time_scale = time_scale  # headless: 0 = tanpa menunggu (tes, harness FR-14)
@@ -312,6 +313,11 @@ class ShowEngine:
         self.log.event("error", stage=stage, message=message[:300])
         await self._emit("alert", {"stage": stage, "message": message[:300], "turn": self.turn_no})
 
+    async def _alert_once(self, key: str, message: str) -> None:
+        if key not in self._alerted:
+            self._alerted.add(key)
+            await self._alert("tts", message)
+
     async def _persona_turn(self, speaker: PersonaCard, ctx: TurnContext, correction=None) -> PersonaResult:
         try:
             result = await asyncio.wait_for(self.persona_agent.generate(speaker, ctx, correction), self.settings.PERSONA_TIMEOUT_MS / 1000)
@@ -375,13 +381,16 @@ class ShowEngine:
 
         audio_path, duration, tts_provider, tts_reason, credits = None, max(1.5, len(reviewed.text.split()) / 3.0), "", "", 0
         try:
-            result = await self.tts.synthesize(reviewed.text, speaker.gender, speaker.voices)
+            result = await self.tts.synthesize(reviewed.text, speaker.id)
             latency.tts = result.latency_ms
             audio_path = self.audio_dir / f"{self.session_id}_{turn:04d}.{result.ext}"
             audio_path.write_bytes(result.audio)
             duration, tts_provider, tts_reason, credits = result.duration_s, result.provider, result.fallback_reason, result.credit_cost
+            if result.fallback_used:
+                await self._alert_once(f"tts_fallback:{result.provider}", f"TTS {self.tts.primary.name} gagal ({tts_reason[:100]}); suara memakai {result.provider}")
         except (TTSError, Exception) as e:
-            self.log.event("error", stage="tts", turn=turn, message=str(e)[:300])
+            # Siaran tidak boleh bisu tanpa kabar: operator melihat peringatan di konsol.
+            await self._alert("tts", f"Giliran {turn} tanpa suara: {str(e)[:200]}")
 
         record = TurnRecord(
             session_id=self.session_id,
@@ -399,6 +408,7 @@ class ShowEngine:
             models={"persona": candidate.model, "supervisor": self.supervisor._model if self.supervisor.mode == "full" else "", "tts": tts_provider},
             tts_provider=tts_provider,
             tts_fallback_reason=tts_reason,
+            tts_fallback_used=bool(tts_reason),
             audio_url=f"/audio/{audio_path.name}" if audio_path else None,
             duration_s=round(duration, 2),
             credit_cost=credits,
@@ -532,11 +542,13 @@ class ShowEngine:
             blocker=self.blocker.model_dump(mode="json"),
             personas=[p.id for p in self.personas],
             config={k: getattr(self.settings, k) for k in (
-                "LLM_MODE", "TTS_MODE", "TTS_PRIMARY", "SUPERVISOR_MODE", "SHOWRUNNER_POLICY", "SHOWRUNNER_EVERY_K",
+                "LLM_MODE", "TTS_MODE", "TTS_PROVIDER", "TTS_FALLBACK", "SUPERVISOR_MODE", "SHOWRUNNER_POLICY", "SHOWRUNNER_EVERY_K",
                 "MIN_TURNS_PER_TOPIC", "MAX_TURNS_PER_TOPIC", "FIXED_TURNS_PER_TOPIC", "PIPELINE_DEPTH", "OPENING_TURNS", "CLOSING_TURNS")},
             models={r: self.settings.model_for(r) for r in ("persona", "supervisor", "showrunner")},
             prompts={a.prompt.name: a.prompt.version for a in (self.persona_agent, self.supervisor, self.showrunner)},
         )
+        for warning in self.tts.warnings:  # mis. ELEVENLABS_API_KEY kosong → jatuh ke Edge
+            await self._alert("tts", warning)
         await self._broadcast_state()
         # Pipelining (FR-2): produsen menyiapkan sampai PIPELINE_DEPTH giliran di depan;
         # satu slot terbuka setiap kali sebuah giliran mulai diputar. Depth 1 = giliran n+1

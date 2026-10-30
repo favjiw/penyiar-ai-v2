@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
 import type { LiveSession } from '../live/useLiveSession'
+import { ttsLabel } from '../live/tts'
 import type { Blocker } from '../types'
 import { VoiceStage } from './VoiceStage'
 
@@ -206,7 +207,7 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
               </span>
               <span className={`who ${t.persona}`}>{t.name}</span> {t.text}
               {t.supervisor !== 'forward' && <span className="badge">{t.supervisor}</span>}
-              {t.tts_provider && t.tts_provider !== 'elevenlabs' && t.tts_provider !== 'mock' && <span className="badge">TTS {t.tts_provider}</span>}
+              {t.tts_provider && snap.tts && t.tts_provider !== snap.tts.primary && t.tts_provider !== 'mock' && <span className="badge">TTS {t.tts_provider}</span>}
             </div>
           ))}
           {live.sttPartial && (
@@ -293,8 +294,9 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
             </div>
             {snap.tts && (
               <div className="angle">
-                TTS {snap.tts.primary}
-                {snap.tts.breaker_open && ' (breaker terbuka → ' + snap.tts.fallback + ')'} · kredit {snap.tts.credits_used}
+                {ttsLabel(snap.tts)}
+                {snap.tts.fallback_uses ? ` · cadangan dipakai ${snap.tts.fallback_uses}×` : ''}
+                {snap.tts.credits_used > 0 ? ` · kredit ${snap.tts.credits_used}` : ''}
               </div>
             )}
           </section>

@@ -1,5 +1,7 @@
 // Event /ws/session (PRD §6.3), cermin backend/app/show/engine.py.
 
+import type { TtsStatus } from './tts'
+
 export type ShowStateName = 'idle' | 'live' | 'paused' | 'ended'
 
 export interface TranscriptEntry {
@@ -76,7 +78,7 @@ export interface ShowSnapshot {
   transcript?: TranscriptEntry[]
   showrunner?: ShowrunnerDecision | null
   coverage?: Record<string, { covered: string[]; total: number }>
-  tts?: { primary: string; fallback: string | null; breaker_open: boolean; credits_used: number }
+  tts?: TtsStatus
   error?: string | null
   // mode A
   human?: { id: string; name: string }
