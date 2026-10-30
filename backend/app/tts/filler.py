@@ -7,6 +7,7 @@ persiapan berikutnya tidak memakai kredit lagi.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import random
 from dataclasses import dataclass
@@ -40,19 +41,27 @@ class FillerBank:
     def phrases() -> dict[str, list[str]]:
         return json.loads(FILLER_FILE.read_text(encoding="utf-8"))
 
-    async def prepare(self, persona: PersonaCard) -> int:
-        """TTS semua filler persona (kena cache bila sudah pernah); kembalikan jumlah yang siap."""
-        ready: list[Filler] = []
-        for i, text in enumerate(self.phrases().get(persona.id, [])):
-            try:
-                result = await self._tts.synthesize(text, persona.id)
-            except Exception:
-                continue  # satu filler gagal tidak masalah; sisanya tetap dipakai
+    async def prepare(self, persona: PersonaCard, concurrency: int = 4) -> int:
+        """TTS semua filler persona (kena cache bila sudah pernah); kembalikan jumlah yang siap.
+
+        Berjalan paralel terbatas (Edge butuh 1-4 s per kalimat; berurutan, 36 filler dua persona bisa
+        lebih dari semenit) dan filler yang sudah siap langsung bisa dipakai `pick`, tanpa menunggu semuanya.
+        """
+        ready = self._bank[persona.id] = []
+        gate = asyncio.Semaphore(max(1, concurrency))
+
+        async def one(i: int, text: str) -> None:
+            async with gate:
+                try:
+                    result = await self._tts.synthesize(text, persona.id)
+                except Exception:
+                    return  # satu filler gagal tidak masalah; sisanya tetap dipakai
             path = self._dir / f"filler_{persona.id}_{i:02d}_{result.provider}.{result.ext}"
             if not path.exists() or not result.cached:  # hasil baru menimpa file lama (suara atau prosodi bisa berubah)
                 path.write_bytes(result.audio)
             ready.append(Filler(text, f"/audio/{path.name}", result.duration_s, result.provider))
-        self._bank[persona.id] = ready
+
+        await asyncio.gather(*(one(i, t) for i, t in enumerate(self.phrases().get(persona.id, []))))
         return len(ready)
 
     def pick(self, persona_id: str) -> Optional[Filler]:

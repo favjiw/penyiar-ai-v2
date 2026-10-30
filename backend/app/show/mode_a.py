@@ -139,13 +139,11 @@ class HumanLedEngine(ShowEngine):
         for warning in self.tts.warnings:  # mis. ELEVENLABS_API_KEY kosong → jatuh ke Edge
             await self._alert("tts", warning)
         await self._broadcast_state()
-        ready = 0
-        for persona in self.personas:
-            n = await self.fillers.prepare(persona)
-            ready += n
+        counts = await asyncio.gather(*(self.fillers.prepare(p) for p in self.personas))  # semua persona sekaligus
+        for persona, n in zip(self.personas, counts):
             if n == 0:
                 await self._alert("tts", f"Bank filler {persona.name} kosong (TTS gagal); jawaban tetap jalan tanpa filler")
-        self.log.event("quota", fillers_ready=ready, tts=self.tts.status())
+        self.log.event("quota", fillers_ready=sum(counts), tts=self.tts.status())
         await self._broadcast_state()
 
     async def stop(self) -> None:
