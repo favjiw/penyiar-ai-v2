@@ -20,14 +20,14 @@ export function PrompterPage() {
   const [message, setMessage] = useState('')
   const lastPartialSent = useRef(0)
   const onAir = snap.state === 'live' || snap.state === 'paused'
-  const ai = snap.personas?.[0]
+  const aiNames = (snap.personas ?? []).map((p) => p.name).join(' dan ')
   const advice = [...showrunner].reverse().find((d) => d.advisory)
 
-  const sendTurn = async (text: string, sttMs: number) => {
+  const sendTurn = async (text: string, sttMs: number, speechMs = 0) => {
     setPartial('')
     live.send('stt_partial', { text: '', final: true })
     try {
-      await api.pttTurn(text, sttMs)
+      await api.pttTurn(text, sttMs, speechMs)
       setMessage('')
     } catch (e) {
       setMessage(e instanceof ApiError ? e.message : String(e))
@@ -43,7 +43,7 @@ export function PrompterPage() {
         live.send('stt_partial', { text })
       }
     },
-    onFinal: (text, sttMs) => void sendTurn(text, sttMs),
+    onFinal: (text, sttMs, speechMs) => void sendTurn(text, sttMs, speechMs),
   })
 
   // Konsol menyalakan indikator mikrofon selama tombol bicara ditahan.
@@ -99,11 +99,11 @@ export function PrompterPage() {
       </div>
     )
   }
-  if (snap.mode !== 'A') {
+  if (snap.mode === 'B') {
     return (
       <div className="prompter idle">
         <h1>Prompter</h1>
-        <p>Siaran yang berjalan adalah mode B (AI + AI); prompter dipakai di mode A.</p>
+        <p>Siaran yang berjalan adalah mode B (AI + AI); prompter dipakai di mode A dan C.</p>
       </div>
     )
   }
@@ -113,14 +113,14 @@ export function PrompterPage() {
   const currentTopic = snap.rundown?.topics.find((t) => t.id === snap.topic?.id)
   const covered = points.filter((p) => p.covered).length
   const recent = transcript.slice(-4)
-  const aiSpeaking = live.speaking === snap.ai_persona || snap.busy
+  const aiSpeaking = snap.busy || (snap.personas ?? []).some((p) => p.id === live.speaking)
 
   return (
     <div className="prompter">
       <header>
         <span className={`state ${snap.state}`}>{snap.state === 'paused' ? 'PAUSE' : '● LIVE'}</span>
         <span className="tema">{snap.blocker?.tema}</span>
-        <span className="with">bersama {ai?.name} (AI)</span>
+        <span className="with">bersama {aiNames} (AI)</span>
         <button className="next" onClick={() => void next()}>
           Next topik <kbd>N</kbd>
         </button>
@@ -245,7 +245,7 @@ export function PrompterPage() {
         <label className="toggle">
           <input type="checkbox" checked={toggleMode} onChange={(e) => setToggleMode(e.target.checked)} /> tekan sekali mulai, tekan lagi selesai
         </label>
-        <div className="partial">{partial || (aiSpeaking ? `${ai?.name} sedang menjawab…` : '')}</div>
+        <div className="partial">{partial || (aiSpeaking ? `${aiNames} sedang menjawab…` : '')}</div>
         {(ptt.error || message) && <div className="warn">{ptt.error || message}</div>}
         {ptt.listening && <div className="hint">Esc = batal</div>}
       </section>

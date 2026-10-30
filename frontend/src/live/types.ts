@@ -44,6 +44,7 @@ export interface ShowrunnerDecision {
   points_covered: string[]
   saturation: number
   decision: 'continue' | 'steer' | 'transition' | 'close'
+  aksi?: 'lanjut' | 'pindah_topik' | 'tutup'
   steer_hint: string
   next_speaker: string | null
   reason: string
@@ -92,6 +93,9 @@ export interface ShowSnapshot {
   human?: { id: string; name: string }
   ai_persona?: string
   busy?: boolean
+  thinking?: string | null // id AI yang sedang menyiapkan jawaban (mode A dan C)
+  ai_streak?: number
+  participants?: { id: string; name: string; kind: 'human' | 'ai' }[]
   topic_points?: TopicPoint[]
   fillers_ready?: number
 }

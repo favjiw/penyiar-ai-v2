@@ -27,7 +27,7 @@ function segmentLabel(t: { segment: string; topic_id: string | null }, topics: s
 export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
   const { snapshot: snap, transcript, showrunner, supervisor, output } = live
   const [blockerId, setBlockerId] = useState('')
-  const [mode, setMode] = useState<'A' | 'B'>('B')
+  const [mode, setMode] = useState<'A' | 'B' | 'C'>('B')
   const [aiPersona, setAiPersona] = useState('salsa')
   const [humanName, setHumanName] = useState('')
   const [busy, setBusy] = useState(false)
@@ -111,7 +111,8 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
             </strong>
             <span className="angle">
               {fmtElapsed(elapsed)} · giliran {snap.turn}
-              {snap.mode === 'A' && ` · mode A dengan ${snap.human?.name} · filler ${snap.fillers_ready ?? 0}`}
+              {` · mode ${snap.mode}`}
+              {snap.mode !== 'B' && ` dengan ${snap.human?.name} · filler ${snap.fillers_ready ?? 0}`}
             </span>
             <span className="spacer" />
             <button onClick={() => control(snap.state === 'paused' ? 'resume' : 'pause')} disabled={busy}>
@@ -137,16 +138,19 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
             <button onClick={() => void runPrecheck()} disabled={busy}>
               Cek pra-live
             </button>
-            <select value={mode} onChange={(e) => setMode(e.target.value as 'A' | 'B')} aria-label="Mode">
+            <select value={mode} onChange={(e) => setMode(e.target.value as 'A' | 'B' | 'C')} aria-label="Mode">
               <option value="B">Mode B: Raka + Salsa (AI + AI)</option>
-              <option value="A">Mode A: penyiar + AI</option>
+              <option value="A">Mode A: penyiar + 1 AI</option>
+              <option value="C">Mode C: penyiar + Raka + Salsa</option>
             </select>
-            {mode === 'A' && (
+            {mode !== 'B' && (
               <>
+                {mode === 'A' && (
                 <select value={aiPersona} onChange={(e) => setAiPersona(e.target.value)} aria-label="Lawan bicara AI">
                   <option value="salsa">AI: Salsa</option>
                   <option value="raka">AI: Raka</option>
                 </select>
+                )}
                 <input
                   type="text"
                   className="host-name"
@@ -160,15 +164,21 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
             <button
               className="primary"
               onClick={() =>
-                act(() => (mode === 'A' ? api.startShow(blockerId, 'A', { ai_persona: aiPersona, human_name: humanName }) : api.startShow(blockerId, 'B')))
+                act(() =>
+                  mode === 'A'
+                    ? api.startShow(blockerId, 'A', { ai_persona: aiPersona, human_name: humanName })
+                    : mode === 'C'
+                      ? api.startShow(blockerId, 'C', { human_name: humanName })
+                      : api.startShow(blockerId, 'B'),
+                )
               }
-              disabled={busy || !blockerId || (mode === 'A' && !humanName.trim())}
+              disabled={busy || !blockerId || (mode !== 'B' && !humanName.trim())}
             >
               Mulai
             </button>
           </>
         )}
-        {(mode === 'A' || snap.mode === 'A') && (
+        {(onAir ? snap.mode !== 'B' : mode !== 'B') && (
           <a className="button-link" href="/prompter" target="hits-prompter" title="Prompter untuk penyiar (tablet atau monitor kedua)">
             {output?.clients?.prompter ? 'Prompter ✓' : 'Buka Prompter'}
           </a>
@@ -246,7 +256,7 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
             {latestSr ? (
               <>
                 <div>
-                  <strong>{latestSr.decision}</strong> · jenuh {latestSr.saturation.toFixed(2)} · {latestSr.policy}
+                  <strong>{latestSr.aksi ?? latestSr.decision}</strong> ({latestSr.decision}) · jenuh {latestSr.saturation.toFixed(2)} · {latestSr.policy}
                   {latestSr.forced && <span className="badge">forced</span>}
                 </div>
                 {latestSr.steer_hint && <div className="angle">→ {latestSr.steer_hint}</div>}

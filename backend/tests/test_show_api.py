@@ -81,3 +81,19 @@ def test_ptt_rejected_in_mode_b(client):
     client.post("/api/show/start", json={"blocker_id": blocker["id"], "mode": "B"})
     assert client.post("/api/ptt/turn", json={"text": "halo"}).status_code == 409
     client.post("/api/show/stop")
+
+
+def test_mode_c_start_ptt_and_snapshot(client):
+    import time
+
+    blocker = locked_blocker(client)
+    snap = client.post("/api/show/start", json={"blocker_id": blocker["id"], "mode": "C", "human_name": "Kak Dimas"}).json()
+    assert snap["mode"] == "C" and snap["ai_persona"] is None
+    assert [p["id"] for p in snap["personas"]] == ["raka", "salsa"]
+    assert [(p["id"], p["kind"]) for p in snap["participants"]] == [("human", "human"), ("raka", "ai"), ("salsa", "ai")]
+    deadline = time.time() + 10
+    while client.get("/api/show").json()["fillers_ready"] < 2 and time.time() < deadline:
+        time.sleep(0.05)
+    r = client.post("/api/ptt/turn", json={"text": "Salsa, lo tim kopi atau teh?", "stt_ms": 300, "speech_ms": 1500})
+    assert r.status_code == 200 and r.json()["responder"] == "salsa"
+    client.post("/api/show/stop")

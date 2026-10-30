@@ -18,7 +18,7 @@ interface Props {
  * list, jadi mode dengan lebih dari dua AI cukup menambah isinya.
  */
 export function VoiceStage({ live, previewMode, previewAi, previewHuman }: Props) {
-  const { snapshot: snap, speaking, transcript, sttPartial, micActive, awaiting, level } = live
+  const { snapshot: snap, speaking, transcript, sttPartial, micActive, level } = live
   const onAir = snap.state === 'live'
   const mode = snap.state === 'idle' || snap.state === 'ended' ? previewMode : snap.mode ?? previewMode
   const hasHuman = mode === 'A' || mode === 'C'
@@ -32,7 +32,7 @@ export function VoiceStage({ live, previewMode, previewAi, previewHuman }: Props
     if (speaking === id) return 'speaking'
     if (hasHuman) {
       if (humanActive) return 'listening'
-      if (awaiting && speaking === null) return 'thinking' // menunggu LLM/TTS
+      if (snap.thinking === id) return 'thinking' // AI ini menunggu LLM/TTS
       return 'listening' // menunggu manusia, atau AI lain sedang bicara
     }
     // Mode B: yang berikutnya bicara sedang menyiapkan giliran (pipelining), yang lain mendengarkan.

@@ -16,8 +16,6 @@ export interface LiveSession {
   speaking: string | null
   alerts: { stage: string; message: string; turn: number }[]
   sttPartial: string
-  /** Ucapan penyiar manusia sudah diterima dan jawaban AI belum mulai (LLM/TTS berjalan). */
-  awaiting: boolean
   /** Mikrofon penyiar manusia sedang ditahan (push-to-talk di prompter). */
   micActive: boolean
   /** Amplitudo audio yang sedang diputar, 0..1; null bila klien ini bukan pemilik audio. */
@@ -55,7 +53,6 @@ export function useLiveSession(role: Role): LiveSession {
   const [alerts, setAlerts] = useState<LiveSession['alerts']>([])
   const [sttPartial, setSttPartial] = useState('')
   const [micActive, setMicActive] = useState(false)
-  const [awaiting, setAwaiting] = useState(false)
   const [audioBlocked, setAudioBlocked] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
@@ -248,15 +245,11 @@ export function useLiveSession(role: Role): LiveSession {
               setAlerts([])
             }
             if (snap.transcript) setTranscript(snap.transcript)
-            if (snap.state === 'ended') {
-              stopAudio()
-              setAwaiting(false)
-            }
+            if (snap.state === 'ended') stopAudio()
             break
           }
           case 'turn': {
             const turn = data as TurnEvent
-            setAwaiting(false)
             setTranscript((t) => (t.some((x) => x.turn === turn.turn) ? t : [...t, turn].slice(-KEEP)))
             if (ownerRef.current) {
               const total = turn.parts ?? 1
@@ -278,7 +271,6 @@ export function useLiveSession(role: Role): LiveSession {
             if (ownerRef.current && data.audio_url) enqueue({ id: `filler:${Date.now()}`, persona: data.persona, urls: [data.audio_url], total: 1, report: false })
             break
           case 'human_turn':
-            setAwaiting(true)
             setTranscript((t) => [...t, data].slice(-KEEP))
             setSttPartial('')
             break
@@ -309,7 +301,6 @@ export function useLiveSession(role: Role): LiveSession {
           case 'stop_audio':
             stopAudio()
             setSpeaking(null)
-            setAwaiting(false)
             break
         }
       }
@@ -325,5 +316,5 @@ export function useLiveSession(role: Role): LiveSession {
     }
   }, [role, enqueue, pump, send, stopAudio])
 
-  return { connected, snapshot, transcript, showrunner, supervisor, output, speaking, alerts, sttPartial, micActive, awaiting, level, audioBlocked, unlockAudio, send }
+  return { connected, snapshot, transcript, showrunner, supervisor, output, speaking, alerts, sttPartial, micActive, level, audioBlocked, unlockAudio, send }
 }

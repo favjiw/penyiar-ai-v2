@@ -34,9 +34,10 @@ export const api = {
   lock: (id: string) => post<Blocker>(`/api/blocker/${id}/lock`),
   newVersion: (id: string) => post<Blocker>(`/api/blocker/${id}/version`),
   lockedList: () => request<Blocker[]>('/api/blockers?locked=true'),
-  startShow: (blocker_id: string, mode: 'A' | 'B' = 'B', opts: { ai_persona?: string; human_name?: string } = {}) =>
+  startShow: (blocker_id: string, mode: 'A' | 'B' | 'C' = 'B', opts: { ai_persona?: string; human_name?: string } = {}) =>
     post<ShowSnapshot>('/api/show/start', { blocker_id, mode, ...opts }),
-  pttTurn: (text: string, stt_ms: number) => post<{ filler?: string | null }>('/api/ptt/turn', { text, stt_ms }),
+  pttTurn: (text: string, stt_ms: number, speech_ms = 0) =>
+    post<{ filler?: string | null; responder?: string }>('/api/ptt/turn', { text, stt_ms, speech_ms }),
   control: (action: 'pause' | 'resume' | 'next' | 'stop') => post<ShowSnapshot>(`/api/show/${action}`),
   precheck: () =>
     post<{ models_ok: boolean; tts_ok: boolean; tts_error?: string; tts_warmup_ms?: Record<string, number>; models: Record<string, string> }>(

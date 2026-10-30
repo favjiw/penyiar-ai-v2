@@ -28,7 +28,7 @@ export const speechSupported = !!SR
 
 interface Options {
   onPartial: (text: string) => void
-  onFinal: (text: string, sttMs: number) => void
+  onFinal: (text: string, sttMs: number, speechMs: number) => void
 }
 
 export function usePushToTalk({ onPartial, onFinal }: Options) {
@@ -38,6 +38,7 @@ export function usePushToTalk({ onPartial, onFinal }: Options) {
   const finalText = useRef('')
   const interim = useRef('')
   const releasedAt = useRef(0)
+  const startedAt = useRef(0)
   const cancelled = useRef(false)
   const cb = useRef({ onPartial, onFinal })
   cb.current = { onPartial, onFinal }
@@ -48,6 +49,7 @@ export function usePushToTalk({ onPartial, onFinal }: Options) {
     finalText.current = ''
     interim.current = ''
     cancelled.current = false
+    startedAt.current = performance.now()
     const r = new SR()
     r.lang = 'id-ID'
     r.interimResults = true
@@ -71,7 +73,7 @@ export function usePushToTalk({ onPartial, onFinal }: Options) {
       if (cancelled.current) return cb.current.onPartial('')
       // Kata terakhir yang belum final ikut dikirim, supaya ujung kalimat tidak hilang.
       const text = (finalText.current + interim.current).trim()
-      if (text) cb.current.onFinal(text, Math.round(performance.now() - releasedAt.current))
+      if (text) cb.current.onFinal(text, Math.round(performance.now() - releasedAt.current), Math.round(releasedAt.current - startedAt.current))
     }
     rec.current = r
     r.start()
