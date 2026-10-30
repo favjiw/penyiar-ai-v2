@@ -284,13 +284,13 @@ Format setiap FR: deskripsi → aturan → kriteria terima (KT).
   2. Bahasa santai ala HITS, ditujukan untuk mahasiswa dan anak muda Bandung.
   3. Hindari klaim faktual spesifik (angka, tanggal, nama orang). Bila perlu, tandai `perlu_cek: true` agar operator memeriksa.
   4. Hindari politik praktis, SARA, dan topik medis yang bisa disalahartikan.
-  5. Pakai structured output (JSON schema). Parsing gagal → ulangi sekali, lalu tampilkan galat.
+  5. Pakai structured output (JSON schema). Parsing atau validasi gagal → ulangi sampai 2 kali (dengan alasan penolakan), lalu tampilkan galat.
 - **UI:**
   - kartu varian berdampingan;
   - pilih satu varian;
   - editor inline (ubah teks, tambah/hapus poin, geser urutan, hapus topik);
   - tombol "buat ulang varian ini";
-  - tombol kunci.
+  - tombol kunci: syaratnya 3-5 poin per topik dan field wajib terisi (Opening hook, Closing rangkuman dan ajakan, sudut pandang, pertanyaan, transisi); blocker terkunci disalin ke `sessions/<session_id>/blocker.json` saat sesi dimulai.
 
   Blocker yang sudah dikunci tidak bisa diubah. Untuk perubahan, buat versi baru.
 - **KT:**
@@ -845,7 +845,7 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 | 4 Mode A | Berjalan | 25 Okt 2026 | FR-7 (PTT Web Speech di prompter), FR-11 prompter, bank filler, ModeAEngine (TTS per kalimat, penyiar boleh memotong, Showrunner mode saran); 93 tes lulus; uji browser mock lulus (`docs/kt/tahap4-mode-a.md`). Probe latensi live tidak mewakili (Gemini 4–6 s per panggilan saat diuji). Menunggu: uji STT nyata, ukur ulang latensi, sesi 15 menit bersama penyiar. |
 | 5 Avatar T2 | Ditunda (diarsipkan) | 30 Okt 2026 | MuseTalk 1.5 jalan untuk Raka (bibir mengikuti suku kata) tetapi RTF ±410 di MX250; belum diukur di GTX 1080. Kode, hasil uji, dan catatan ada di branch `archive/avatar-dan-komentar` (`docs/kt/avatar-t2-musetalk.md`). |
 | 6 Tambahan skripsi | Belum | | FR-13 (komentar) ditunda. |
-| 3b Strip + Orb + TTS + Mode C | Berjalan | 30 Okt 2026 | Fase 1 selesai (avatar, stage, T2, dan setelan komentar dihapus; audit di `docs/AUDIT-STRIP.md`; 92 tes lulus, show mock mode B berjalan di konsol). Fase 2 (orb, transkrip) dan 2b (lapisan TTS Edge/ElevenLabs/gTTS) selesai; 107 tes lulus. Menunggu: Blocker 3 varian (3), mode C dan log `sessions/` (4). |
+| 3b Strip + Orb + TTS + Mode C | Berjalan | 30 Okt 2026 | Fase 1 selesai (avatar, stage, T2, dan setelan komentar dihapus; audit di `docs/AUDIT-STRIP.md`; 92 tes lulus, show mock mode B berjalan di konsol). Fase 2 (orb, transkrip), 2b (lapisan TTS Edge/ElevenLabs/gTTS), dan 3 (retry parse 2×, aturan kunci 3-5 poin, `sessions/<id>/blocker.json`, rundown di prompter) selesai; 116 tes lulus. Menunggu: mode C dan log `sessions/` (4). |
 | 7 Eksperimen | Belum | | |
 
 ## 17. Riwayat

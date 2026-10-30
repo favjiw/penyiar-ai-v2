@@ -64,11 +64,19 @@ export interface SupervisorEvent {
   timed_out: boolean
 }
 
+/** Blocker terkunci apa adanya, dikirim di snapshot untuk prompter penyiar manusia. */
+export interface Rundown {
+  opening: { hook: string; poin: string[] }
+  topics: { id: string; judul: string; sudut_pandang: string; poin: { id: string; text: string }[]; pertanyaan_penonton: string; transisi: string }[]
+  closing: { rangkuman: string; ajakan: string }
+}
+
 export interface ShowSnapshot {
   state: ShowStateName
   session_id?: string
   mode?: string
   blocker?: { id: string; tema: string; variant_label: string; topics: string[] }
+  rundown?: Rundown
   personas?: { id: string; name: string }[]
   segment?: 'opening' | 'topic' | 'closing'
   topic?: OnAirTopic | null

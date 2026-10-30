@@ -61,9 +61,28 @@ Branch kerja: `feat/topik-percakapan`. Kondisi sebelum penghapusan: branch `arch
 - gTTS hanya punya satu suara, sehingga Raka dan Salsa terdengar sama selama cadangan ini dipakai.
 - Edge adalah pustaka tidak resmi; bila diblokir, gTTS menjadi satu-satunya suara gratis.
 
+## Fase 3: pembuatan topik, Tema → Blocker (selesai, 30 Okt 2026)
+
+Sebagian besar sudah ada dari FR-1 (Tahap 1) dan dipertahankan: tema → 3 varian (default 3, pilihan 2-3), 1-3 topik per varian, tiap topik berisi judul, sudut pandang, poin, pertanyaan ke penonton, dan kalimat transisi; keluaran LLM berupa JSON terstruktur yang divalidasi; editor inline (ubah semua field, tambah/hapus/geser poin dan topik, maks 3 topik); kunci dengan versi baru untuk perubahan. Yang ditambah di Fase 3:
+
+- **Retry parse maksimal 2 kali** (3 percobaan), tiap ulang membawa alasan penolakan terbaru. Sebelumnya hanya 1 kali. Log `blocker_generations.jsonl` mencatat jumlah percobaan; UI menampilkan "diulang N×".
+- **Aturan saat mengunci** (server `validate_for_lock`, dicerminkan di UI `lockProblems`): 3-5 poin per topik, hook Opening, rangkuman dan ajakan Closing, serta sudut pandang, pertanyaan, dan transisi tiap topik tidak boleh kosong. Semua masalah dilaporkan sekaligus, dan UI menolak sebelum dialog konfirmasi muncul. Draf boleh belum rapi; tombol "+ Poin" berhenti di 5.
+- **`sessions/<session_id>/blocker.json`**: tiap sesi (mode A dan B) menyalin blocker terkunci yang dipakai saat dimulai. Folder default berada di samping `LOG_DIR` (`backend/sessions/`, di-ignore git), bisa diubah dengan `SESSIONS_DIR`.
+- **Prompter menampilkan blocker terkunci**: snapshot memuat `rundown`; prompter menampilkan langkah Opening → topik → Closing (selesai, sedang, berikutnya), hook dan poin Opening besar saat Opening, rangkuman dan ajakan saat Closing, sudut pandang dan kalimat transisi saat topik, dan panel "Seluruh blocker".
+- Konteks AI dari blocker terkunci sudah ada sejak Tahap 2 (opening, topik aktif beserta poin yang belum tercakup, transisi); tidak diubah.
+
+**Diverifikasi**
+- 116 tes backend lulus (retry 1-3 percobaan, gagal tepat 3 panggilan, aturan kunci per kasus, blocker.json mode A dan B, rundown di snapshot).
+- Browser dengan Gemini asli (`gemini-3.5-flash-lite`): tema "Ospek" menghasilkan 3 varian dalam 8,5 s tanpa ulang; "+ Poin" berhenti di 5; kunci dengan poin kurang ditolak tanpa dialog dan menyebut "Topik 1: 1 poin, harus 3-5"; kunci valid menghasilkan `blk_20261030_ospek_ca19`; mode A dengan blocker itu menulis `sessions/<id>/blocker.json` (4/3/3 poin) dan prompter menampilkan hook, langkah rundown, dan kalimat transisi.
+
+**Belum diverifikasi / catatan**
+- Retry dengan LLM asli yang benar-benar gagal parse (hanya diuji dengan LLM tiruan; satu-satunya generate asli berhasil percobaan pertama).
+- Penilaian "layak siar" 8 dari 10 tema (KT FR-1) masih menunggu Anda: `docs/kt/FR-1-blocker.md`.
+- Konsol belum menampilkan peringatan khusus untuk poin `perlu_cek` selain konfirmasi saat mengunci (perilaku lama).
+- Blocker lama yang sudah terkunci dengan kurang dari 3 poin tetap bisa dipakai (aturan hanya berlaku saat mengunci).
+
 ## Masih terbuka
 
-- Fase 3: 3 varian Blocker dengan retry parse maksimal 2 kali, `sessions/<id>/blocker.json`.
 - Fase 4: mode C, daftar peserta di engine, log `sessions/<id>/turns.jsonl`, hook `supervisor.check()` default nonaktif.
 - Prompt persona, Showrunner, dan Supervisor masih menyebut "live TikTok HITS" sebagai konteks program; belum diubah supaya versi prompt tidak bergeser.
 - Bagian PRD §6.1, §6.3, §11, dan Lampiran B masih memuat stage/avatar/komentar sebagai rujukan sejarah.
