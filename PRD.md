@@ -1,10 +1,10 @@
-# PRD Penyiar AI Co-Host Live TikTok HITS (v2.4)
+# PRD Penyiar AI Co-Host Live TikTok HITS (v2.5)
 
 | | |
 |---|---|
 | Pemilik | Muhammad Favian Jiwani (Favian) |
-| Tanggal | 24 Oktober 2026 |
-| Status | Draf v2.4, Tahap 2 menunggu pemeriksaan |
+| Tanggal | 30 Oktober 2026 |
+| Status | Draf v2.5: fokus kualitas percakapan; avatar, komentar, dan live TikTok ditunda |
 | Menggantikan | Semua PRD dan dokumen desain di repo `conversational-ai`: `PRD-KP-HITS-AI-Live*.md`, `PRD HITS AI Live v1.1`, `docs/avatar/PRD Avatar 3D…`, `docs/KEPUTUSAN-DESAIN.md`, `docs/RUNDOWN-LIVE-1-JAM-DRAF.md` |
 | Repo | `favjiw/penyiar-ai-v2` (public) [F] |
 
@@ -43,6 +43,20 @@ Live TikTok HITS Unikom Radio adalah kamera yang merekam studio on-air: penyiar 
 | 7 | Tema dari input teks | Parser `.docx` dihapus. |
 | 8 | LLM membuat rundown tema untuk dipilih | Generator Blocker (FR-1). |
 
+### 1.3.1 Perubahan fokus (30 Okt 2026) [F]
+Riset difokuskan ke **kualitas percakapan** (target obrolan 40+ menit). Yang ditunda dan **dikeluarkan dari build** (kode lengkap tetap di branch `archive/avatar-dan-komentar`, tag `pre-strip`):
+- Avatar video T1 (FR-8), lip-sync T2 MuseTalk (FR-9), halaman stage dan output OBS (FR-10), dan Lampiran A. Temuan FR-9 yang sudah terukur: di laptop MX250 RTF ±410 (VRAM 2,77 GB lebih besar dari 2 GB; fp16 lambat di GPU Pascal); belum diukur di GTX 1080.
+- Panel komentar dan label komentar (FR-13). Fiturnya belum pernah dibuat; hanya variabel `COMMENTS_ENABLED` dan `TIKTOK_USERNAME` yang dihapus.
+- Siaran live TikTok dan OBS.
+
+Yang ditambah:
+- **Mode C**: 1 penyiar manusia (pemegang sesi) + 2 AI (Raka dan Salsa). Lihat §3.
+- **Indikator giliran bicara (orb)** di konsol sebagai pengganti avatar (FR-15).
+- **Lapisan TTS yang bisa diganti** (FR-6): Edge TTS gratis sebagai default selama pengembangan dan uji panjang; ElevenLabs dipakai untuk demo ke pembimbing dengan mengganti satu variabel `.env`.
+- Log riset per sesi: `sessions/<id>/turns.jsonl` dan `blocker.json` (FR-12).
+
+Supervisor dan Showrunner **dipertahankan**. Hook Supervisor default nonaktif (pass-through), Showrunner dipakai lewat antarmuka `lanjut | pindah_topik | tutup` dengan tombol override operator.
+
 ### 1.3 Keputusan lanjutan Favian (24 Okt 2026)
 - Fokus hanya ke **siaran live TikTok**; jalur suara AI ke on-air radio belum dipikirkan [F].
 - Rundown hanya berisi Opening → maksimal 3 topik → Closing. Tanpa jingle, PSA, spot, atau audio statis lain [F].
@@ -79,13 +93,14 @@ Live TikTok HITS Unikom Radio adalah kamera yang merekam studio on-air: penyiar 
 | FR-5 Supervisor | versi dasar (keamanan) | **fokus** | – |
 | FR-6 TTS | ✓ | ✓ | – |
 | FR-7 Input penyiar (PTT + STT) | ✓ | ✓ | – |
-| FR-8 Avatar T1 (bank klip) | ✓ | ✓ | – |
-| FR-9 Avatar T2 (lip-sync neural) | opsional | opsional | – |
-| FR-10 Stage / output OBS | ✓ | ✓ | – |
+| ~~FR-8 Avatar T1 (bank klip)~~ ditunda | – | – | – |
+| ~~FR-9 Avatar T2 (lip-sync neural)~~ ditunda | – | – | – |
+| ~~FR-10 Stage / output OBS~~ ditunda | – | – | – |
 | FR-11 Konsol operator dan prompter | ✓ | ✓ | – |
 | FR-12 Logging | ✓ | ✓ | ✓ |
-| FR-13 Panel komentar + Supervisor | – | ✓ | – |
+| ~~FR-13 Panel komentar + Supervisor~~ ditunda | – | – | – |
 | FR-14 Harness eksperimen | – | ✓ | ✓ |
+| FR-15 Indikator giliran bicara (orb) | ✓ | ✓ | – |
 
 ### 2.3 Tidak dikerjakan
 - Pemutaran dan rekomendasi lagu.
@@ -107,8 +122,9 @@ Live TikTok HITS Unikom Radio adalah kamera yang merekam studio on-air: penyiar 
 | **Blocker** | Rundown hasil LLM yang sudah dipilih, diedit, dan dikunci: Opening, 1–3 Topik, Closing. Dibaca penyiar manusia (prompter) dan dipakai AI sebagai konteks. |
 | **Topik** | Satu bagian blocker berisi judul, sudut pandang, poin obrolan, pertanyaan ke penonton, dan kalimat transisi. |
 | **Giliran (turn)** | Satu ucapan utuh satu penyiar. |
-| **Mode A** | 1 penyiar manusia + 1 penyiar AI. Penyiar manusia memandu, membaca komentar, dan menekan "next topik". |
+| **Mode A** | 1 penyiar manusia + 1 penyiar AI. Penyiar manusia memandu dan menekan "next topik". |
 | **Mode B** | 2 penyiar AI (Raka dan Salsa), berjalan otomatis. Showrunner memutuskan transisi. |
+| **Mode C** [F] | 1 penyiar manusia (pemegang sesi, satu-satunya yang menekan "next topik") + 2 AI. Setelah manusia bicara, satu AI menjawab: yang disapa namanya, atau bergantian. AI kedua boleh menimpali, maksimal 2 giliran AI berturut-turut (konfigurasi) sebelum giliran kembali ke manusia. Daftar peserta berupa list agar kelak bisa lebih dari 2 AI. |
 | **Persona** | Kartu identitas penyiar AI: Raka (pria) dan Salsa (wanita). |
 | **Showrunner** | Agen LLM yang memantau cakupan poin, kejenuhan obrolan, dan keputusan lanjut / arahkan / pindah topik / tutup. Di mode A hanya memberi saran. |
 | **Supervisor** | Agen LLM yang memeriksa setiap ucapan AI sebelum diubah menjadi suara. Hasilnya: teruskan, koreksi (buat ulang dengan memori koreksi), atau ganti dengan kalimat aman. |
@@ -735,7 +751,7 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 - Halaman stage sementara tanpa video, hanya HUD + audio.
 - **Gerbang:** sesi mode B 20 menit dari blocker, tanpa intervensi; log lengkap.
 
-### Tahap 3: Avatar T1 + stage + OBS
+### Tahap 3: Avatar T1 + stage + OBS (ditunda 30 Okt 2026; lihat §1.3.1)
 - FR-8, FR-10, dan bank klip lengkap (Lampiran A).
 - **Gerbang:** live uji di akun TikTok pribadi 20 menit, mode B, dengan label AI.
 
@@ -743,13 +759,13 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 - FR-7, FR-11 (prompter), filler, dan Showrunner mode saran.
 - **Gerbang:** sesi uji 15 menit bersama penyiar sungguhan; KT latensi FR-7.
 
-### Tahap 5: Avatar T2 (bila lolos Tahap 0)
+### Tahap 5: Avatar T2 (ditunda 30 Okt 2026; lihat §1.3.1)
 - FR-9: worker di PC lab, buffer mode B.
 - **Gerbang:** RTF ≤0,8 saat live, dan kualitas dinilai lebih baik dari T1.
 
 ### Tahap 6: Tambahan skripsi
-- FR-13 (TikTokLive + label Supervisor), dan Supervisor `full` dengan ledger dan memori koreksi lengkap.
-- **Gerbang:** KT FR-5 dan FR-13.
+- ~~FR-13 (TikTokLive + label Supervisor)~~ ditunda; Supervisor `full` dengan ledger dan memori koreksi lengkap.
+- **Gerbang:** KT FR-5.
 
 ### Tahap 7: Eksperimen
 - FR-14: eksperimen skripsi dan publikasi (§14), lalu laporan.
@@ -817,10 +833,11 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 | 0 Uji kelayakan | Berjalan | 24 Okt 2026 | Alat uji di `tahap0/` siap. TTS terukur: Edge, Gemini (free tier 3 RPM, terlalu lambat untuk live), ElevenLabs flash (p50 0,55 s) dipilih sebagai TTS utama [F], Edge failover. Suara Pratama/Aita disetujui Favian setelah didengar [F]. Menunggu: rekaman STT, kuota resmi AI Studio, klip Flow, PC lab. Lihat `tahap0/HASIL.md`. |
 | 1 Fondasi + Blocker | Menunggu pemeriksaan Favian | 24 Okt 2026 | Backend (config, skema, LLM + rate limiter, TTS ElevenLabs/Edge + breaker, persona) dan FR-1 lengkap (API + konsol: generate, bandingkan, edit, kunci, versi, buat ulang). 27 tes lulus. KT otomatis: 10/10 tema valid dalam 5,8–8,1 s (`gemini-3.5-flash-lite`, prompt `blocker-v2`). Sisa KT: penilaian layak siar ≥8/10 di `docs/kt/FR-1-blocker.md`. Catatan: repo lama ternyata tidak punya breaker TTS (FR-6), jadi dibuat baru. Repo lama sudah diberi tag `v1-format-clock` dan README arsip. |
 | 2 Mode B inti | Menunggu pemeriksaan Favian | 24 Okt 2026 | FR-2/3/4/5/6/12, konsol live, stage; 83 tes lulus. Sesi 21,4 menit dari blocker tanpa crash/intervensi (`docs/kt/tahap2-gate-4.md`): topik 1–2 memakai jatah waktu dengan sudut baru, topik 3 rusak karena kuota harian habis (penanganan kuota, cadangan `compat:`, dan `PIPELINE_DEPTH=2` sudah ditambahkan). Ulangan sore hari (`tahap2-gate-5.md`) tidak mewakili karena DNS laptop putus-sambung (30/74 persona timeout), tetapi semua jalur cadangan bertahan. Sisa: gerbang 20 menit dari jaringan stabil; jeda p95 ≤4 s. Angka sistem di jaringan baik (sesi 3): persona p50 1,4 s, Supervisor p50 1,2 s, jeda p50 0 s. |
-| 3 Avatar T1 + OBS | Berjalan | 25 Okt 2026 | Pemutar avatar video di stage (FR-8: crossfade dua `<video>`, idle/listen/talk/react mengikuti siapa yang bicara dan emosi, `focus_y` untuk panel 9:8; klip berganti lewat crossfade, tidak di-loop; klip bicara mulai ±0,3 s setelah audio, tanpa klip reaksi di depan); panduan OBS (`docs/obs-setup.md`). 15 klip Flow Raka terpasang dan diuji di stage; mic di klip idle/listen berbeda posisi dari klip bicara (catatan di `docs/flow-prompts.md`). Menunggu: klip Salsa, uji tahan 60 menit dengan klip asli, live uji TikTok 20 menit. |
+| 3 Avatar T1 + OBS | Ditunda (diarsipkan) | 30 Okt 2026 | Pemutar video dan 15 klip Flow Raka sempat berjalan di stage; dikeluarkan dari build. Kode: branch `archive/avatar-dan-komentar`. |
 | 4 Mode A | Berjalan | 25 Okt 2026 | FR-7 (PTT Web Speech di prompter), FR-11 prompter, bank filler, ModeAEngine (TTS per kalimat, penyiar boleh memotong, Showrunner mode saran); 93 tes lulus; uji browser mock lulus (`docs/kt/tahap4-mode-a.md`). Probe latensi live tidak mewakili (Gemini 4–6 s per panggilan saat diuji). Menunggu: uji STT nyata, ukur ulang latensi, sesi 15 menit bersama penyiar. |
-| 5 Avatar T2 | Berjalan | 25 Okt 2026 | MuseTalk 1.5 (MIT) dipasang tanpa mmcv: `avatar-worker/` (prepare + `POST /render`), backend `AVATAR_TIER=t2` mengirim tiap audio TTS dan jatuh ke T1 bila worker gagal, stage memutar video lip-sync disinkronkan ke audio. Avatar Raka disiapkan dari `talk_calm_1`. Laptop MX250: RTF ±410 (VRAM 2,77 GB > 2 GB, fp16 lambat di Pascal), tidak layak. Kualitas mulut mengikuti suku kata; ujung mic di dagu ikut buram. Menunggu: ukur RTF di PC lab GTX 1080 (fp32). Lihat `docs/kt/avatar-t2-musetalk.md`. |
-| 6 Tambahan skripsi | Belum | | |
+| 5 Avatar T2 | Ditunda (diarsipkan) | 30 Okt 2026 | MuseTalk 1.5 jalan untuk Raka (bibir mengikuti suku kata) tetapi RTF ±410 di MX250; belum diukur di GTX 1080. Kode, hasil uji, dan catatan ada di branch `archive/avatar-dan-komentar` (`docs/kt/avatar-t2-musetalk.md`). |
+| 6 Tambahan skripsi | Belum | | FR-13 (komentar) ditunda. |
+| 3b Strip + Orb + TTS + Mode C | Berjalan | 30 Okt 2026 | Fase 1 selesai (avatar, stage, T2, dan setelan komentar dihapus; audit di `docs/AUDIT-STRIP.md`; 92 tes lulus, show mock mode B berjalan di konsol). Menunggu: orb dan transkrip (Fase 2), lapisan TTS Edge/ElevenLabs/gTTS (2b), Blocker 3 varian (3), mode C dan log `sessions/` (4). |
 | 7 Eksperimen | Belum | | |
 
 ## 17. Riwayat
@@ -840,10 +857,14 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 - **v2.4 (24 Okt 2026):** LLM cadangan berbiaya kecil [F]:
   - `compat:gemini-3.8-flash` (endpoint cosmoshub) sebagai cadangan persona saat kuota harian Gemini habis dan untuk eksperimen offline FR-14;
   - pengecualian biaya di §1.3, §2.3, §8; FR-14, §15.1, dan Lampiran B disesuaikan.
+- **v2.5 (30 Okt 2026):** fokus ke kualitas percakapan [F] (§1.3.1):
+  - FR-8, FR-9, FR-10, FR-13, Lampiran A, Tahap 3 dan 5 ditunda; kode diarsipkan di branch `archive/avatar-dan-komentar`;
+  - ditambah Mode C (§3) dan FR-15 (orb); TTS memakai lapisan provider (Edge default, ElevenLabs untuk demo);
+  - bagian arsitektur (§6.1, §6.3, §11) dan Lampiran B masih memuat stage/avatar/komentar sebagai rujukan sejarah; dibersihkan setelah Fase 2–4 selesai.
 
 ---
 
-## Lampiran A: Bank klip Google Flow per karakter [C]
+## Lampiran A: Bank klip Google Flow per karakter [C] (ditunda; lihat §1.3.1)
 
 Buat karakter **fiktif**. Kunci wajah dengan gambar referensi yang sama (ingredients / frame awal) di setiap klip. Kamera statis, framing dada ke atas, 9:16, latar studio radio dengan neon "HITS UNIKOM", mic broadcast di depan.
 
@@ -896,8 +917,4 @@ SHOWRUNNER_POLICY=llm|fixed_turns|coverage_only
 SHOWRUNNER_EVERY_K=3   MIN_TURNS_PER_TOPIC=6   MAX_TURNS_PER_TOPIC=40   FIXED_TURNS_PER_TOPIC=
 SUPERVISOR_MODE=off|rules|full   SUPERVISOR_MAX_REGEN=1   SUPERVISOR_TIMEOUT_MS=5000
 PIPELINE_DEPTH=1
-# Avatar
-AVATAR_TIER=t1|t2   AVATAR_WORKER_URL=
-# Skripsi
-COMMENTS_ENABLED=false   TIKTOK_USERNAME=
 ```
