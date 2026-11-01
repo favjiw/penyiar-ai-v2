@@ -3,7 +3,7 @@
 Acuan tunggal tetap `PRD.md` (v2.5). Rincian hasil uji: `docs/CATATAN-PROGRES.md`. Audit penghapusan: `docs/AUDIT-STRIP.md`.
 
 ## Tujuan
-Memfokuskan riset pada **kualitas percakapan** (podcast: Opening, maks 3 topik, Closing; target 40+ menit). Avatar, komentar, OBS, dan live TikTok ditunda. Branch ini 16 commit di depan `main` (termasuk checkpoint ini), belum di-merge dan belum ada PR. Kondisi sebelum penghapusan: branch `archive/avatar-dan-komentar` dan tag `pre-strip`.
+Memfokuskan riset pada **kualitas percakapan** (podcast: Opening, maks 3 topik, Closing; target 40+ menit). Avatar, komentar, OBS, dan live TikTok ditunda. Branch ini di depan `main` (jumlah commit: `git log main..HEAD`), belum di-merge dan belum ada PR. Kondisi sebelum penghapusan: branch `archive/avatar-dan-komentar` dan tag `pre-strip`.
 
 ## Sudah selesai
 - Fase 1: avatar T1, MuseTalk T2, halaman stage, dan setelan komentar dihapus (role WS `stage` hilang; konsol satu-satunya pemutar audio).
