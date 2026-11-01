@@ -93,8 +93,7 @@ export interface ShowSnapshot {
   human?: { id: string; name: string }
   ai_persona?: string
   busy?: boolean
-  thinking?: string | null // id AI yang sedang menyiapkan jawaban (mode A dan C)
-  ai_streak?: number
+  thinking?: string | null // id AI yang sedang menyiapkan jawaban (mode A)
   participants?: { id: string; name: string; kind: 'human' | 'ai' }[]
   topic_points?: TopicPoint[]
   fillers_ready?: number

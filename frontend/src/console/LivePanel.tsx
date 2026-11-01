@@ -27,7 +27,7 @@ function segmentLabel(t: { segment: string; topic_id: string | null }, topics: s
 export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
   const { snapshot: snap, transcript, showrunner, supervisor, output } = live
   const [blockerId, setBlockerId] = useState('')
-  const [mode, setMode] = useState<'A' | 'B' | 'C'>('B')
+  const [mode, setMode] = useState<'A' | 'B'>('B')
   const [aiPersona, setAiPersona] = useState('salsa')
   const [humanName, setHumanName] = useState('')
   const [busy, setBusy] = useState(false)
@@ -138,19 +138,16 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
             <button onClick={() => void runPrecheck()} disabled={busy}>
               Cek pra-live
             </button>
-            <select value={mode} onChange={(e) => setMode(e.target.value as 'A' | 'B' | 'C')} aria-label="Mode">
+            <select value={mode} onChange={(e) => setMode(e.target.value as 'A' | 'B')} aria-label="Mode">
               <option value="B">Mode B: Raka + Salsa (AI + AI)</option>
               <option value="A">Mode A: penyiar + 1 AI</option>
-              <option value="C">Mode C: penyiar + Raka + Salsa</option>
             </select>
             {mode !== 'B' && (
               <>
-                {mode === 'A' && (
                 <select value={aiPersona} onChange={(e) => setAiPersona(e.target.value)} aria-label="Lawan bicara AI">
                   <option value="salsa">AI: Salsa</option>
                   <option value="raka">AI: Raka</option>
                 </select>
-                )}
                 <input
                   type="text"
                   className="host-name"
@@ -167,9 +164,7 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
                 act(() =>
                   mode === 'A'
                     ? api.startShow(blockerId, 'A', { ai_persona: aiPersona, human_name: humanName })
-                    : mode === 'C'
-                      ? api.startShow(blockerId, 'C', { human_name: humanName })
-                      : api.startShow(blockerId, 'B'),
+                    : api.startShow(blockerId, 'B'),
                 )
               }
               disabled={busy || !blockerId || (mode !== 'B' && !humanName.trim())}

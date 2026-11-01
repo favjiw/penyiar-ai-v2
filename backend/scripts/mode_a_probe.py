@@ -1,4 +1,4 @@
-"""Ukur latensi mode A atau C tanpa browser (KT FR-7): ucapan penyiar tertulis → filler → jawaban AI.
+"""Ukur latensi mode A tanpa browser (KT FR-7): ucapan penyiar tertulis → filler → jawaban AI.
 
 Mengirim beberapa ucapan penyiar berurutan ke HumanLedEngine headless dan mencatat
 waktu dari "lepas tombol" (transkrip final diterima) ke filler dan ke kalimat
@@ -6,7 +6,6 @@ pertama jawaban AI. Waktu STT tidak termasuk; tambahkan hasil uji STT Tahap 0.
 
     cd backend
     python scripts/mode_a_probe.py --blocker blk_20261024_kos-kosan_ca3a --ai salsa
-    python scripts/mode_a_probe.py --blocker blk_20261024_kos-kosan_ca3a --mode C   # Raka + Salsa, disapa bergantian
 """
 
 from __future__ import annotations
@@ -44,7 +43,6 @@ async def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--blocker", required=True)
     ap.add_argument("--ai", default="salsa")
-    ap.add_argument("--mode", choices=("A", "C"), default="A")
     ap.add_argument("--host", default="Kak Uji")
     args = ap.parse_args()
 
@@ -56,19 +54,17 @@ async def main() -> None:
             marks[type_] = time.perf_counter()
 
     personas = load_personas()
-    who = {"ai_persona": args.ai} if args.mode == "A" else {"ai_personas": ["raka", "salsa"]}
     engine = HumanLedEngine(
         settings, create_llm_client(settings), create_tts(settings), BlockerStore(settings.DATA_DIR).get(args.blocker),
-        emit=emit, audio_dir=Path(settings.CACHE_DIR) / "audio", personas=personas, human_name=args.host, time_scale=0.0, **who,
+        emit=emit, audio_dir=Path(settings.CACHE_DIR) / "audio", personas=personas, human_name=args.host, time_scale=0.0, ai_persona=args.ai,
     )
     engine.start()
     await engine._task  # bank filler siap
     await engine.skip()  # masuk topik 1
 
     filler_ms, answer_ms = [], []
-    names = [personas[args.ai].name] if args.mode == "A" else [personas["raka"].name, personas["salsa"].name]
-    for i, line in enumerate(LINES):
-        ai_name = names[i % len(names)]  # mode C: menyapa AI bergantian
+    ai_name = personas[args.ai].name
+    for line in LINES:
         marks.clear()
         before = len(engine.transcript)
         t0 = time.perf_counter()

@@ -103,7 +103,7 @@ export function PrompterPage() {
     return (
       <div className="prompter idle">
         <h1>Prompter</h1>
-        <p>Siaran yang berjalan adalah mode B (AI + AI); prompter dipakai di mode A dan C.</p>
+        <p>Siaran yang berjalan adalah mode B (AI + AI); prompter dipakai di mode A (penyiar + 1 AI).</p>
       </div>
     )
   }

@@ -16,7 +16,6 @@ from app.schemas import PTTTurnRequest, ShowState, StartShowRequest
 from app.session_log import read_log
 from app.show.engine import ShowEngine
 from app.show.mode_a import HumanLedEngine
-from app.show.participants import DEFAULT_AI_IDS
 from app.ws import ConnectionManager
 
 logger = logging.getLogger(__name__)
@@ -50,18 +49,14 @@ async def start_show(req: StartShowRequest, request: Request):
         raise HTTPException(422, "Kunci blocker dulu sebelum live")
     ws: ConnectionManager = app.state.ws
     common = dict(seed=req.seed, has_audio_owner=lambda: ws.audio_owner() is not None)
-    if req.mode in ("A", "C"):
+    if req.mode == "A":
         personas = load_personas()
         human_name = req.human_name or app.state.settings.HUMAN_HOST_NAME
-        if req.mode == "A":
-            if req.ai_persona not in personas:
-                raise HTTPException(422, "Mode A: pilih ai_persona raka atau salsa")
-            ai = dict(ai_persona=req.ai_persona)
-        else:  # mode C: semua AI bawaan bersama penyiar manusia
-            ai = dict(ai_personas=[i for i in DEFAULT_AI_IDS if i in personas])
+        if req.ai_persona not in personas:
+            raise HTTPException(422, "Mode A: pilih ai_persona raka atau salsa")
         engine: ShowEngine = HumanLedEngine(
             app.state.settings, app.state.llm, app.state.tts, blocker, emit=ws.broadcast, audio_dir=audio_dir(request),
-            personas=personas, human_name=human_name, **ai, **common,
+            personas=personas, human_name=human_name, ai_persona=req.ai_persona, **common,
         )
     else:
         engine = ShowEngine(
@@ -93,7 +88,7 @@ async def ptt_turn(req: PTTTurnRequest, request: Request):
     """Transkrip final push-to-talk dari prompter (FR-7, STT di browser)."""
     engine = require_engine(request)
     if not isinstance(engine, HumanLedEngine):
-        raise HTTPException(409, "PTT hanya untuk mode A dan C")
+        raise HTTPException(409, "PTT hanya untuk mode A")
     if engine.state != ShowState.LIVE:
         raise HTTPException(409, "Siaran sedang pause")
     return await engine.human_turn(req.text, req.stt_ms, req.speech_ms) or {}

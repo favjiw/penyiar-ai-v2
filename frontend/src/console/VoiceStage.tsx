@@ -14,14 +14,14 @@ interface Props {
 
 /**
  * Indikator giliran bicara pengganti avatar: satu orb per penyiar AI (mode A: 1, B dan C: 2)
- * dan indikator mikrofon kecil untuk penyiar manusia (mode A dan C). Daftar peserta berupa
+ * dan indikator mikrofon kecil untuk penyiar manusia (mode A). Daftar peserta berupa
  * list, jadi mode dengan lebih dari dua AI cukup menambah isinya.
  */
 export function VoiceStage({ live, previewMode, previewAi, previewHuman }: Props) {
   const { snapshot: snap, speaking, transcript, sttPartial, micActive, level } = live
   const onAir = snap.state === 'live'
   const mode = snap.state === 'idle' || snap.state === 'ended' ? previewMode : snap.mode ?? previewMode
-  const hasHuman = mode === 'A' || mode === 'C'
+  const hasHuman = mode === 'A'
   const aiIds = mode === 'A' ? [snap.ai_persona ?? previewAi] : (snap.personas?.map((p) => p.id) ?? DEFAULT_AI)
   const humanName = snap.human?.name ?? (previewHuman || 'Penyiar')
   const humanActive = micActive || !!sttPartial

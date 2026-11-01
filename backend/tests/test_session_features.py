@@ -10,7 +10,7 @@ from app.data.personas import load_personas
 from app.llm import LLMClient, MockLLMClient
 from app.show.engine import ShowEngine
 from app.show.mode_a import HumanLedEngine, split_sentences
-from app.show.participants import addressed_ais, build_participants
+from app.show.participants import build_participants
 from app.show.turnlog import REQUIRED, TurnLog, topic_index
 from app.tts import FailoverTTS, MockTTSProvider
 from tests.test_persona import make_blocker
@@ -20,7 +20,7 @@ def read_rows(path):
     return [json.loads(l) for l in open(path, encoding="utf-8") if l.strip()]
 
 
-def make_c(tmp_path, llm=None, **overrides):
+def make_a(tmp_path, llm=None, **overrides):
     settings = Settings(LLM_MODE="mock", TTS_MODE="mock", LOG_DIR=str(tmp_path / "logs"), CACHE_DIR=str(tmp_path / "cache"),
                         SHOWRUNNER_EVERY_K=2, _env_file=None, **overrides)
     events = []
@@ -30,7 +30,7 @@ def make_c(tmp_path, llm=None, **overrides):
 
     engine = HumanLedEngine(
         settings, llm or MockLLMClient(delay_sec=0), FailoverTTS(MockTTSProvider(delay_sec=0)), make_blocker(2),
-        emit=emit, audio_dir=tmp_path / "audio", personas=load_personas(), ai_personas=["raka", "salsa"],
+        emit=emit, audio_dir=tmp_path / "audio", personas=load_personas(), ai_persona="raka",
         human_name="Kak Dimas", seed=3, time_scale=0.0,
     )
     return engine, events
@@ -60,103 +60,40 @@ def test_participants_per_mode():
     personas = load_personas()
     assert [p.id for p in build_participants("A", personas, ["salsa"], "Dimas")] == ["human", "salsa"]
     assert [p.id for p in build_participants("B", personas)] == ["raka", "salsa"]
-    c = build_participants("C", personas, None, "Dimas")
-    assert [(p.id, p.kind) for p in c] == [("human", "human"), ("raka", "ai"), ("salsa", "ai")]
     with pytest.raises(ValueError):
         build_participants("A", personas, ["raka", "salsa"], "x")
     with pytest.raises(ValueError):
-        build_participants("C", personas, ["raka"], "x")
+        build_participants("B", personas, ["raka"], "x")
+    with pytest.raises(ValueError):
+        build_participants("C", personas, None, "x")
     with pytest.raises(ValueError):
         build_participants("B", personas, ["raka", "tidak-ada"])
 
 
-def test_addressed_ais_by_name_and_kalian():
-    ais = [p for p in build_participants("C", load_personas(), None, "D") if not p.is_human]
-    assert addressed_ais("Salsa, menurut lo gimana?", ais) == ["salsa"]
-    assert addressed_ais("Menurut lo, raka, dan salsa juga ya", ais) == ["raka", "salsa"]
-    assert addressed_ais("Halo semuanya", ais) == []
-    assert addressed_ais("Kalian setuju nggak?", ais) == ["raka", "salsa"]
-    assert addressed_ais("Salsa, kalian setuju?", ais) == ["salsa", "raka"]
-    assert addressed_ais("rakyat salsabila", ais) == []  # bukan kata utuh
+# ── Mode A ───────────────────────────────────────────────────────────────────
 
 
-# ── Mode C ───────────────────────────────────────────────────────────────────
-
-
-async def test_mode_c_snapshot_lists_both_ais_and_human(tmp_path):
-    engine, _ = make_c(tmp_path)
+async def test_mode_a_snapshot_lists_human_and_one_ai(tmp_path):
+    engine, _ = make_a(tmp_path)
     snap = engine.snapshot()
-    assert engine.mode == "C" and [p["id"] for p in snap["personas"]] == ["raka", "salsa"]
-    assert [(p["id"], p["kind"]) for p in snap["participants"]] == [("human", "human"), ("raka", "ai"), ("salsa", "ai")]
-    assert snap["ai_persona"] is None
-
-
-async def test_addressed_ai_answers_and_streak_returns_to_human(tmp_path):
-    engine, events = make_c(tmp_path, MODE_C_CHIME_PROBABILITY=0.0)
-    engine.start()
-    await settle(engine)
-    info = await talk(engine, "Salsa, lo tim teh atau kopi?")
-    assert info["responder"] == "salsa" and ai_turns(events) == ["salsa"]  # tanpa peluang menimpali
-    assert engine._ai_streak == 1
-
-
-async def test_unaddressed_turns_alternate_between_ais(tmp_path):
-    engine, events = make_c(tmp_path, MODE_C_CHIME_PROBABILITY=0.0)
-    engine.start()
-    await settle(engine)
-    for text in ("Halo semuanya", "Lanjut ya", "Terus gimana"):
-        await talk(engine, text)
-    assert ai_turns(events) == ["raka", "salsa", "raka"]
-
-
-async def test_second_ai_chimes_in_but_never_exceeds_streak_limit(tmp_path):
-    engine, events = make_c(tmp_path, MODE_C_CHIME_PROBABILITY=1.0)  # selalu menimpali, batas default 2
-    engine.start()
-    await settle(engine)
-    await talk(engine, "Raka, ceritain dong")
-    assert ai_turns(events) == ["raka", "salsa"] and engine._ai_streak == 2  # dua AI, lalu kembali ke manusia
-    await talk(engine, "Oke lanjut")  # streak direset oleh ucapan manusia
-    assert len(ai_turns(events)) == 4 and engine._ai_streak == 2
-
-
-async def test_streak_limit_is_configurable(tmp_path):
-    engine, events = make_c(tmp_path, MODE_C_CHIME_PROBABILITY=1.0, MODE_C_MAX_AI_STREAK=1)
-    engine.start()
-    await settle(engine)
-    await talk(engine, "Raka, ceritain dong")
-    assert ai_turns(events) == ["raka"]
-
-
-async def test_kalian_forces_both_even_with_zero_chime_probability(tmp_path):
-    engine, events = make_c(tmp_path, MODE_C_CHIME_PROBABILITY=0.0)
-    engine.start()
-    await settle(engine)
-    await talk(engine, "Kalian berdua setuju nggak?")
-    assert ai_turns(events) == ["raka", "salsa"]
-
-
-async def test_chime_in_prompt_and_roster(tmp_path):
-    engine, _ = make_c(tmp_path)
-    ctx = engine._context(engine._ai("salsa"), chime_after="Raka")
-    prompt = engine.persona_agent.turn_prompt(engine._ai("salsa"), ctx, None, engine.persona_agent._sample_length(ctx), None, None)
-    assert "MENIMPALI ucapan Raka" in prompt and "1 sampai 2 kalimat" in prompt
-    assert "Peserta siaran lainnya: Kak Dimas (penyiar manusia); Raka (penyiar AI)" in prompt
-    assert "komentar" not in prompt.lower()
+    assert engine.mode == "A" and [p["id"] for p in snap["personas"]] == ["raka"]
+    assert [(p["id"], p["kind"]) for p in snap["participants"]] == [("human", "human"), ("raka", "ai")]
+    assert snap["ai_persona"] == "raka"
 
 
 async def test_thinking_id_is_in_snapshot_while_generating(tmp_path):
-    engine, _ = make_c(tmp_path, llm=MockLLMClient(delay_sec=0.3), MODE_C_CHIME_PROBABILITY=0.0)
+    engine, _ = make_a(tmp_path, llm=MockLLMClient(delay_sec=0.3))
     engine.start()
     await settle(engine)
-    await engine.human_turn("Salsa, halo")
+    await engine.human_turn("Raka, halo")
     await asyncio.sleep(0.1)
-    assert engine.snapshot()["thinking"] == "salsa" and engine.snapshot()["busy"]
+    assert engine.snapshot()["thinking"] == "raka" and engine.snapshot()["busy"]
     await settle(engine)
     assert engine.snapshot()["thinking"] is None and not engine.snapshot()["busy"]
 
 
-async def test_interrupt_cancels_the_chain_and_resets_streak(tmp_path):
-    engine, events = make_c(tmp_path, llm=MockLLMClient(delay_sec=0.2), MODE_C_CHIME_PROBABILITY=1.0)
+async def test_interrupt_cancels_the_running_answer(tmp_path):
+    engine, events = make_a(tmp_path, llm=MockLLMClient(delay_sec=0.2))
     engine.start()
     await settle(engine)
     await engine.human_turn("Raka, halo")
@@ -164,29 +101,27 @@ async def test_interrupt_cancels_the_chain_and_resets_streak(tmp_path):
     await engine.human_turn("Eh tunggu dulu")  # memotong
     await settle(engine)
     assert any(t == "stop_audio" and d["reason"] == "interrupt" for t, d in events)
-    assert engine._ai_streak <= 2
 
 
 # ── turns.jsonl ──────────────────────────────────────────────────────────────
 
 
 async def test_turns_jsonl_has_required_fields_for_human_and_ai(tmp_path):
-    engine, _ = make_c(tmp_path, MODE_C_CHIME_PROBABILITY=1.0)
+    engine, _ = make_a(tmp_path)
     engine.start()
     await settle(engine)
     await engine.skip()  # topik 1
     await talk(engine, "Raka, ceritain dong", stt_ms=420, speech_ms=1800)
     rows = read_rows(tmp_path / "sessions" / engine.session_id / "turns.jsonl")
-    assert [r["speaker"] for r in rows] == ["human", "raka", "salsa"] and [r["turn_idx"] for r in rows] == [1, 2, 3]
+    assert [r["speaker"] for r in rows] == ["human", "raka"] and [r["turn_idx"] for r in rows] == [1, 2]
     for r in rows:
         assert not [k for k in REQUIRED if k not in r]
-        assert r["session_id"] == engine.session_id and r["mode"] == "C" and r["t_end"] >= r["t_start"] and r["topic_idx"] == 0
-    human, raka, salsa = rows
+        assert r["session_id"] == engine.session_id and r["mode"] == "A" and r["t_end"] >= r["t_start"] and r["topic_idx"] == 0
+    human, raka = rows
     assert human["is_human"] and human["latency_asr_ms"] == 420 and human["text"] == "Raka, ceritain dong" and human["model"] == ""
     assert round(human["t_end"] - human["t_start"], 1) == 1.8
     assert not raka["is_human"] and raka["model"] == "mock" and raka["latency_llm_ms"] >= 0 and raka["tts_chars"] == sum(len(x) for x in split_sentences(raka["text"]))
     assert raka["filler_used"] is None or isinstance(raka["filler_used"], str)
-    assert salsa["filler_used"] is None  # filler hanya untuk AI yang menjawab langsung
     assert raka["tts_provider"] == "mock" and raka["supervisor_action"] == "forward" and raka["interrupted"] is False
 
 
@@ -215,7 +150,7 @@ def test_turnlog_rejects_incomplete_rows_and_parses_topic_idx(tmp_path):
 
 async def test_supervisor_hook_is_off_and_passthrough_by_default(tmp_path):
     assert Settings(_env_file=None).SUPERVISOR_MODE == "off"
-    engine, _ = make_c(tmp_path)
+    engine, _ = make_a(tmp_path)
     assert engine.supervisor.mode == "off"
     engine.start()
     await settle(engine)

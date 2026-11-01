@@ -86,8 +86,6 @@ class Settings(BaseSettings):
     CLOSING_TURNS: int = 2
     SESSION_TARGET_MIN: int = 0  # petunjuk lunak durasi total untuk Showrunner; 0 = tanpa
     PERSONA_TEMPERATURE: float = 0.9
-    MODE_C_MAX_AI_STREAK: int = 2  # giliran AI berturut-turut sebelum giliran wajib kembali ke manusia (mode C)
-    MODE_C_CHIME_PROBABILITY: float = 0.6  # peluang AI lain menimpali setelah AI pertama menjawab (mode C)
     SUMMARY_EVERY_TURNS: int = 10  # ringkasan obrolan diperbarui tiap sekian giliran yang keluar dari jendela riwayat; 0 = mati
     HUMAN_HOST_NAME: str = ""  # mode A (Tahap 4); keputusan terbuka PRD §15.2 #2
 

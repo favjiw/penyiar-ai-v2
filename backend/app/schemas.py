@@ -144,7 +144,7 @@ class GenerateBlockerRequest(BaseModel):
 
 # ── Show Engine (Tahap 2: FR-2, FR-4, FR-5, FR-12) ───────────────────────────
 
-ShowMode = Literal["A", "B", "C"]
+ShowMode = Literal["A", "B"]
 Segment = Literal["opening", "topic", "closing"]
 SupervisorMode = Literal["off", "rules", "full"]
 ShowrunnerPolicy = Literal["llm", "fixed_turns", "coverage_only"]
@@ -160,8 +160,8 @@ class ShowState(str, Enum):
 class StartShowRequest(BaseModel):
     blocker_id: str
     mode: ShowMode = "B"
-    ai_persona: Optional[str] = None  # mode A: raka | salsa (mode C memakai semua AI)
-    human_name: str = ""  # mode A dan C: nama tampilan penyiar manusia (§15.2 #2)
+    ai_persona: Optional[str] = None  # mode A: raka | salsa
+    human_name: str = ""  # mode A: nama tampilan penyiar manusia (§15.2 #2)
     seed: Optional[int] = None
 
 

@@ -1,7 +1,7 @@
 """Manajer WebSocket /ws/session (PRD §6.3), pola dari main.py repo lama.
 
 Setiap klien menyatakan role: `console` (konsol operator) atau `prompter`
-(penyiar manusia, mode A dan C). Hanya satu klien yang memutar audio
+(penyiar manusia, mode A). Hanya satu klien yang memutar audio
 (pemilik audio): konsol pertama yang tersambung. Hanya laporan pemutaran dari
 pemilik audio yang dipakai Show Engine.
 """

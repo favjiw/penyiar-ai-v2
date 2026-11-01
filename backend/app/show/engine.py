@@ -1,7 +1,7 @@
 """Show Engine (FR-2): orkestrator siaran dari blocker terkunci.
 
 Peserta berupa daftar (`participants.py`). Kelas ini menjalankan mode B (semua peserta AI,
-otomatis); mode A dan C (penyiar manusia memandu) ada di `mode_a.py` sebagai turunan yang
+otomatis); mode A (penyiar manusia memandu) ada di `mode_a.py` sebagai turunan yang
 memakai kerangka yang sama: state machine, Supervisor, TTS, pemutaran, dan log.
 
 Alur satu giliran: Persona → Supervisor → TTS → antrean putar. Giliran n+1
@@ -108,8 +108,8 @@ class ShowEngine:
         ai_ids: Optional[Sequence[str]] = None,
         human_name: str = "",
     ):
-        if mode in ("A", "C") and type(self) is ShowEngine:
-            raise ValueError("Mode A dan C memakai HumanLedEngine (app/show/mode_a.py)")
+        if mode == "A" and type(self) is ShowEngine:
+            raise ValueError("Mode A memakai HumanLedEngine (app/show/mode_a.py)")
         if not blocker.locked:
             raise ValueError("Blocker harus dikunci sebelum live")
         self.settings, self.blocker, self.mode = settings, blocker, mode
