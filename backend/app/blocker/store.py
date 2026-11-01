@@ -64,6 +64,26 @@ def normalize(blocker: Blocker) -> Blocker:
     return blocker
 
 
+MIN_POINTS, MAX_POINTS = 3, 5
+
+
+def validate_for_lock(blocker: Blocker) -> None:
+    """Aturan FR-1 yang wajib terpenuhi sebelum blocker dikunci (draf boleh belum rapi)."""
+    problems = []
+    if not blocker.opening.hook.strip():
+        problems.append("Opening: hook kosong")
+    if not blocker.closing.rangkuman.strip() or not blocker.closing.ajakan.strip():
+        problems.append("Closing: rangkuman atau ajakan kosong")
+    for i, t in enumerate(blocker.topics, 1):
+        if not MIN_POINTS <= len(t.poin) <= MAX_POINTS:
+            problems.append(f"Topik {i} ({t.judul[:30]}): {len(t.poin)} poin, harus {MIN_POINTS}-{MAX_POINTS}")
+        for name, label in (("sudut_pandang", "sudut pandang"), ("pertanyaan_penonton", "pertanyaan ke penonton"), ("transisi", "kalimat transisi")):
+            if not getattr(t, name).strip():
+                problems.append(f"Topik {i}: {label} kosong")
+    if problems:
+        raise BlockerInvalid("Belum bisa dikunci: " + "; ".join(problems))
+
+
 class BlockerStore:
     def __init__(self, data_dir: str | Path):
         self._dir = Path(data_dir) / "blockers"
@@ -115,6 +135,7 @@ class BlockerStore:
         if current.locked:
             return current
         current = normalize(current)
+        validate_for_lock(current)
         current.locked = True
         return self.save(current)
 

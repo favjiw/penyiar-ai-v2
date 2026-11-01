@@ -14,9 +14,9 @@ def test_start_requires_locked_blocker(client):
     assert client.post("/api/show/pause").status_code == 409
 
 
-def test_stage_plays_whole_show_over_websocket(client):
+def test_console_plays_whole_show_over_websocket(client):
     blocker = locked_blocker(client)
-    with client.websocket_connect("/ws/session?role=stage") as stage:
+    with client.websocket_connect("/ws/session?role=console") as stage:
         assert stage.receive_json()["type"] == "state"
         started = client.post("/api/show/start", json={"blocker_id": blocker["id"], "seed": 3})
         assert started.status_code == 200
@@ -35,7 +35,6 @@ def test_stage_plays_whole_show_over_websocket(client):
             if msg["type"] == "state" and msg["data"]["state"] == "ended":
                 break
         assert {"topic_change", "showrunner", "speaking", "output_status"} <= seen
-        assert "supervisor" not in seen  # event Supervisor hanya untuk konsol
         assert turns[0]["segment"] == "opening" and turns[-1]["segment"] == "closing"
 
     session_id = started.json()["session_id"]
@@ -81,4 +80,20 @@ def test_ptt_rejected_in_mode_b(client):
     blocker = locked_blocker(client)
     client.post("/api/show/start", json={"blocker_id": blocker["id"], "mode": "B"})
     assert client.post("/api/ptt/turn", json={"text": "halo"}).status_code == 409
+    client.post("/api/show/stop")
+
+
+def test_mode_c_start_ptt_and_snapshot(client):
+    import time
+
+    blocker = locked_blocker(client)
+    snap = client.post("/api/show/start", json={"blocker_id": blocker["id"], "mode": "C", "human_name": "Kak Dimas"}).json()
+    assert snap["mode"] == "C" and snap["ai_persona"] is None
+    assert [p["id"] for p in snap["personas"]] == ["raka", "salsa"]
+    assert [(p["id"], p["kind"]) for p in snap["participants"]] == [("human", "human"), ("raka", "ai"), ("salsa", "ai")]
+    deadline = time.time() + 10
+    while client.get("/api/show").json()["fillers_ready"] < 2 and time.time() < deadline:
+        time.sleep(0.05)
+    r = client.post("/api/ptt/turn", json={"text": "Salsa, lo tim kopi atau teh?", "stt_ms": 300, "speech_ms": 1500})
+    assert r.status_code == 200 and r.json()["responder"] == "salsa"
     client.post("/api/show/stop")

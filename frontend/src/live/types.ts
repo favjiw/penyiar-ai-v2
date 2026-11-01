@@ -1,5 +1,7 @@
 // Event /ws/session (PRD §6.3), cermin backend/app/show/engine.py.
 
+import type { TtsStatus } from './tts'
+
 export type ShowStateName = 'idle' | 'live' | 'paused' | 'ended'
 
 export interface TranscriptEntry {
@@ -13,11 +15,11 @@ export interface TranscriptEntry {
   supervisor: 'forward' | 'regenerate' | 'fallback'
   tts_provider: string
   gap_ms: number
+  ts?: number // detik epoch, dari server
 }
 
 export interface TurnEvent extends TranscriptEntry {
   audio_url: string | null
-  video_url?: string | null // avatar T2 (lip-sync MuseTalk) untuk bagian pertama
   duration_s: number
   playback_id: string
   parts?: number // mode A: jumlah bagian kalimat; bagian 2..n datang lewat audio_part
@@ -42,6 +44,7 @@ export interface ShowrunnerDecision {
   points_covered: string[]
   saturation: number
   decision: 'continue' | 'steer' | 'transition' | 'close'
+  aksi?: 'lanjut' | 'pindah_topik' | 'tutup'
   steer_hint: string
   next_speaker: string | null
   reason: string
@@ -62,11 +65,19 @@ export interface SupervisorEvent {
   timed_out: boolean
 }
 
+/** Blocker terkunci apa adanya, dikirim di snapshot untuk prompter penyiar manusia. */
+export interface Rundown {
+  opening: { hook: string; poin: string[] }
+  topics: { id: string; judul: string; sudut_pandang: string; poin: { id: string; text: string }[]; pertanyaan_penonton: string; transisi: string }[]
+  closing: { rangkuman: string; ajakan: string }
+}
+
 export interface ShowSnapshot {
   state: ShowStateName
   session_id?: string
   mode?: string
   blocker?: { id: string; tema: string; variant_label: string; topics: string[] }
+  rundown?: Rundown
   personas?: { id: string; name: string }[]
   segment?: 'opening' | 'topic' | 'closing'
   topic?: OnAirTopic | null
@@ -76,12 +87,15 @@ export interface ShowSnapshot {
   transcript?: TranscriptEntry[]
   showrunner?: ShowrunnerDecision | null
   coverage?: Record<string, { covered: string[]; total: number }>
-  tts?: { primary: string; fallback: string | null; breaker_open: boolean; credits_used: number }
+  tts?: TtsStatus
   error?: string | null
   // mode A
   human?: { id: string; name: string }
   ai_persona?: string
   busy?: boolean
+  thinking?: string | null // id AI yang sedang menyiapkan jawaban (mode A dan C)
+  ai_streak?: number
+  participants?: { id: string; name: string; kind: 'human' | 'ai' }[]
   topic_points?: TopicPoint[]
   fillers_ready?: number
 }
@@ -89,7 +103,6 @@ export interface ShowSnapshot {
 export interface OutputStatus {
   is_audio_owner: boolean
   audio_owner_role: string | null
-  stage_connected: boolean
   audio_blocked: boolean
   clients: Record<string, number>
 }

@@ -15,7 +15,8 @@ from app.data.personas import load_personas
 from app.schemas import PTTTurnRequest, ShowState, StartShowRequest
 from app.session_log import read_log
 from app.show.engine import ShowEngine
-from app.show.mode_a import ModeAEngine
+from app.show.mode_a import HumanLedEngine
+from app.show.participants import DEFAULT_AI_IDS
 from app.ws import ConnectionManager
 
 logger = logging.getLogger(__name__)
@@ -49,13 +50,18 @@ async def start_show(req: StartShowRequest, request: Request):
         raise HTTPException(422, "Kunci blocker dulu sebelum live")
     ws: ConnectionManager = app.state.ws
     common = dict(seed=req.seed, has_audio_owner=lambda: ws.audio_owner() is not None)
-    if req.mode == "A":
-        if req.ai_persona not in load_personas():
-            raise HTTPException(422, "Mode A: pilih ai_persona raka atau salsa")
-        engine: ShowEngine = ModeAEngine(
+    if req.mode in ("A", "C"):
+        personas = load_personas()
+        human_name = req.human_name or app.state.settings.HUMAN_HOST_NAME
+        if req.mode == "A":
+            if req.ai_persona not in personas:
+                raise HTTPException(422, "Mode A: pilih ai_persona raka atau salsa")
+            ai = dict(ai_persona=req.ai_persona)
+        else:  # mode C: semua AI bawaan bersama penyiar manusia
+            ai = dict(ai_personas=[i for i in DEFAULT_AI_IDS if i in personas])
+        engine: ShowEngine = HumanLedEngine(
             app.state.settings, app.state.llm, app.state.tts, blocker, emit=ws.broadcast, audio_dir=audio_dir(request),
-            personas=load_personas(), ai_persona=req.ai_persona,
-            human_name=req.human_name or app.state.settings.HUMAN_HOST_NAME, **common,
+            personas=personas, human_name=human_name, **ai, **common,
         )
     else:
         engine = ShowEngine(
@@ -86,16 +92,16 @@ async def control(action: str, request: Request):
 async def ptt_turn(req: PTTTurnRequest, request: Request):
     """Transkrip final push-to-talk dari prompter (FR-7, STT di browser)."""
     engine = require_engine(request)
-    if not isinstance(engine, ModeAEngine):
-        raise HTTPException(409, "PTT hanya untuk mode A")
+    if not isinstance(engine, HumanLedEngine):
+        raise HTTPException(409, "PTT hanya untuk mode A dan C")
     if engine.state != ShowState.LIVE:
         raise HTTPException(409, "Siaran sedang pause")
-    return await engine.human_turn(req.text, req.stt_ms) or {}
+    return await engine.human_turn(req.text, req.stt_ms, req.speech_ms) or {}
 
 
 @router.post("/api/precheck")
 async def precheck(request: Request):
-    """Cek pra-live (§5.1): model terisi, TTS dipanaskan (cold start suara library), stage tersambung."""
+    """Cek pra-live (§5.1): model terisi, TTS dipanaskan (cold start suara library)."""
     app = request.app
     s = app.state.settings
     personas = load_personas()
@@ -106,7 +112,7 @@ async def precheck(request: Request):
         "output": app.state.ws.output_status(),
     }
     try:
-        result["tts_warmup_ms"] = await app.state.tts.warm_up({p.gender: p.voices for p in personas.values()})
+        result["tts_warmup_ms"] = await app.state.tts.warm_up(list(personas))
         result["tts_ok"] = True
     except Exception as e:
         result["tts_ok"], result["tts_error"] = False, str(e)[:300]
@@ -160,7 +166,7 @@ async def ws_session(ws: WebSocket, role: str = "console"):
                     await manager.broadcast("speaking", {"persona": data.get("persona")})
             elif action == "stt_partial":
                 # Transkrip sementara dari prompter, diteruskan ke konsol (FR-7)
-                await manager.broadcast("stt_partial", {"text": str(data.get("text", ""))[:500], "final": bool(data.get("final"))})
+                await manager.broadcast("stt_partial", {"text": str(data.get("text", ""))[:500], "final": bool(data.get("final")), "active": data.get("active")})
             elif action == "audio_state":
                 blocked = bool(data.get("blocked"))
                 (manager.audio_blocked.add if blocked else manager.audio_blocked.discard)(ws)

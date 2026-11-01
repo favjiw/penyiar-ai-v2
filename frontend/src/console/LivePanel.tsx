@@ -1,20 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
 import type { LiveSession } from '../live/useLiveSession'
+import { ttsLabel } from '../live/tts'
 import type { Blocker } from '../types'
-
-// Jendela stage untuk OBS: popup 9:16 tanpa tab, dibuka ulang di jendela bernama sama (dari repo lama).
-const STAGE_URL = '/stage?clean=1'
-const STAGE_WINDOW = 'hits-stage'
-const STAGE_FEATURES = 'popup=yes,width=540,height=960,left=40,top=40'
-
-function openStage() {
-  const win = window.open(STAGE_URL, STAGE_WINDOW, STAGE_FEATURES)
-  if (win) win.focus()
-  else window.open(STAGE_URL, '_blank')
-}
+import { VoiceStage } from './VoiceStage'
 
 const fmtElapsed = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
+const fmtClock = (ts?: number) => (ts ? new Date(ts * 1000).toLocaleTimeString('id-ID', { hour12: false }) : '')
 const isTyping = (el: Element | null) => !!el && ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)
 
 interface Props {
@@ -23,11 +15,19 @@ interface Props {
   onRefreshBlockers: () => void
 }
 
-/** Kontrol dan pemantauan siaran mode B (FR-11, bagian Tahap 2). */
+/** Judul segmen untuk satu giliran: Opening, Closing, atau judul topik (id `t2` = topik kedua). */
+function segmentLabel(t: { segment: string; topic_id: string | null }, topics: string[]): string {
+  if (t.segment === 'opening') return 'Opening'
+  if (t.segment === 'closing') return 'Closing'
+  const i = t.topic_id ? Number(t.topic_id.replace(/\D/g, '')) - 1 : -1
+  return topics[i] ?? 'Topik'
+}
+
+/** Kontrol dan pemantauan siaran (FR-11): orb giliran bicara, transkrip, dan panel agen. */
 export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
   const { snapshot: snap, transcript, showrunner, supervisor, output } = live
   const [blockerId, setBlockerId] = useState('')
-  const [mode, setMode] = useState<'A' | 'B'>('B')
+  const [mode, setMode] = useState<'A' | 'B' | 'C'>('B')
   const [aiPersona, setAiPersona] = useState('salsa')
   const [humanName, setHumanName] = useState('')
   const [busy, setBusy] = useState(false)
@@ -77,7 +77,6 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
         [
           r.models_ok ? 'Model LLM ✓' : 'Model LLM belum diisi di .env ✗',
           r.tts_ok ? `TTS ✓ (pemanasan ${warm})` : `TTS ✗ ${r.tts_error ?? ''}`,
-          r.output.stage_connected ? 'Stage tersambung ✓' : 'Stage belum dibuka (audio diputar di konsol)',
         ].join(' · '),
       )
     })
@@ -112,7 +111,8 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
             </strong>
             <span className="angle">
               {fmtElapsed(elapsed)} · giliran {snap.turn}
-              {snap.mode === 'A' && ` · mode A dengan ${snap.human?.name} · filler ${snap.fillers_ready ?? 0}`}
+              {` · mode ${snap.mode}`}
+              {snap.mode !== 'B' && ` dengan ${snap.human?.name} · filler ${snap.fillers_ready ?? 0}`}
             </span>
             <span className="spacer" />
             <button onClick={() => control(snap.state === 'paused' ? 'resume' : 'pause')} disabled={busy}>
@@ -138,16 +138,19 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
             <button onClick={() => void runPrecheck()} disabled={busy}>
               Cek pra-live
             </button>
-            <select value={mode} onChange={(e) => setMode(e.target.value as 'A' | 'B')} aria-label="Mode">
+            <select value={mode} onChange={(e) => setMode(e.target.value as 'A' | 'B' | 'C')} aria-label="Mode">
               <option value="B">Mode B: Raka + Salsa (AI + AI)</option>
-              <option value="A">Mode A: penyiar + AI</option>
+              <option value="A">Mode A: penyiar + 1 AI</option>
+              <option value="C">Mode C: penyiar + Raka + Salsa</option>
             </select>
-            {mode === 'A' && (
+            {mode !== 'B' && (
               <>
+                {mode === 'A' && (
                 <select value={aiPersona} onChange={(e) => setAiPersona(e.target.value)} aria-label="Lawan bicara AI">
                   <option value="salsa">AI: Salsa</option>
                   <option value="raka">AI: Raka</option>
                 </select>
+                )}
                 <input
                   type="text"
                   className="host-name"
@@ -161,18 +164,21 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
             <button
               className="primary"
               onClick={() =>
-                act(() => (mode === 'A' ? api.startShow(blockerId, 'A', { ai_persona: aiPersona, human_name: humanName }) : api.startShow(blockerId, 'B')))
+                act(() =>
+                  mode === 'A'
+                    ? api.startShow(blockerId, 'A', { ai_persona: aiPersona, human_name: humanName })
+                    : mode === 'C'
+                      ? api.startShow(blockerId, 'C', { human_name: humanName })
+                      : api.startShow(blockerId, 'B'),
+                )
               }
-              disabled={busy || !blockerId || (mode === 'A' && !humanName.trim())}
+              disabled={busy || !blockerId || (mode !== 'B' && !humanName.trim())}
             >
               Mulai
             </button>
           </>
         )}
-        <button onClick={openStage} title="Popup 9:16 untuk ditangkap OBS">
-          {output?.stage_connected ? 'Stage ✓' : 'Buka Stage'}
-        </button>
-        {(mode === 'A' || snap.mode === 'A') && (
+        {(onAir ? snap.mode !== 'B' : mode !== 'B') && (
           <a className="button-link" href="/prompter" target="hits-prompter" title="Prompter untuk penyiar (tablet atau monitor kedua)">
             {output?.clients?.prompter ? 'Prompter ✓' : 'Buka Prompter'}
           </a>
@@ -198,15 +204,20 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
       )}
       {!live.connected && <div className="error">Tersambung ulang ke server…</div>}
 
+      <VoiceStage live={live} previewMode={mode} previewAi={aiPersona} previewHuman={humanName} />
+
       <div className="live-grid">
         <section className="panel transcript">
           <h2>Transkrip</h2>
           {transcript.length === 0 && <p className="empty">Belum ada giliran.</p>}
           {transcript.map((t) => (
             <div key={t.turn} className={`line ${live.speaking === t.persona && t === transcript[transcript.length - 1] ? 'now' : ''}`}>
+              <span className="meta">
+                {fmtClock(t.ts)} · {segmentLabel(t, topics)}
+              </span>
               <span className={`who ${t.persona}`}>{t.name}</span> {t.text}
               {t.supervisor !== 'forward' && <span className="badge">{t.supervisor}</span>}
-              {t.tts_provider && t.tts_provider !== 'elevenlabs' && t.tts_provider !== 'mock' && <span className="badge">TTS {t.tts_provider}</span>}
+              {t.tts_provider && snap.tts && t.tts_provider !== snap.tts.primary && t.tts_provider !== 'mock' && <span className="badge">TTS {t.tts_provider}</span>}
             </div>
           ))}
           {live.sttPartial && (
@@ -245,7 +256,7 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
             {latestSr ? (
               <>
                 <div>
-                  <strong>{latestSr.decision}</strong> · jenuh {latestSr.saturation.toFixed(2)} · {latestSr.policy}
+                  <strong>{latestSr.aksi ?? latestSr.decision}</strong> ({latestSr.decision}) · jenuh {latestSr.saturation.toFixed(2)} · {latestSr.policy}
                   {latestSr.forced && <span className="badge">forced</span>}
                 </div>
                 {latestSr.steer_hint && <div className="angle">→ {latestSr.steer_hint}</div>}
@@ -293,8 +304,9 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
             </div>
             {snap.tts && (
               <div className="angle">
-                TTS {snap.tts.primary}
-                {snap.tts.breaker_open && ' (breaker terbuka → ' + snap.tts.fallback + ')'} · kredit {snap.tts.credits_used}
+                {ttsLabel(snap.tts)}
+                {snap.tts.fallback_uses ? ` · cadangan dipakai ${snap.tts.fallback_uses}×` : ''}
+                {snap.tts.credits_used > 0 ? ` · kredit ${snap.tts.credits_used}` : ''}
               </div>
             )}
           </section>

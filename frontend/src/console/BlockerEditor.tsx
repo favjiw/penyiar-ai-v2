@@ -7,6 +7,24 @@ interface Props {
 }
 
 const MAX_TOPICS = 3
+export const MIN_POINTS = 3
+export const MAX_POINTS = 5
+
+/** Aturan yang sama dengan server (`validate_for_lock`): daftar masalah sebelum blocker boleh dikunci. */
+export function lockProblems(b: Blocker): string[] {
+  const out: string[] = []
+  if (!b.opening.hook.trim()) out.push('Opening: hook kosong')
+  if (!b.closing.rangkuman.trim() || !b.closing.ajakan.trim()) out.push('Closing: rangkuman atau ajakan kosong')
+  b.topics.forEach((t, i) => {
+    const n = t.poin.filter((p) => p.text.trim()).length
+    if (n < MIN_POINTS || n > MAX_POINTS) out.push(`Topik ${i + 1}: ${n} poin, harus ${MIN_POINTS}-${MAX_POINTS}`)
+    if (!t.judul.trim()) out.push(`Topik ${i + 1}: judul kosong`)
+    if (!t.sudut_pandang.trim()) out.push(`Topik ${i + 1}: sudut pandang kosong`)
+    if (!t.pertanyaan_penonton.trim()) out.push(`Topik ${i + 1}: pertanyaan ke penonton kosong`)
+    if (!t.transisi.trim()) out.push(`Topik ${i + 1}: kalimat transisi kosong`)
+  })
+  return out
+}
 
 function move<T>(list: T[], from: number, to: number): T[] {
   if (to < 0 || to >= list.length) return list
@@ -100,7 +118,10 @@ export function BlockerEditor({ blocker: b, onChange }: Props) {
             Sudut pandang
             <input type="text" value={t.sudut_pandang} onChange={(e) => setTopic(i, { sudut_pandang: e.target.value })} />
           </label>
-          <div className="section-label">Poin obrolan</div>
+          <div className="section-label">
+            Poin obrolan ({MIN_POINTS}-{MAX_POINTS}){' '}
+            {(t.poin.length < MIN_POINTS || t.poin.length > MAX_POINTS) && <span className="warn-inline">sekarang {t.poin.length}</span>}
+          </div>
           {t.poin.map((p, j) => (
             <div className="row" key={j}>
               <input
@@ -132,6 +153,8 @@ export function BlockerEditor({ blocker: b, onChange }: Props) {
           <div className="row">
             <button
               className="small"
+              disabled={t.poin.length >= MAX_POINTS}
+              title={t.poin.length >= MAX_POINTS ? `Maksimal ${MAX_POINTS} poin per topik` : undefined}
               onClick={() => {
                 pendingFocus.current = `poin-${i}-${t.poin.length}`
                 setTopic(i, { poin: [...t.poin, { id: '', text: '', perlu_cek: false }] })

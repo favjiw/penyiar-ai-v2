@@ -14,9 +14,9 @@
       "port": 8000
     },
     {
-      "name": "backend-edge",
+      "name": "backend-mock-edge",
       "runtimeExecutable": "cmd",
-      "runtimeArgs": ["/c", "cd backend && set TTS_PRIMARY=edge&& python -m uvicorn app.main:app --port 8000"],
+      "runtimeArgs": ["/c", "cd backend && set LLM_MODE=mock&& set TTS_MODE=live&& python -m uvicorn app.main:app --port 8000"],
       "port": 8000
     },
     {

@@ -9,7 +9,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 
 class Emotion(str, Enum):
@@ -36,7 +36,6 @@ class PersonaCard(BaseModel):
     background_facts: list[str] = Field(default_factory=list)
     do_not: list[str] = Field(default_factory=list)
     opinions: list[str] = Field(default_factory=list)
-    clips: str = ""
     filler_bank: str = ""
 
 
@@ -62,7 +61,6 @@ class LatencyMs(BaseModel):
     persona: int = 0
     supervisor: int = 0
     tts: int = 0
-    avatar_render: int = 0
     gap_before_play: int = 0
 
 
@@ -146,7 +144,7 @@ class GenerateBlockerRequest(BaseModel):
 
 # ── Show Engine (Tahap 2: FR-2, FR-4, FR-5, FR-12) ───────────────────────────
 
-ShowMode = Literal["A", "B"]
+ShowMode = Literal["A", "B", "C"]
 Segment = Literal["opening", "topic", "closing"]
 SupervisorMode = Literal["off", "rules", "full"]
 ShowrunnerPolicy = Literal["llm", "fixed_turns", "coverage_only"]
@@ -162,14 +160,15 @@ class ShowState(str, Enum):
 class StartShowRequest(BaseModel):
     blocker_id: str
     mode: ShowMode = "B"
-    ai_persona: Optional[str] = None  # mode A: raka | salsa
-    human_name: str = ""  # mode A: nama tampilan penyiar manusia (§15.2 #2)
+    ai_persona: Optional[str] = None  # mode A: raka | salsa (mode C memakai semua AI)
+    human_name: str = ""  # mode A dan C: nama tampilan penyiar manusia (§15.2 #2)
     seed: Optional[int] = None
 
 
 class PTTTurnRequest(BaseModel):
     text: str = Field(min_length=1, max_length=1000)
     stt_ms: int = 0  # lepas tombol → transkrip final, diukur di browser
+    speech_ms: int = 0  # lama tombol bicara ditahan (untuk t_start/t_end di turns.jsonl)
 
 
 # Supervisor (FR-5)
@@ -229,6 +228,12 @@ class ShowrunnerDecision(BaseModel):
     forced: bool = False
     latency_ms: int = 0
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def aksi(self) -> Literal["lanjut", "pindah_topik", "tutup"]:
+        """Antarmuka mode B: continue/steer → lanjut, transition → pindah_topik, close → tutup."""
+        return {"continue": "lanjut", "steer": "lanjut", "transition": "pindah_topik", "close": "tutup"}[self.decision]
+
 
 # Log giliran (§9.4)
 
@@ -249,8 +254,8 @@ class TurnRecord(BaseModel):
     models: dict[str, str] = Field(default_factory=dict)
     tts_provider: str = ""
     tts_fallback_reason: str = ""
+    tts_fallback_used: bool = False  # ada bagian audio giliran ini yang berasal dari cadangan
     audio_url: Optional[str] = None
-    video_url: Optional[str] = None  # avatar T2 (lip-sync), FR-9
     duration_s: float = 0.0
     credit_cost: int = 0
     filler: Optional[str] = None

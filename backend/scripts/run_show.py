@@ -76,7 +76,7 @@ async def main() -> None:
     print(f"Sesi {engine.session_id}: {blocker.tema} · {blocker.variant_label} · log {engine.log.path}", flush=True)
     if settings.TTS_MODE == "live":
         try:
-            print("Pemanasan TTS:", await tts.warm_up({p.gender: p.voices for p in load_personas().values()}), flush=True)
+            print("Pemanasan TTS:", await tts.warm_up(list(load_personas())), flush=True)
         except Exception as e:  # pemanasan gagal bukan alasan membatalkan sesi; failover yang menangani
             print(f"Pemanasan TTS gagal: {type(e).__name__}: {e}", flush=True)
     engine.start()

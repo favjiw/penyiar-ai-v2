@@ -159,6 +159,7 @@ button.danger { border-color: var(--err-fg); color: var(--err-fg); }
 
 .transcript { max-height: 70vh; overflow-y: auto; }
 .transcript .line { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.transcript .line .meta { display: block; font-size: 0.78rem; color: var(--muted); }
 .transcript .line.now { background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .who { font-weight: 700; margin-right: 4px; }
 .who.raka { color: #3b82f6; }
@@ -177,3 +178,5 @@ ol.log { margin: 8px 0 0; padding-left: 18px; font-size: 13px; }
 .live-bar .host-name { width: 160px; }
 a.button-link { border: 1px solid var(--line); border-radius: 7px; padding: 7px 12px; color: var(--fg); text-decoration: none; background: var(--panel); }
 a.button-link:hover { border-color: var(--accent); }
+.tts-warning { margin: 10px 16px 0; }
+.warn-inline { color: var(--err-fg); font-weight: 600; }

@@ -20,14 +20,14 @@ export function PrompterPage() {
   const [message, setMessage] = useState('')
   const lastPartialSent = useRef(0)
   const onAir = snap.state === 'live' || snap.state === 'paused'
-  const ai = snap.personas?.[0]
+  const aiNames = (snap.personas ?? []).map((p) => p.name).join(' dan ')
   const advice = [...showrunner].reverse().find((d) => d.advisory)
 
-  const sendTurn = async (text: string, sttMs: number) => {
+  const sendTurn = async (text: string, sttMs: number, speechMs = 0) => {
     setPartial('')
     live.send('stt_partial', { text: '', final: true })
     try {
-      await api.pttTurn(text, sttMs)
+      await api.pttTurn(text, sttMs, speechMs)
       setMessage('')
     } catch (e) {
       setMessage(e instanceof ApiError ? e.message : String(e))
@@ -43,8 +43,14 @@ export function PrompterPage() {
         live.send('stt_partial', { text })
       }
     },
-    onFinal: (text, sttMs) => void sendTurn(text, sttMs),
+    onFinal: (text, sttMs, speechMs) => void sendTurn(text, sttMs, speechMs),
   })
+
+  // Konsol menyalakan indikator mikrofon selama tombol bicara ditahan.
+  const { send } = live
+  useEffect(() => {
+    send('stt_partial', { text: '', active: ptt.listening })
+  }, [ptt.listening, send])
 
   const next = async () => {
     try {
@@ -93,27 +99,28 @@ export function PrompterPage() {
       </div>
     )
   }
-  if (snap.mode !== 'A') {
+  if (snap.mode === 'B') {
     return (
       <div className="prompter idle">
         <h1>Prompter</h1>
-        <p>Siaran yang berjalan adalah mode B (AI + AI); prompter dipakai di mode A.</p>
+        <p>Siaran yang berjalan adalah mode B (AI + AI); prompter dipakai di mode A dan C.</p>
       </div>
     )
   }
 
   const segment = snap.segment === 'topic' ? snap.topic?.judul : snap.segment === 'closing' ? 'Closing' : 'Opening'
   const points = snap.topic_points ?? []
+  const currentTopic = snap.rundown?.topics.find((t) => t.id === snap.topic?.id)
   const covered = points.filter((p) => p.covered).length
   const recent = transcript.slice(-4)
-  const aiSpeaking = live.speaking === snap.ai_persona || snap.busy
+  const aiSpeaking = snap.busy || (snap.personas ?? []).some((p) => p.id === live.speaking)
 
   return (
     <div className="prompter">
       <header>
         <span className={`state ${snap.state}`}>{snap.state === 'paused' ? 'PAUSE' : '● LIVE'}</span>
         <span className="tema">{snap.blocker?.tema}</span>
-        <span className="with">bersama {ai?.name} (AI)</span>
+        <span className="with">bersama {aiNames} (AI)</span>
         <button className="next" onClick={() => void next()}>
           Next topik <kbd>N</kbd>
         </button>
@@ -121,6 +128,27 @@ export function PrompterPage() {
 
       <section className="topic">
         <div className="segment">{segment}</div>
+        {snap.segment === 'opening' && snap.rundown && (
+          <>
+            <div className="lead">{snap.rundown.opening.hook}</div>
+            {snap.rundown.opening.poin.length > 0 && (
+              <ul className="points">
+                {snap.rundown.opening.poin.map((p) => (
+                  <li key={p}>
+                    <span className="check">○</span> {p}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+        {snap.segment === 'closing' && snap.rundown && (
+          <>
+            <div className="lead">{snap.rundown.closing.rangkuman}</div>
+            <div className="question">📣 {snap.rundown.closing.ajakan}</div>
+          </>
+        )}
+        {snap.segment === 'topic' && currentTopic && <div className="angle">Sudut pandang: {currentTopic.sudut_pandang}</div>}
         {snap.topic?.pertanyaan_penonton && <div className="question">❓ {snap.topic.pertanyaan_penonton}</div>}
         {points.length > 0 && (
           <ul className="points">
@@ -133,11 +161,61 @@ export function PrompterPage() {
         )}
       </section>
 
+      {snap.segment === 'topic' && currentTopic?.transisi && <div className="transition">➡ Transisi: {currentTopic.transisi}</div>}
+
       {advice && (
         <section className="advice">
           Poin tercakup {covered}/{points.length}
           {advice.steer_hint && <> · saran: {advice.steer_hint.replace(/^bahas t\d+p\d+: /, '').replace(/^sudut baru: /, '')}</>}
           {(advice.decision === 'transition' || advice.decision === 'close') && <strong> · siap pindah</strong>}
+        </section>
+      )}
+
+      {snap.rundown && (
+        <section className="rundown" aria-label="Rundown blocker">
+          <ol className="steps">
+            {[
+              { key: 'opening', label: 'Opening', on: snap.segment === 'opening' },
+              ...snap.rundown.topics.map((t) => ({ key: t.id, label: t.judul, on: snap.segment === 'topic' && snap.topic?.id === t.id })),
+              { key: 'closing', label: 'Closing', on: snap.segment === 'closing' },
+            ].map((s, i, all) => {
+              const here = all.findIndex((x) => x.on)
+              return (
+                <li key={s.key} className={s.on ? 'now' : i < here ? 'past' : ''}>
+                  {s.label}
+                </li>
+              )
+            })}
+          </ol>
+          <details>
+            <summary>Seluruh blocker</summary>
+            <div className="full">
+              <p>
+                <b>Opening:</b> {snap.rundown.opening.hook}
+                {snap.rundown.opening.poin.length > 0 && <> ({snap.rundown.opening.poin.join(' · ')})</>}
+              </p>
+              {snap.rundown.topics.map((t, i) => (
+                <div key={t.id} className={snap.topic?.id === t.id ? 'cur' : ''}>
+                  <p>
+                    <b>
+                      Topik {i + 1}: {t.judul}
+                    </b>{' '}
+                    <i>({t.sudut_pandang})</i>
+                  </p>
+                  <ul>
+                    {t.poin.map((p) => (
+                      <li key={p.id}>{p.text}</li>
+                    ))}
+                  </ul>
+                  <p>❓ {t.pertanyaan_penonton}</p>
+                  <p>➡ {t.transisi}</p>
+                </div>
+              ))}
+              <p>
+                <b>Closing:</b> {snap.rundown.closing.rangkuman} — {snap.rundown.closing.ajakan}
+              </p>
+            </div>
+          </details>
         </section>
       )}
 
@@ -167,7 +245,7 @@ export function PrompterPage() {
         <label className="toggle">
           <input type="checkbox" checked={toggleMode} onChange={(e) => setToggleMode(e.target.checked)} /> tekan sekali mulai, tekan lagi selesai
         </label>
-        <div className="partial">{partial || (aiSpeaking ? `${ai?.name} sedang menjawab…` : '')}</div>
+        <div className="partial">{partial || (aiSpeaking ? `${aiNames} sedang menjawab…` : '')}</div>
         {(ptt.error || message) && <div className="warn">{ptt.error || message}</div>}
         {ptt.listening && <div className="hint">Esc = batal</div>}
       </section>

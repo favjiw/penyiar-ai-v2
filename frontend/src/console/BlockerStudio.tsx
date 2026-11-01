@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
 import type { Blocker, GenerateRequest } from '../types'
-import { BlockerEditor } from './BlockerEditor'
+import { BlockerEditor, lockProblems } from './BlockerEditor'
 import { BlockerView, VariantCard } from './VariantCard'
 
 type Busy = null | 'generate' | 'save' | 'lock' | 'version' | `regen:${string}`
@@ -75,7 +75,7 @@ export function BlockerStudio() {
     setDirty(false)
     setStatus(
       `${res.variants.length} varian dalam ${(res.latency_ms / 1000).toFixed(1)} s · ${res.model}` +
-        (res.attempts > 1 ? ' · diulang sekali' : ''),
+        (res.attempts > 1 ? ` · diulang ${res.attempts - 1}×` : ''),
     )
   }
 
@@ -111,6 +111,11 @@ export function BlockerStudio() {
 
   const lock = async () => {
     if (!active || active.locked) return
+    const problems = lockProblems(active)
+    if (problems.length) {
+      setError({ message: 'Belum bisa dikunci. Lengkapi dulu:', issues: problems })
+      return
+    }
     const current = dirty ? await save() : active
     if (!current) return
     const toCheck = current.topics.flatMap((t) => t.poin).filter((p) => p.perlu_cek).length

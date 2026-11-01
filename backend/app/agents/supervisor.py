@@ -96,6 +96,11 @@ class Reviewed:
     persona_result: PersonaResult  # hasil persona yang dipakai (asli atau buat ulang)
     judgement_prompt: str = ""
 
+    @property
+    def hook(self) -> str:
+        """Verdict dalam kosakata hook: teruskan | koreksi | ganti."""
+        return {"forward": "teruskan", "regenerate": "koreksi", "fallback": "ganti"}[self.verdict.action]
+
 
 Regenerate = Callable[[CorrectionMemory], Awaitable[PersonaResult]]
 
@@ -188,6 +193,14 @@ class Supervisor:
         if any(h not in sanitized_only for h in hits):
             return True
         return bool(judgement and "violation" in (judgement.persona, judgement.blocker, judgement.safety))
+
+    async def check(self, persona: PersonaCard, candidate: PersonaResult, ctx: TurnContext, regenerate: Regenerate, turn: int) -> Reviewed:
+        """Hook di antara LLM dan TTS (`teruskan | koreksi | ganti`, lihat `Reviewed.hook`).
+
+        Dengan SUPERVISOR_MODE=off (default) hook ini pass-through: teks persona diteruskan apa adanya
+        tanpa pemanggilan LLM. `rules` dan `full` menjalankan pemeriksaan FR-5 penuh.
+        """
+        return await self.review(persona, candidate, ctx, regenerate, turn)
 
     async def review(self, persona: PersonaCard, candidate: PersonaResult, ctx: TurnContext, regenerate: Regenerate, turn: int) -> Reviewed:
         out = candidate.output

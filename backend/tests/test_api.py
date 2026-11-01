@@ -11,7 +11,7 @@ from app.main import build_app
 def client(tmp_path):
     settings = Settings(
         LLM_MODE="mock", TTS_MODE="mock", DATA_DIR=str(tmp_path / "data"), LOG_DIR=str(tmp_path / "logs"),
-        CACHE_DIR=str(tmp_path / "cache"), AVATAR_DIR=str(tmp_path / "avatar"), _env_file=None,
+        CACHE_DIR=str(tmp_path / "cache"), _env_file=None,
     )
     with TestClient(build_app(settings)) as c:
         c.log_dir = tmp_path / "logs"
@@ -64,11 +64,3 @@ def test_full_blocker_flow(client):
 def test_unknown_and_malformed_ids(client):
     assert client.get("/api/blocker/blk_tidak_ada").status_code == 404
     assert client.get("/api/blocker/..%2Fsecret").status_code == 404
-
-
-def test_avatar_assets_are_served(client, tmp_path):
-    folder = tmp_path / "avatar" / "raka"
-    folder.mkdir(parents=True)
-    (folder / "manifest.json").write_text('{"persona": "raka", "clips": []}', encoding="utf-8")
-    assert client.get("/avatar-assets/raka/manifest.json").json()["persona"] == "raka"
-    assert client.get("/avatar-assets/salsa/manifest.json").status_code == 404
