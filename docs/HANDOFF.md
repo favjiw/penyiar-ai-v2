@@ -3,7 +3,7 @@
 Acuan tunggal tetap `PRD.md` (v2.5). Rincian hasil uji: `docs/CATATAN-PROGRES.md`. Audit penghapusan: `docs/AUDIT-STRIP.md`.
 
 ## Tujuan
-Memfokuskan riset pada **kualitas percakapan** (podcast: Opening, maks 3 topik, Closing; target 40+ menit). Avatar, komentar, OBS, dan live TikTok ditunda. Branch ini 15 commit di depan `main`, belum di-merge dan belum ada PR. Kondisi sebelum penghapusan: branch `archive/avatar-dan-komentar` dan tag `pre-strip`.
+Memfokuskan riset pada **kualitas percakapan** (podcast: Opening, maks 3 topik, Closing; target 40+ menit). Avatar, komentar, OBS, dan live TikTok ditunda. Branch ini 16 commit di depan `main` (termasuk checkpoint ini), belum di-merge dan belum ada PR. Kondisi sebelum penghapusan: branch `archive/avatar-dan-komentar` dan tag `pre-strip`.
 
 ## Sudah selesai
 - Fase 1: avatar T1, MuseTalk T2, halaman stage, dan setelan komentar dihapus (role WS `stage` hilang; konsol satu-satunya pemutar audio).
@@ -18,7 +18,7 @@ Memfokuskan riset pada **kualitas percakapan** (podcast: Opening, maks 3 topik, 
 - **Kualitas percakapan**: transkrip 34 menit belum dinilai (pengulangan, konsistensi persona, efek ringkasan, AI yang menimpali).
 - ElevenLabs lewat lapisan baru: backend memuatnya tanpa peringatan; latensi dan kredit nyata belum diukur. Jalankan `python scripts/test_tts.py --providers elevenlabs`.
 - Penilaian layak siar 8 dari 10 tema (KT FR-1), `prefers-reduced-motion`, sesi mode A/C yang panjang, kalibrasi Showrunner mode saran di C.
-- PRD §6.1, §6.3, §11, Lampiran B, §5, dan README masih menyebut stage/avatar/komentar; README belum memuat mode C.
+- PRD masih menyebut stage/avatar/komentar di §4, §5, §6.1, §6.3, §9.2 (`clips`), §11, dan FR-7 ("halaman stage"). README belum memuat mode C dan masih menyebut konfigurasi preview `backend-edge` yang sudah dihapus.
 - Tahap 7 (harness eksperimen FR-14) belum dimulai; evaluasi Supervisor `rules`/`full` belum dijalankan.
 - Prompt persona, Showrunner, Supervisor masih menyebut "live TikTok HITS".
 
