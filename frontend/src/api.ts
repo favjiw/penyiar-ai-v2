@@ -33,7 +33,7 @@ export const api = {
   save: (b: Blocker) => request<Blocker>(`/api/blocker/${b.id}`, { method: 'PUT', body: JSON.stringify(b) }),
   lock: (id: string) => post<Blocker>(`/api/blocker/${id}/lock`),
   newVersion: (id: string) => post<Blocker>(`/api/blocker/${id}/version`),
-  lockedList: () => request<Blocker[]>('/api/blockers?locked=true'),
+  list: () => request<Blocker[]>('/api/blockers'),
   startShow: (blocker_id: string, mode: 'A' | 'B' = 'B', opts: { ai_persona?: string; human_name?: string } = {}) =>
     post<ShowSnapshot>('/api/show/start', { blocker_id, mode, ...opts }),
   pttTurn: (text: string, stt_ms: number, speech_ms = 0) =>

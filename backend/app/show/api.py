@@ -11,6 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 
+from app.blocker.store import BlockerInvalid
 from app.data.personas import load_personas
 from app.schemas import PTTTurnRequest, ShowState, StartShowRequest
 from app.session_log import read_log
@@ -44,23 +45,27 @@ async def start_show(req: StartShowRequest, request: Request):
     running = current(request)
     if running is not None and running.state != ShowState.ENDED:
         raise HTTPException(409, f"Siaran {running.session_id} masih berjalan; stop dulu")
+    personas = load_personas()
+    if req.mode == "A" and req.ai_persona not in personas:
+        raise HTTPException(422, "Mode A: pilih ai_persona raka atau salsa")  # sebelum mengunci apa pun
     blocker = app.state.store.get(req.blocker_id)
     if not blocker.locked:
-        raise HTTPException(422, "Kunci blocker dulu sebelum live")
+        # Blocking terkunci begitu live dimulai (draf hasil generate boleh langsung dipakai tanpa edit).
+        try:
+            blocker = app.state.store.lock(req.blocker_id)
+        except BlockerInvalid as e:
+            raise HTTPException(422, str(e))
     ws: ConnectionManager = app.state.ws
     common = dict(seed=req.seed, has_audio_owner=lambda: ws.audio_owner() is not None)
     if req.mode == "A":
-        personas = load_personas()
         human_name = req.human_name or app.state.settings.HUMAN_HOST_NAME
-        if req.ai_persona not in personas:
-            raise HTTPException(422, "Mode A: pilih ai_persona raka atau salsa")
         engine: ShowEngine = HumanLedEngine(
             app.state.settings, app.state.llm, app.state.tts, blocker, emit=ws.broadcast, audio_dir=audio_dir(request),
             personas=personas, human_name=human_name, ai_persona=req.ai_persona, **common,
         )
     else:
         engine = ShowEngine(
-            app.state.settings, app.state.llm, app.state.tts, blocker, load_personas(), ws.broadcast, audio_dir(request), mode="B", **common
+            app.state.settings, app.state.llm, app.state.tts, blocker, personas, ws.broadcast, audio_dir(request), mode="B", **common
         )
     app.state.engine = engine
     engine.start()

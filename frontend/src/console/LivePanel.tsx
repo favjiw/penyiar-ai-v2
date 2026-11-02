@@ -11,7 +11,7 @@ const isTyping = (el: Element | null) => !!el && ['INPUT', 'TEXTAREA', 'SELECT']
 
 interface Props {
   live: LiveSession
-  lockedBlockers: Blocker[]
+  blockers: Blocker[]
   onRefreshBlockers: () => void
 }
 
@@ -24,7 +24,7 @@ function segmentLabel(t: { segment: string; topic_id: string | null }, topics: s
 }
 
 /** Kontrol dan pemantauan siaran (FR-11): orb giliran bicara, transkrip, dan panel agen. */
-export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
+export function LivePanel({ live, blockers, onRefreshBlockers }: Props) {
   const { snapshot: snap, transcript, showrunner, supervisor, output } = live
   const [blockerId, setBlockerId] = useState('')
   const [mode, setMode] = useState<'A' | 'B'>('B')
@@ -38,8 +38,8 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
   const onAir = snap.state === 'live' || snap.state === 'paused'
 
   useEffect(() => {
-    if (!blockerId && lockedBlockers.length) setBlockerId(lockedBlockers[0].id)
-  }, [lockedBlockers, blockerId])
+    if (!blockerId && blockers.length) setBlockerId(blockers[0].id)
+  }, [blockers, blockerId])
 
   // Jam siaran: snapshot server + detak lokal
   useEffect(() => {
@@ -127,11 +127,12 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
           </>
         ) : (
           <>
-            <select value={blockerId} onChange={(e) => setBlockerId(e.target.value)} onFocus={onRefreshBlockers} aria-label="Blocker terkunci">
-              {lockedBlockers.length === 0 && <option value="">Belum ada blocker terkunci</option>}
-              {lockedBlockers.map((b) => (
+            <select value={blockerId} onChange={(e) => setBlockerId(e.target.value)} onFocus={onRefreshBlockers} aria-label="Blocking">
+              {blockers.length === 0 && <option value="">Belum ada blocking; buat di tab Blocker</option>}
+              {blockers.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.tema} · {b.variant_label} · v{b.versi}
+                  {b.locked ? ' · terkunci' : ' · draf'}
                 </option>
               ))}
             </select>
@@ -160,8 +161,11 @@ export function LivePanel({ live, lockedBlockers, onRefreshBlockers }: Props) {
             )}
             <button
               className="primary"
-              onClick={() =>
-                act(() =>
+              onClick={() => {
+                const b = blockers.find((x) => x.id === blockerId)
+                const toCheck = b ? b.topics.flatMap((t) => t.poin).filter((p) => p.perlu_cek).length : 0
+                if (toCheck && !window.confirm(`Ada ${toCheck} poin bertanda "perlu cek". Blocking akan dikunci dan dipakai live. Lanjutkan?`)) return
+                void act(() =>
                   mode === 'A'
                     ? api.startShow(blockerId, 'A', { ai_persona: aiPersona, human_name: humanName })
                     : api.startShow(blockerId, 'B'),
