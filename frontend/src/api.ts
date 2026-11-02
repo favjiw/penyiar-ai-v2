@@ -27,21 +27,37 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 const post = <T>(path: string, data?: unknown) =>
   request<T>(path, { method: 'POST', body: data === undefined ? undefined : JSON.stringify(data) })
 
+export interface VoiceOption {
+  id: string
+  provider: 'elevenlabs' | 'edge'
+  name: string
+  gender: 'male' | 'female'
+  notes: string
+}
+
+export interface VoiceCatalog {
+  provider: string
+  voices: VoiceOption[]
+  current: Record<string, string>
+}
+
 export const api = {
+  voices: () => request<VoiceCatalog>('/api/voices'),
   generate: (req: GenerateRequest) => post<GenerateResponse>('/api/blocker/generate', req),
   regenerate: (id: string, hindari: string[]) => post<RegenerateResponse>(`/api/blocker/${id}/regenerate`, { hindari }),
   save: (b: Blocker) => request<Blocker>(`/api/blocker/${b.id}`, { method: 'PUT', body: JSON.stringify(b) }),
   lock: (id: string) => post<Blocker>(`/api/blocker/${id}/lock`),
   newVersion: (id: string) => post<Blocker>(`/api/blocker/${id}/version`),
   list: () => request<Blocker[]>('/api/blockers'),
-  startShow: (blocker_id: string, mode: 'A' | 'B' = 'B', opts: { ai_persona?: string; human_name?: string } = {}) =>
+  startShow: (blocker_id: string, mode: 'A' | 'B' = 'B', opts: { ai_persona?: string; human_name?: string; voices?: Record<string, string> } = {}) =>
     post<ShowSnapshot>('/api/show/start', { blocker_id, mode, ...opts }),
   pttTurn: (text: string, stt_ms: number, speech_ms = 0) =>
     post<{ filler?: string | null; responder?: string }>('/api/ptt/turn', { text, stt_ms, speech_ms }),
   control: (action: 'pause' | 'resume' | 'next' | 'stop') => post<ShowSnapshot>(`/api/show/${action}`),
-  precheck: () =>
+  precheck: (voices: Record<string, string> = {}) =>
     post<{ models_ok: boolean; tts_ok: boolean; tts_error?: string; tts_warmup_ms?: Record<string, number>; models: Record<string, string> }>(
       '/api/precheck',
+      { voices },
     ),
   health: () => request<{ llm_mode: string; tts_mode: string; models: Record<string, string>; tts?: TtsStatus }>('/api/health'),
 }

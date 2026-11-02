@@ -112,6 +112,7 @@ class HumanLedEngine(ShowEngine):
             personas=[p.id for p in self.personas],
             participants=[{"id": p.id, "name": p.name, "kind": p.kind} for p in self.participants],
             human_name=self.human_name,
+            voices={p.id: self.tts.voice_for(p.id) for p in self.personas},
             config={k: getattr(self.settings, k) for k in (
                 "LLM_MODE", "TTS_MODE", "TTS_PROVIDER", "TTS_FALLBACK", "SUPERVISOR_MODE", "SHOWRUNNER_POLICY", "SHOWRUNNER_EVERY_K",
                 "SUPERVISOR_TIMEOUT_MS_MODE_A", "SUMMARY_EVERY_TURNS")},
@@ -299,7 +300,7 @@ class HumanLedEngine(ShowEngine):
                 raw_text=candidate.output.text, final_text=reviewed.text, emotion=reviewed.emotion, dialog_act=candidate.dialog_act,
                 supervisor=reviewed.verdict, latency_ms=latency,
                 models={"persona": candidate.model, "supervisor": self.supervisor._model if self.supervisor.mode == "full" else ""},
-                tts_provider=",".join(sorted(providers)), tts_fallback_used=fallback_used, audio_url=first["url"] if first else None,
+                tts_provider=",".join(sorted(providers)), tts_voice=first["voice"] if first else "", tts_fallback_used=fallback_used, audio_url=first["url"] if first else None,
                 duration_s=round(sum(durations), 2), credit_cost=credits, filler=filler, seed=self.seed,
             )
             self.log.event("turn", record)
@@ -317,6 +318,7 @@ class HumanLedEngine(ShowEngine):
                 asr_ms=stt_ms, llm_ms=candidate.latency_ms, supervisor_ms=latency.supervisor, tts_ms=tts_ms, model=candidate.model,
                 tts_chars=tts_chars, filler=filler, supervisor_action=reviewed.verdict.action, tts_provider=",".join(sorted(providers)),
                 tts_fallback_used=fallback_used, dialog_act=candidate.dialog_act, gap_ms=latency.gap_before_play, interrupted=not completed,
+                tts_voice=first["voice"] if first else "",
             )
         return turn, sum(durations)
 
@@ -340,7 +342,8 @@ class HumanLedEngine(ShowEngine):
         path = self.audio_dir / f"{self.session_id}_{turn:04d}_{index}.{r.ext}"
         path.write_bytes(r.audio)
         return {"url": f"/audio/{path.name}", "fallback": r.fallback_used,
-                "duration_s": r.duration_s, "provider": r.provider, "latency_ms": r.latency_ms, "credits": r.credit_cost}
+                "duration_s": r.duration_s, "provider": r.provider, "latency_ms": r.latency_ms, "credits": r.credit_cost,
+                "voice": r.voice.split("|")[0]}
 
     async def _wait_playback(self, duration_s: float) -> None:
         timeout = duration_s + 5.0 if self._has_owner() else duration_s * self._time_scale

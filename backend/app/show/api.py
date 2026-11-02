@@ -13,10 +13,13 @@ from fastapi.responses import FileResponse
 
 from app.blocker.store import BlockerInvalid
 from app.data.personas import load_personas
-from app.schemas import PTTTurnRequest, ShowState, StartShowRequest
+from app.schemas import PrecheckRequest, PTTTurnRequest, ShowState, StartShowRequest
 from app.session_log import read_log
 from app.show.engine import ShowEngine
 from app.show.mode_a import HumanLedEngine
+from app.show.participants import DEFAULT_AI_IDS
+from app.tts.base import TTSError
+from app.tts.catalog import load_voice_catalog
 from app.ws import ConnectionManager
 
 logger = logging.getLogger(__name__)
@@ -48,6 +51,11 @@ async def start_show(req: StartShowRequest, request: Request):
     personas = load_personas()
     if req.mode == "A" and req.ai_persona not in personas:
         raise HTTPException(422, "Mode A: pilih ai_persona raka atau salsa")  # sebelum mengunci apa pun
+    ai_ids = [req.ai_persona] if req.mode == "A" else list(DEFAULT_AI_IDS)
+    try:
+        app.state.tts.check_voices(req.voices, ai_ids)  # sebelum mengunci apa pun; diterapkan sesudah lolos semua cek
+    except TTSError as e:
+        raise HTTPException(422, str(e))
     blocker = app.state.store.get(req.blocker_id)
     if not blocker.locked:
         # Blocking terkunci begitu live dimulai (draf hasil generate boleh langsung dipakai tanpa edit).
@@ -55,6 +63,7 @@ async def start_show(req: StartShowRequest, request: Request):
             blocker = app.state.store.lock(req.blocker_id)
         except BlockerInvalid as e:
             raise HTTPException(422, str(e))
+    app.state.tts.set_voices(req.voices, ai_ids)
     ws: ConnectionManager = app.state.ws
     common = dict(seed=req.seed, has_audio_owner=lambda: ws.audio_owner() is not None)
     if req.mode == "A":
@@ -99,10 +108,27 @@ async def ptt_turn(req: PTTTurnRequest, request: Request):
     return await engine.human_turn(req.text, req.stt_ms, req.speech_ms) or {}
 
 
+@router.get("/api/voices")
+async def voices(request: Request):
+    """Daftar suara terkurasi + suara aktif per persona (untuk pilihan operator sebelum live)."""
+    tts = request.app.state.tts
+    return {
+        "provider": tts.primary.name,
+        "voices": load_voice_catalog(),
+        "current": {p: tts.voice_for(p) for p in load_personas()},
+    }
+
+
 @router.post("/api/precheck")
-async def precheck(request: Request):
+async def precheck(request: Request, req: Optional[PrecheckRequest] = None):
     """Cek pra-live (§5.1): model terisi, TTS dipanaskan (cold start suara library)."""
     app = request.app
+    running = current(request)
+    if req is not None and (running is None or running.state == ShowState.ENDED):
+        try:  # panaskan suara yang dipilih (kosong = bawaan); tidak menyentuh pilihan selama siaran berjalan
+            app.state.tts.set_voices(req.voices, list(DEFAULT_AI_IDS))
+        except TTSError as e:
+            raise HTTPException(422, str(e))
     s = app.state.settings
     personas = load_personas()
     result = {

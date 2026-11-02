@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, ApiError } from '../api'
+import { api, ApiError, type VoiceCatalog } from '../api'
 import type { LiveSession } from '../live/useLiveSession'
 import { ttsLabel } from '../live/tts'
 import type { Blocker } from '../types'
@@ -33,6 +33,8 @@ export function LivePanel({ live, blockers, onRefreshBlockers }: Props) {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [precheck, setPrecheck] = useState<string>('')
+  const [catalog, setCatalog] = useState<VoiceCatalog | null>(null)
+  const [voiceChoice, setVoiceChoice] = useState<Record<string, string>>({})
   const [elapsed, setElapsed] = useState(0)
   const transcriptEnd = useRef<HTMLDivElement>(null)
   const onAir = snap.state === 'live' || snap.state === 'paused'
@@ -40,6 +42,22 @@ export function LivePanel({ live, blockers, onRefreshBlockers }: Props) {
   useEffect(() => {
     if (!blockerId && blockers.length) setBlockerId(blockers[0].id)
   }, [blockers, blockerId])
+
+  // Daftar suara terkurasi; pilihan awal = suara aktif sekarang (id sebelum tanda '|' untuk Edge)
+  useEffect(() => {
+    api
+      .voices()
+      .then((c) => {
+        setCatalog(c)
+        const pick: Record<string, string> = {}
+        for (const [persona, cur] of Object.entries(c.current)) {
+          const id = cur.split('|')[0]
+          if (c.voices.some((v) => v.id === id && v.provider === c.provider)) pick[persona] = id
+        }
+        setVoiceChoice(pick)
+      })
+      .catch(() => setCatalog(null))
+  }, [])
 
   // Jam siaran: snapshot server + detak lokal
   useEffect(() => {
@@ -71,7 +89,7 @@ export function LivePanel({ live, blockers, onRefreshBlockers }: Props) {
   const runPrecheck = () =>
     act(async () => {
       setPrecheck('Memeriksa… (memanaskan suara TTS)')
-      const r = await api.precheck()
+      const r = await api.precheck(chosenVoices)
       const warm = r.tts_warmup_ms ? Object.values(r.tts_warmup_ms).map((ms) => `${(ms / 1000).toFixed(1)} s`).join(', ') : ''
       setPrecheck(
         [
@@ -80,6 +98,11 @@ export function LivePanel({ live, blockers, onRefreshBlockers }: Props) {
         ].join(' · '),
       )
     })
+
+  const aiIds = mode === 'A' ? [aiPersona] : ['raka', 'salsa']
+  const chosenVoices = Object.fromEntries(aiIds.filter((id) => voiceChoice[id]).map((id) => [id, voiceChoice[id]]))
+  const effectiveVoice = (id: string) => voiceChoice[id] || catalog?.current[id]?.split('|')[0] || ''
+  const sameVoice = mode === 'B' && !!effectiveVoice('raka') && effectiveVoice('raka') === effectiveVoice('salsa')
 
   const control = (a: 'pause' | 'resume' | 'next' | 'stop') => act(() => api.control(a))
   const stop = () => window.confirm('Hentikan siaran sekarang?') && control('stop')
@@ -159,6 +182,26 @@ export function LivePanel({ live, blockers, onRefreshBlockers }: Props) {
                 />
               </>
             )}
+            {catalog &&
+              aiIds.map((id) => (
+                <select
+                  key={id}
+                  value={voiceChoice[id] ?? ''}
+                  onChange={(e) => setVoiceChoice({ ...voiceChoice, [id]: e.target.value })}
+                  aria-label={`Suara ${id}`}
+                  title={catalog.voices.find((v) => v.id === voiceChoice[id])?.notes}
+                >
+                  <option value="">Suara {id === 'raka' ? 'Raka' : 'Salsa'}: bawaan</option>
+                  {catalog.voices
+                    .filter((v) => v.provider === catalog.provider)
+                    .map((v) => (
+                      <option key={v.id} value={v.id}>
+                        Suara {id === 'raka' ? 'Raka' : 'Salsa'}: {v.name} ({v.gender === 'male' ? 'pria' : 'wanita'})
+                      </option>
+                    ))}
+                </select>
+              ))}
+            {sameVoice && <span className="error" role="alert">Raka dan Salsa memakai suara yang sama</span>}
             <button
               className="primary"
               onClick={() => {
@@ -167,8 +210,8 @@ export function LivePanel({ live, blockers, onRefreshBlockers }: Props) {
                 if (toCheck && !window.confirm(`Ada ${toCheck} poin bertanda "perlu cek". Blocking akan dikunci dan dipakai live. Lanjutkan?`)) return
                 void act(() =>
                   mode === 'A'
-                    ? api.startShow(blockerId, 'A', { ai_persona: aiPersona, human_name: humanName })
-                    : api.startShow(blockerId, 'B'),
+                    ? api.startShow(blockerId, 'A', { ai_persona: aiPersona, human_name: humanName, voices: chosenVoices })
+                    : api.startShow(blockerId, 'B', { voices: chosenVoices }),
                 )
               }}
               disabled={busy || !blockerId || (mode !== 'B' && !humanName.trim())}

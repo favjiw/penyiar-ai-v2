@@ -33,6 +33,7 @@ from app.tts.base import (
     silence_wav,
     wav_duration,
 )
+from app.tts.catalog import find_voice
 from app.tts.voices import VoiceBook
 
 logger = logging.getLogger(__name__)
@@ -292,6 +293,32 @@ class FailoverTTS:
         self.fallback_uses = 0
         self.last_provider = ""
         self.warnings: list[str] = list(warnings)
+        self.voice_book: VoiceBook | None = None  # diisi create_tts; None untuk mock
+
+    def check_voices(self, selection: dict[str, str], personas: Sequence[str]) -> None:
+        """Validasi pilihan suara tanpa menerapkannya: id ada di katalog, milik provider yang dipakai, persona ikut siaran."""
+        active = {self.primary.name, *(f.name for f in self.fallbacks)}
+        for persona, voice_id in selection.items():
+            if persona not in personas:
+                raise TTSError(f"Persona {persona!r} tidak ikut siaran ini")
+            option = find_voice(voice_id)
+            if option is None:
+                raise TTSError(f"Suara {voice_id!r} tidak ada di daftar suara terkurasi")
+            if self.primary.name != "mock" and option.provider not in active:
+                raise TTSError(f"Suara {option.name} ({option.provider}) tidak cocok dengan TTS aktif ({self.primary.name})")
+
+    def set_voices(self, selection: dict[str, str], personas: Sequence[str]) -> None:
+        """Pilihan suara operator per persona (id dari katalog); dikirim kosong = kembali ke bawaan."""
+        self.check_voices(selection, personas)
+        if self.voice_book is not None:
+            self.voice_book.select(selection)
+
+    def voice_for(self, persona: str) -> str:
+        """Suara provider utama untuk persona (untuk log); kosong bila tidak diketahui."""
+        try:
+            return self.primary.cache_key(persona).split("|")[0]  # Edge: buang rate/pitch dari kunci cache
+        except Exception:
+            return ""
 
     @property
     def fallback(self) -> TTSProvider | None:
@@ -413,7 +440,7 @@ def create_tts(settings, personas: dict | None = None) -> FailoverTTS:
         provider = _build(fb, settings, voices, warnings)
         if provider is not None:
             fallbacks.append(provider)
-    return FailoverTTS(
+    tts = FailoverTTS(
         primary,
         fallbacks,
         cache,
@@ -421,3 +448,5 @@ def create_tts(settings, personas: dict | None = None) -> FailoverTTS:
         retries=settings.TTS_RETRIES,
         warnings=warnings,
     )
+    tts.voice_book = voices
+    return tts

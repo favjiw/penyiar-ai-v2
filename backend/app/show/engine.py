@@ -440,13 +440,14 @@ class ShowEngine:
             await self._alert("quota", f"Supervisor turun ke mode {self.supervisor.mode}: {self.supervisor.last_llm_error[:120]}")
             self._supervisor_mode = self.supervisor.mode
 
-        audio_path, duration, tts_provider, tts_reason, credits = None, max(1.5, len(reviewed.text.split()) / 3.0), "", "", 0
+        audio_path, duration, tts_provider, tts_reason, credits, tts_voice = None, max(1.5, len(reviewed.text.split()) / 3.0), "", "", 0, ""
         try:
             result = await self.tts.synthesize(reviewed.text, speaker.id)
             latency.tts = result.latency_ms
             audio_path = self.audio_dir / f"{self.session_id}_{turn:04d}.{result.ext}"
             audio_path.write_bytes(result.audio)
             duration, tts_provider, tts_reason, credits = result.duration_s, result.provider, result.fallback_reason, result.credit_cost
+            tts_voice = result.voice.split("|")[0]
             if result.fallback_used:
                 await self._alert_once(f"tts_fallback:{result.provider}", f"TTS {self.tts.primary.name} gagal ({tts_reason[:100]}); suara memakai {result.provider}")
         except (TTSError, Exception) as e:
@@ -468,6 +469,7 @@ class ShowEngine:
             latency_ms=latency,
             models={"persona": candidate.model, "supervisor": self.supervisor._model if self.supervisor.mode == "full" else "", "tts": tts_provider},
             tts_provider=tts_provider,
+            tts_voice=tts_voice,
             tts_fallback_reason=tts_reason,
             tts_fallback_used=bool(tts_reason),
             audio_url=f"/audio/{audio_path.name}" if audio_path else None,
@@ -491,7 +493,7 @@ class ShowEngine:
         self, *, turn: int, speaker: str, speaker_name: str, is_human: bool, segment: str, topic_id: Optional[str], text: str, raw_text: str,
         t_start: float, t_end: float, asr_ms: int, llm_ms: int, tts_ms: int, model: str, tts_chars: int, filler: Optional[str],
         supervisor_ms: int = 0, supervisor_action: str = "forward", tts_provider: str = "", tts_fallback_used: bool = False,
-        dialog_act: Optional[str] = None, gap_ms: int = 0, interrupted: bool = False,
+        dialog_act: Optional[str] = None, gap_ms: int = 0, interrupted: bool = False, tts_voice: str = "",
     ) -> None:
         """Satu baris `sessions/<id>/turns.jsonl` (lihat turnlog.py untuk arti tiap medan)."""
         try:
@@ -501,7 +503,7 @@ class ShowEngine:
                 t_start=round(t_start, 3), t_end=round(t_end, 3), latency_asr_ms=asr_ms, latency_llm_ms=llm_ms, latency_supervisor_ms=supervisor_ms,
                 latency_tts_ms=tts_ms, gap_before_play_ms=gap_ms, model=model, tts_chars=tts_chars, filler_used=filler,
                 supervisor_action=supervisor_action, tts_provider=tts_provider, tts_fallback_used=tts_fallback_used,
-                dialog_act=dialog_act, interrupted=interrupted,
+                dialog_act=dialog_act, interrupted=interrupted, tts_voice=tts_voice,
             )
         except OSError as e:
             self.log.event("error", stage="turn_log", message=str(e)[:300])
@@ -624,7 +626,7 @@ class ShowEngine:
                 t_start=t_start, t_end=wall_clock(), asr_ms=0, llm_ms=t.record.latency_ms.persona, supervisor_ms=t.record.latency_ms.supervisor,
                 tts_ms=t.record.latency_ms.tts, model=t.record.models.get("persona", ""), tts_chars=t.tts_chars, filler=None,
                 supervisor_action=t.record.supervisor.action, tts_provider=t.record.tts_provider, tts_fallback_used=t.record.tts_fallback_used,
-                dialog_act=t.record.dialog_act, gap_ms=gap, interrupted=not completed,
+                dialog_act=t.record.dialog_act, gap_ms=gap, interrupted=not completed, tts_voice=t.record.tts_voice,
             )
 
     # ── Loop utama ───────────────────────────────────────────────────────────
@@ -637,6 +639,7 @@ class ShowEngine:
             blocker=self.blocker.model_dump(mode="json"),
             personas=[p.id for p in self.personas],
             participants=[{"id": p.id, "name": p.name, "kind": p.kind} for p in self.participants],
+            voices={p.id: self.tts.voice_for(p.id) for p in self.personas},
             config={k: getattr(self.settings, k) for k in (
                 "LLM_MODE", "TTS_MODE", "TTS_PROVIDER", "TTS_FALLBACK", "SUPERVISOR_MODE", "SHOWRUNNER_POLICY", "SHOWRUNNER_EVERY_K",
                 "MIN_TURNS_PER_TOPIC", "MAX_TURNS_PER_TOPIC", "FIXED_TURNS_PER_TOPIC", "PIPELINE_DEPTH", "OPENING_TURNS", "CLOSING_TURNS",

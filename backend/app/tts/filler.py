@@ -8,6 +8,7 @@ persiapan berikutnya tidak memakai kredit lagi.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import random
 from dataclasses import dataclass
@@ -56,8 +57,9 @@ class FillerBank:
                     result = await self._tts.synthesize(text, persona.id)
                 except Exception:
                     return  # satu filler gagal tidak masalah; sisanya tetap dipakai
-            path = self._dir / f"filler_{persona.id}_{i:02d}_{result.provider}.{result.ext}"
-            if not path.exists() or not result.cached:  # hasil baru menimpa file lama (suara atau prosodi bisa berubah)
+            voice = hashlib.sha1(result.voice.encode()).hexdigest()[:6]  # ganti suara = berkas lain, bukan menimpa
+            path = self._dir / f"filler_{persona.id}_{i:02d}_{result.provider}_{voice}.{result.ext}"
+            if not path.exists() or not result.cached:  # hasil baru menimpa file lama (prosodi bisa berubah)
                 path.write_bytes(result.audio)
             ready.append(Filler(text, f"/audio/{path.name}", result.duration_s, result.provider))
 
