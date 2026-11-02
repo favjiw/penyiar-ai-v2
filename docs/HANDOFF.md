@@ -31,7 +31,7 @@ Memfokuskan riset pada **kualitas percakapan** (podcast: Opening, maks 3 topik, 
 - Alert fallback TTS belum menyebut nama suara yang dipakai. Kondisi `DEFAULT_AI_IDS` dipakai untuk memvalidasi persona di mode B.
 - Catatan temuan (tidak diperbaiki, di luar cakupan): voice id masih tertulis di `data/persona/*.json` (PRD §0 aturan 3); `sessions/` jatuh ke `backend/sessions/`, bukan root repo seperti di PRD.
 - **Hook VAD (di luar cakupan sesi ini):** tempat yang pas untuk deteksi giliran otomatis mode A adalah `HumanLedEngine.human_turn(text, stt_ms, speech_ms)` (`show/mode_a.py`), yang kini dipanggil dari `/api/ptt/turn`; VAD cukup mengganti pemicunya (akhir ucapan terdeteksi menggantikan spasi dilepas) dan mengisi `speech_ms`.
-- **PRD belum diperbarui** (aturan §0: lapor konflik dulu). Usulan v2.6 ada di akhir sesi; konflik: mode C [F] di §3/§6.4/FR-2/§1.3.1, jadwal slot per topik dan peran Showrunner (FR-4, §6.2, §14.2) saat timer poin aktif, dan README/docs yang masih menyebut mode C.
+- **PRD v2.6 sudah ditulis (2 Nov 2026):** §1.3.2, §3, §6.2–§6.4, FR-1, FR-2, FR-4, FR-6, FR-12, Lampiran B, §16, §17. Yang masih rujukan sejarah: stage/avatar/komentar di §4–§6.1, §9.2, §11; README belum diperbarui.
 - **Mikrofon dan Web Speech nyata** di Chrome (yang diuji: `/api/ptt/turn` dengan teks dan sinyal mikrofon simulasi).
 - **Kualitas percakapan**: transkrip 34 menit belum dinilai (pengulangan, konsistensi persona, efek ringkasan, AI yang menimpali).
 - ElevenLabs lewat lapisan baru: backend memuatnya tanpa peringatan; latensi dan kredit nyata belum diukur. Jalankan `python scripts/test_tts.py --providers elevenlabs`.
@@ -60,7 +60,7 @@ Memfokuskan riset pada **kualitas percakapan** (podcast: Opening, maks 3 topik, 
 1. Coba mode A dengan mikrofon nyata di Chrome, lalu ukur latensi lepas-tombol sampai suara dengan ElevenLabs (KT FR-7).
 2. Nilai transkrip `backend/sessions/show_20261030_113137_5204/turns.jsonl` dan perbaiki prompt/ringkasan sesuai temuan.
 3. Isi penilaian FR-1 di `docs/kt/FR-1-blocker.md`; putuskan merge atau PR ke `main`.
-4. Setujui usulan PRD v2.6 lalu bersihkan PRD dan README (stage/avatar/komentar dan mode C; mode kini hanya A dan B).
+4. Bersihkan sisa stage/avatar/komentar di PRD (§4–§6.1, §9.2, §11) dan README (mode kini hanya A dan B).
 5. Uji R1–R4 dengan LLM, mikrofon, dan ElevenLabs nyata; kalibrasi 60 vs 90 detik dan kata per detik ElevenLabs.
 6. Mulai Tahap 7: harness offline (LLM `compat:`, `TTS_MODE=mock`) untuk kondisi Supervisor dan Showrunner.
 
