@@ -11,7 +11,7 @@ from app.main import build_app
 def client(tmp_path):
     settings = Settings(
         LLM_MODE="mock", TTS_MODE="mock", DATA_DIR=str(tmp_path / "data"), LOG_DIR=str(tmp_path / "logs"),
-        CACHE_DIR=str(tmp_path / "cache"), _env_file=None,
+        CACHE_DIR=str(tmp_path / "cache"), POINT_TIME_LIMIT_S=0, _env_file=None,  # tes API lama: Showrunner per topik
     )
     with TestClient(build_app(settings)) as c:
         c.log_dir = tmp_path / "logs"

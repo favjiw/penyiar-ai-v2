@@ -44,7 +44,7 @@ function Console() {
   const [tab, setTab] = useState<Tab>('blocker')
   const [locked, setLocked] = useState<Blocker[]>([])
   const refresh = useCallback(() => {
-    api.lockedList().then(setLocked).catch(() => setLocked([]))
+    api.list().then(setLocked).catch(() => setLocked([]))
   }, [])
 
   useEffect(refresh, [refresh, tab])
@@ -73,7 +73,13 @@ function Console() {
           ))}
         </div>
       )}
-      <main>{tab === 'blocker' ? <BlockerStudio /> : <LivePanel live={live} lockedBlockers={locked} onRefreshBlockers={refresh} />}</main>
+      <main>
+        {/* BlockerStudio tetap terpasang agar editan yang belum disimpan tidak hilang saat pindah tab */}
+        <div hidden={tab !== 'blocker'}>
+          <BlockerStudio />
+        </div>
+        {tab === 'live' && <LivePanel live={live} blockers={locked} onRefreshBlockers={refresh} />}
+      </main>
     </>
   )
 }

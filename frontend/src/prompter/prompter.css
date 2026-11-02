@@ -25,6 +25,9 @@
 .prompter .question { font-size: 28px; color: #ffd43b; margin-top: 8px; }
 .prompter .points { list-style: none; padding: 0; margin: 14px 0 0; font-size: 30px; display: grid; gap: 6px; }
 .prompter .points li.done { color: #7a7a7a; }
+.prompter .points li.current { color: #fff; font-weight: 700; }
+.prompter .point-countdown { font-size: 28px; font-variant-numeric: tabular-nums; padding: 2px 12px; border-radius: 8px; background: #2a2a2a; }
+.prompter .point-countdown.low { background: #8a2c2c; }
 .prompter .points .check { display: inline-block; width: 36px; color: #5bd17f; }
 
 .prompter .advice { font-size: 24px; background: #1d2433; border-left: 6px solid #5b8cff; padding: 10px 16px; border-radius: 8px; }

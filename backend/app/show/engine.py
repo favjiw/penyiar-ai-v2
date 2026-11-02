@@ -1,7 +1,7 @@
 """Show Engine (FR-2): orkestrator siaran dari blocker terkunci.
 
 Peserta berupa daftar (`participants.py`). Kelas ini menjalankan mode B (semua peserta AI,
-otomatis); mode A dan C (penyiar manusia memandu) ada di `mode_a.py` sebagai turunan yang
+otomatis); mode A (penyiar manusia memandu) ada di `mode_a.py` sebagai turunan yang
 memakai kerangka yang sama: state machine, Supervisor, TTS, pemutaran, dan log.
 
 Alur satu giliran: Persona → Supervisor → TTS → antrean putar. Giliran n+1
@@ -25,7 +25,7 @@ import random
 import secrets
 import time
 from time import time as wall_clock  # waktu dinding untuk cap transkrip; tes mengganti `time.monotonic`
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional, Sequence
 
@@ -50,6 +50,7 @@ from app.schemas import (
     TurnRecord,
 )
 from app.session_log import SessionLogger
+from app.show.pointclock import PointClock, trim_to_budget
 from app.show.participants import Participant, build_participants
 from app.show.turnlog import TurnLog, topic_index
 from app.tts import FailoverTTS, TTSError
@@ -76,6 +77,7 @@ class PreparedTurn:
     starts_topic: Optional[BlockerTopic] = None  # giliran pertama topik baru → topic_change saat diputar
     starts_closing: bool = False
     tts_chars: int = 0
+    point_idx: int = -1  # indeks poin (batas waktu per poin); -1 di Opening/Closing atau saat timer mati
 
 
 @dataclass
@@ -85,6 +87,7 @@ class Plan:
     segment: Segment = "opening"
     topic_idx: int = 0
     seg_turns: int = 0
+    point_idx: int = 0  # poin aktif dalam topik (batas waktu per poin)
     pending: Optional[str] = None  # "transition" | "to_closing"
     finished: bool = False
     announce_topic: Optional[BlockerTopic] = None
@@ -108,8 +111,8 @@ class ShowEngine:
         ai_ids: Optional[Sequence[str]] = None,
         human_name: str = "",
     ):
-        if mode in ("A", "C") and type(self) is ShowEngine:
-            raise ValueError("Mode A dan C memakai HumanLedEngine (app/show/mode_a.py)")
+        if mode == "A" and type(self) is ShowEngine:
+            raise ValueError("Mode A memakai HumanLedEngine (app/show/mode_a.py)")
         if not blocker.locked:
             raise ValueError("Blocker harus dikunci sebelum live")
         self.settings, self.blocker, self.mode = settings, blocker, mode
@@ -154,6 +157,14 @@ class ShowEngine:
         self.progress: dict[str, TopicProgress] = {
             t.id: TopicProgress(topic=t, is_last=i == len(blocker.topics) - 1) for i, t in enumerate(blocker.topics)
         }
+        self.timed = settings.POINT_TIME_LIMIT_S > 0  # batas waktu per poin (R4); 0 = Showrunner per topik seperti sebelumnya
+        self.point_clock = PointClock(settings.POINT_TIME_LIMIT_S, settings.POINT_WRAP_S, settings.TTS_WORDS_PER_SEC)
+        self.point_progress: dict[tuple[str, str], TopicProgress] = {}
+        self.point_played: dict[tuple[str, str], float] = {}
+        self._early_close = False  # Showrunner menilai poin sudah jenuh: giliran berikutnya menutup
+        self._closed_point: Optional[tuple[str, str]] = None  # mode A: poin yang baru ditutup jawaban AI, dipindah setelah pertukaran
+        self._clock_running = False
+        self._point_open: Optional[tuple[str, str]] = None
         self.steer_hint = ""
         self.next_speaker: Optional[str] = None
         self._last_speakers: list[str] = []
@@ -201,6 +212,7 @@ class ShowEngine:
             "showrunner": self.last_showrunner.model_dump() if self.last_showrunner else None,
             "coverage": {tid: {"covered": sorted(p.covered), "total": len(p.topic.poin)} for tid, p in self.progress.items()},
             "tts": self.tts.status(),
+            "point_clock": self._clock_payload(self._clock_running),
             "error": self.error,
         }
 
@@ -266,7 +278,7 @@ class ShowEngine:
         before = self._on_air_pos
         self.epoch += 1
         self.plan = Plan(segment=before[0], topic_idx=before[1])
-        self._advance_segment()
+        self._advance_segment("skip")
         self.log.event("operator_action", action="skip", from_segment=before[0], from_topic_idx=before[1], to_segment=self.plan.segment)
         await self._emit("stop_audio", {"reason": "skip"})
         self._playback_done.set()
@@ -298,8 +310,11 @@ class ShowEngine:
 
     # ── Rencana segmen ───────────────────────────────────────────────────────
 
-    def _advance_segment(self) -> None:
+    def _advance_segment(self, reason: str = "advance") -> None:
         p = self.plan
+        self._end_point(reason)
+        p.point_idx, self._early_close, self._closed_point = 0, False, None
+        self.point_clock.reset()
         p.seg_turns, p.pending = 0, None
         self.steer_hint, self.next_speaker = "", None
         if p.segment == "opening":
@@ -334,6 +349,83 @@ class ShowEngine:
         self._last_speakers.append(choice)
         return next(p for p in self.personas if p.id == choice)
 
+    # ── Batas waktu per poin (R4) ────────────────────────────────────────────
+
+    def _point_key(self) -> Optional[tuple[str, str]]:
+        if not self.timed or self.plan.segment != "topic":
+            return None
+        topic = self.blocker.topics[self.plan.topic_idx]
+        return topic.id, topic.poin[min(self.plan.point_idx, len(topic.poin) - 1)].id
+
+    def _point_info(self, topic: BlockerTopic, idx: int) -> dict[str, Any]:
+        return {"topic_id": topic.id, "point_id": topic.poin[idx].id, "idx": idx, "total": len(topic.poin), "text": topic.poin[idx].text}
+
+    def _set_point_onair(self) -> None:
+        """Mode A: poin yang terdengar = poin pada rencana (tidak ada antrean di depan)."""
+        key = self._point_key()
+        self.on_air["point"] = self._point_info(self.blocker.topics[self.plan.topic_idx], self.plan.point_idx) if key else None
+
+    def _clock_payload(self, running: bool) -> dict[str, Any]:
+        pos = self.on_air.get("point") if self.timed else None
+        if not pos:
+            return {"active": False}
+        played = self.point_played.get((pos["topic_id"], pos["point_id"]), 0.0)
+        return {"active": True, **pos, "limit_s": self.point_clock.limit_s, "played_s": round(played, 1), "running": running, "ts": round(wall_clock(), 2)}
+
+    async def _emit_clock(self, running: bool) -> None:
+        self._clock_running = running
+        if self.timed:
+            await self._emit("point_clock", self._clock_payload(running))
+
+    def _decorate_point(self, ctx: TurnContext) -> None:
+        """Isi konteks giliran dengan fokus poin, anggaran kata, dan tanda giliran penutup (sisa waktu menipis)."""
+        if not self.timed or ctx.segment != "topic" or ctx.topic is None:
+            return
+        p, topic = self.plan, ctx.topic
+        i = min(p.point_idx, len(topic.poin) - 1)
+        clock = self.point_clock
+        ctx.point, ctx.point_no, ctx.point_total = topic.poin[i].text, i + 1, len(topic.poin)
+        ctx.uncovered_points = []  # poin lain tidak disebut, supaya AI tidak melompat
+        close = self._early_close or clock.should_close()
+        ctx.max_words = clock.max_words()
+        if close:
+            ctx.close_point = True
+            if i + 1 < len(topic.poin):
+                ctx.next_point = topic.poin[i + 1].text
+            elif p.topic_idx + 1 < len(self.blocker.topics):
+                ctx.transition_to = self.blocker.topics[p.topic_idx + 1]
+            else:
+                ctx.to_closing = True
+
+    def _commit_point(self, seconds: float, count_turn: bool = True, key: Optional[tuple[str, str]] = None) -> None:
+        """`key` dari konteks giliran: hanya dihitung bila poin itu masih poin aktif (operator bisa memindah topik di tengah giliran)."""
+        current = self._point_key()
+        if current is None or (key is not None and key != current):
+            return
+        key = current
+        if self._point_open != key:
+            self._point_open = key
+            self.log.event("point_start", topic_id=key[0], point_id=key[1], limit_s=self.point_clock.limit_s, turn=self.turn_no)
+        self.point_clock.commit(seconds, count_turn)
+
+    def _add_played(self, key: Optional[tuple[str, str]], seconds: float) -> None:
+        if key is not None:
+            self.point_played[key] = self.point_played.get(key, 0.0) + max(0.0, seconds)
+
+    def _end_point(self, reason: str) -> None:
+        """Catat akhir satu obrolan (poin): reason = timer | early | skip | advance."""
+        if self._point_open is None:
+            return
+        topic_id, point_id = self._point_open
+        c = self.point_clock
+        self.log.event(
+            "point_end", topic_id=topic_id, point_id=point_id, reason=reason, limit_s=c.limit_s, committed_s=round(c.committed_s, 1),
+            played_s_at_close=round(self.point_played.get(self._point_open, 0.0), 1), turns=c.turns, turn=self.turn_no,
+        )
+        if topic_id in self.progress:
+            self.progress[topic_id].covered.add(point_id)
+        self._point_open = None
+
     def _others(self, speaker: PersonaCard) -> list[tuple[str, str]]:
         """Peserta selain `speaker`, untuk prompt persona: (nama, peran)."""
         return [(p.name, "penyiar manusia" if p.is_human else "penyiar AI") for p in self.participants if p.id != speaker.id]
@@ -349,7 +441,7 @@ class ShowEngine:
         topic = b.topics[p.topic_idx] if p.segment == "topic" else None
         progress = self.progress[topic.id] if topic else None
         done = [t.judul for t in b.topics[: p.topic_idx]] if p.segment == "topic" else ([t.judul for t in b.topics] if p.segment == "closing" else [])
-        return TurnContext(
+        ctx = TurnContext(
             blocker=b,
             segment=p.segment,
             topic=topic,
@@ -366,6 +458,8 @@ class ShowEngine:
             others=others if len(others) > 1 else [],  # satu lawan bicara cukup lewat partner_name
             summary=self.summary.text,
         )
+        self._decorate_point(ctx)
+        return ctx
 
     # ── Membuat satu giliran ─────────────────────────────────────────────────
 
@@ -412,6 +506,8 @@ class ShowEngine:
             # Tanpa persona, siaran hanya memutar kalimat aman berulang: lebih baik ditutup rapi.
             await self._alert("engine", f"Persona gagal {self._persona_failures}x berturut-turut ({message[:80]}); siaran dibawa ke Closing")
             p = self.plan
+            self._end_point("wrap")
+            self.point_clock.reset()
             p.segment, p.seg_turns, p.pending, p.announce_closing, p.announce_topic = "closing", 0, None, True, None
         # Kuota/jaringan: kalimat aman dari bank supaya siaran tetap jalan.
         text = self.supervisor.fallback(speaker, ctx.segment)
@@ -440,13 +536,20 @@ class ShowEngine:
             await self._alert("quota", f"Supervisor turun ke mode {self.supervisor.mode}: {self.supervisor.last_llm_error[:120]}")
             self._supervisor_mode = self.supervisor.mode
 
-        audio_path, duration, tts_provider, tts_reason, credits = None, max(1.5, len(reviewed.text.split()) / 3.0), "", "", 0
+        if ctx.max_words:  # backstop anggaran kata: buang kalimat utuh di ujung, tidak pernah memotong kalimat
+            trimmed = trim_to_budget(reviewed.text, ctx.max_words, keep_last=ctx.close_point)
+            if trimmed != reviewed.text:
+                self.log.event("point_trim", turn=turn, words_before=len(reviewed.text.split()), words_after=len(trimmed.split()), max_words=ctx.max_words)
+                reviewed = replace(reviewed, text=trimmed)
+
+        audio_path, duration, tts_provider, tts_reason, credits, tts_voice = None, max(1.5, len(reviewed.text.split()) / 3.0), "", "", 0, ""
         try:
             result = await self.tts.synthesize(reviewed.text, speaker.id)
             latency.tts = result.latency_ms
             audio_path = self.audio_dir / f"{self.session_id}_{turn:04d}.{result.ext}"
             audio_path.write_bytes(result.audio)
             duration, tts_provider, tts_reason, credits = result.duration_s, result.provider, result.fallback_reason, result.credit_cost
+            tts_voice = result.voice.split("|")[0]
             if result.fallback_used:
                 await self._alert_once(f"tts_fallback:{result.provider}", f"TTS {self.tts.primary.name} gagal ({tts_reason[:100]}); suara memakai {result.provider}")
         except (TTSError, Exception) as e:
@@ -468,6 +571,7 @@ class ShowEngine:
             latency_ms=latency,
             models={"persona": candidate.model, "supervisor": self.supervisor._model if self.supervisor.mode == "full" else "", "tts": tts_provider},
             tts_provider=tts_provider,
+            tts_voice=tts_voice,
             tts_fallback_reason=tts_reason,
             tts_fallback_used=bool(tts_reason),
             audio_url=f"/audio/{audio_path.name}" if audio_path else None,
@@ -482,7 +586,7 @@ class ShowEngine:
         self._remember(HistoryEntry(speaker.id, speaker.name, reviewed.text))
         prepared = PreparedTurn(
             epoch, turn, speaker, ctx.segment, ctx.topic, reviewed.text, reviewed.emotion, record, audio_path, duration,
-            starts_topic, starts_closing, tts_chars=len(reviewed.text) if audio_path else 0,
+            starts_topic, starts_closing, tts_chars=len(reviewed.text) if audio_path else 0, point_idx=ctx.point_no - 1 if ctx.point else -1,
         )
         await self._after_turn(ctx, prepared, reviewed.verdict)
         return prepared
@@ -491,7 +595,7 @@ class ShowEngine:
         self, *, turn: int, speaker: str, speaker_name: str, is_human: bool, segment: str, topic_id: Optional[str], text: str, raw_text: str,
         t_start: float, t_end: float, asr_ms: int, llm_ms: int, tts_ms: int, model: str, tts_chars: int, filler: Optional[str],
         supervisor_ms: int = 0, supervisor_action: str = "forward", tts_provider: str = "", tts_fallback_used: bool = False,
-        dialog_act: Optional[str] = None, gap_ms: int = 0, interrupted: bool = False,
+        dialog_act: Optional[str] = None, gap_ms: int = 0, interrupted: bool = False, tts_voice: str = "",
     ) -> None:
         """Satu baris `sessions/<id>/turns.jsonl` (lihat turnlog.py untuk arti tiap medan)."""
         try:
@@ -501,7 +605,7 @@ class ShowEngine:
                 t_start=round(t_start, 3), t_end=round(t_end, 3), latency_asr_ms=asr_ms, latency_llm_ms=llm_ms, latency_supervisor_ms=supervisor_ms,
                 latency_tts_ms=tts_ms, gap_before_play_ms=gap_ms, model=model, tts_chars=tts_chars, filler_used=filler,
                 supervisor_action=supervisor_action, tts_provider=tts_provider, tts_fallback_used=tts_fallback_used,
-                dialog_act=dialog_act, interrupted=interrupted,
+                dialog_act=dialog_act, interrupted=interrupted, tts_voice=tts_voice,
             )
         except OSError as e:
             self.log.event("error", stage="turn_log", message=str(e)[:300])
@@ -513,6 +617,9 @@ class ShowEngine:
             self.log.event("supervisor", verdict, turn=prepared.turn, persona=prepared.persona.id, raw_text=prepared.record.raw_text, final_text=prepared.text)
             await self._emit("supervisor", {"turn": prepared.turn, "persona": prepared.persona.id, **verdict.model_dump()})
 
+        if self.timed and ctx.segment == "topic" and ctx.point and ctx.topic is not None and p.segment == "topic":
+            await self._timed_after_turn(ctx, prepared)
+            return
         if ctx.transition_to is not None or ctx.to_closing:
             self._advance_segment()
             return
@@ -546,6 +653,50 @@ class ShowEngine:
                     p.pending = "transition"
                 elif decision.decision == "close":
                     p.pending = "to_closing"
+
+    async def _timed_after_turn(self, ctx: TurnContext, prepared: PreparedTurn) -> None:
+        """Batas waktu per poin: catat audio giliran, tutup poin bila giliran ini penutup, atau tanya Showrunner (penutupan dini)."""
+        p, topic = self.plan, ctx.topic
+        point = topic.poin[ctx.point_no - 1]
+        prog = self.progress[topic.id]
+        if prog.started_at is None:
+            prog.started_at = time.monotonic()
+        p.seg_turns += 1  # giliran ke-n dalam topik (0 = giliran pembuka topik, untuk hits_style)
+        prog.turns += 1
+        prog.audio_s += prepared.duration_s
+        prog.history.append(self.history[-1])
+        self._commit_point(prepared.duration_s)
+        if ctx.close_point:
+            self._end_point("early" if self._early_close else "timer")
+            self._early_close = False
+            if ctx.next_point:
+                p.point_idx += 1
+                self.point_clock.reset()
+                self.steer_hint, self.next_speaker = "", None
+            else:
+                self._advance_segment()  # topik berikutnya atau Closing
+            return
+        # Showrunner menilai satu poin ini saja; waktu tetap batas atas
+        pp = self.point_progress.setdefault((topic.id, point.id), TopicProgress(topic=topic.model_copy(update={"poin": [point]}), is_last=False))
+        pp.turns += 1
+        pp.audio_s += prepared.duration_s
+        pp.history.append(self.history[-1])
+        low = self.settings.POINT_MIN_TURNS
+        if self.settings.SHOWRUNNER_POLICY != "llm" or pp.turns < low or (pp.turns - low) % max(1, self.settings.SHOWRUNNER_EVERY_K) != 0:
+            return
+        try:
+            decision = await asyncio.wait_for(
+                self.showrunner.decide(pp, prepared.turn, "", min_turns=low, max_turns=10**6), self.settings.SHOWRUNNER_TIMEOUT_MS / 1000
+            )
+        except asyncio.TimeoutError:
+            return
+        self.last_showrunner = decision
+        self.log.event("showrunner", decision, point_id=point.id)
+        await self._emit("showrunner", decision.model_dump())
+        self.steer_hint = decision.steer_hint if decision.decision == "steer" else ""
+        self.next_speaker = decision.next_speaker
+        if decision.decision in ("transition", "close"):
+            self._early_close = True
 
     def _start_topic_clock(self, prog: TopicProgress) -> None:
         """Jatah waktu topik [F]: sisa target sesi (dikurangi cadangan Closing) dibagi sisa topik."""
@@ -589,6 +740,13 @@ class ShowEngine:
             self.log.event("topic_change", topic_id=None, judul="Closing", turn=t.turn)
             await self._emit("topic_change", {"id": None, "judul": "Closing", "pertanyaan_penonton": self.blocker.closing.ajakan})
 
+        point_key: Optional[tuple[str, str]] = None
+        if self.timed:
+            if t.point_idx >= 0 and t.topic is not None:
+                self.on_air["point"] = self._point_info(t.topic, t.point_idx)
+                point_key = (t.topic.id, t.topic.poin[t.point_idx].id)
+            else:
+                self.on_air["point"] = None
         start = time.monotonic()
         gap = int((start - self._last_play_end) * 1000) if self._last_play_end is not None else 0
         t.record.latency_ms.gap_before_play = gap
@@ -604,6 +762,7 @@ class ShowEngine:
         t_start, completed = wall_clock(), False
         try:
             await self._emit("turn", {**entry, "audio_url": t.record.audio_url, "duration_s": t.duration_s, "playback_id": self._playback_id})
+            await self._emit_clock(True)
             if t.record.audio_url and self._has_owner():
                 try:
                     await asyncio.wait_for(self._playback_done.wait(), t.duration_s + PLAYBACK_GRACE_SEC)
@@ -615,6 +774,8 @@ class ShowEngine:
                 except asyncio.TimeoutError:
                     pass
             completed = True
+            self._add_played(point_key, t.duration_s)
+            await self._emit_clock(False)
         finally:
             self.on_air["speaking"] = None
             self._last_play_end = time.monotonic()
@@ -624,7 +785,7 @@ class ShowEngine:
                 t_start=t_start, t_end=wall_clock(), asr_ms=0, llm_ms=t.record.latency_ms.persona, supervisor_ms=t.record.latency_ms.supervisor,
                 tts_ms=t.record.latency_ms.tts, model=t.record.models.get("persona", ""), tts_chars=t.tts_chars, filler=None,
                 supervisor_action=t.record.supervisor.action, tts_provider=t.record.tts_provider, tts_fallback_used=t.record.tts_fallback_used,
-                dialog_act=t.record.dialog_act, gap_ms=gap, interrupted=not completed,
+                dialog_act=t.record.dialog_act, gap_ms=gap, interrupted=not completed, tts_voice=t.record.tts_voice,
             )
 
     # ── Loop utama ───────────────────────────────────────────────────────────
@@ -637,10 +798,11 @@ class ShowEngine:
             blocker=self.blocker.model_dump(mode="json"),
             personas=[p.id for p in self.personas],
             participants=[{"id": p.id, "name": p.name, "kind": p.kind} for p in self.participants],
+            voices={p.id: self.tts.voice_for(p.id) for p in self.personas},
             config={k: getattr(self.settings, k) for k in (
                 "LLM_MODE", "TTS_MODE", "TTS_PROVIDER", "TTS_FALLBACK", "SUPERVISOR_MODE", "SHOWRUNNER_POLICY", "SHOWRUNNER_EVERY_K",
                 "MIN_TURNS_PER_TOPIC", "MAX_TURNS_PER_TOPIC", "FIXED_TURNS_PER_TOPIC", "PIPELINE_DEPTH", "OPENING_TURNS", "CLOSING_TURNS",
-                "SUMMARY_EVERY_TURNS")},
+                "SUMMARY_EVERY_TURNS", "POINT_TIME_LIMIT_S", "POINT_WRAP_S", "POINT_MIN_TURNS", "TTS_WORDS_PER_SEC")},
             models={r: self.settings.model_for(r) for r in ("persona", "supervisor", "showrunner")},
             prompts={a.prompt.name: a.prompt.version for a in (self.persona_agent, self.supervisor, self.showrunner)},
         )
@@ -697,6 +859,9 @@ class ShowEngine:
         self.state = ShowState.ENDED
         self._resume.set()
         self.summary.cancel()
+        self._end_point("stop" if reason == "stopped" else "end")
+        self.on_air["point"] = None
+        await self._emit_clock(False)
         self.log.event(
             "session_end",
             reason=reason,

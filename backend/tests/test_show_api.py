@@ -8,10 +8,23 @@ def locked_blocker(client):
     return client.post(f"/api/blocker/{v['id']}/lock").json()
 
 
-def test_start_requires_locked_blocker(client):
+def test_start_locks_a_draft_blocker_automatically(client):
     v = client.post("/api/blocker/generate", json={"tema": "Kopi", "jumlah_topik": 1, "jumlah_varian": 2}).json()["variants"][0]
-    assert client.post("/api/show/start", json={"blocker_id": v["id"]}).status_code == 422
-    assert client.post("/api/show/pause").status_code == 409
+    assert not v["locked"]
+    assert client.post("/api/show/start", json={"blocker_id": v["id"]}).status_code == 200
+    assert client.get(f"/api/blocker/{v['id']}").json()["locked"] is True
+    assert client.put(f"/api/blocker/{v['id']}", json=v).status_code == 409  # tidak bisa diubah selama/sesudah live
+    client.post("/api/show/stop")
+
+
+def test_start_rejects_draft_that_cannot_be_locked(client):
+    v = client.post("/api/blocker/generate", json={"tema": "Kopi", "jumlah_topik": 1, "jumlah_varian": 2}).json()["variants"][0]
+    v["topics"].append({**v["topics"][0], "poin": v["topics"][0]["poin"][:1]})  # topik manual baru, baru satu poin
+    assert client.put(f"/api/blocker/{v['id']}", json=v).status_code == 200
+    r = client.post("/api/show/start", json={"blocker_id": v["id"]})
+    assert r.status_code == 422 and "poin" in r.json()["detail"]
+    assert client.get(f"/api/blocker/{v['id']}").json()["locked"] is False
+    assert client.post("/api/show/pause").status_code == 409  # tidak ada siaran
 
 
 def test_console_plays_whole_show_over_websocket(client):
@@ -83,17 +96,13 @@ def test_ptt_rejected_in_mode_b(client):
     client.post("/api/show/stop")
 
 
-def test_mode_c_start_ptt_and_snapshot(client):
-    import time
-
+def test_mode_c_is_rejected(client):
     blocker = locked_blocker(client)
-    snap = client.post("/api/show/start", json={"blocker_id": blocker["id"], "mode": "C", "human_name": "Kak Dimas"}).json()
-    assert snap["mode"] == "C" and snap["ai_persona"] is None
-    assert [p["id"] for p in snap["personas"]] == ["raka", "salsa"]
-    assert [(p["id"], p["kind"]) for p in snap["participants"]] == [("human", "human"), ("raka", "ai"), ("salsa", "ai")]
-    deadline = time.time() + 10
-    while client.get("/api/show").json()["fillers_ready"] < 2 and time.time() < deadline:
-        time.sleep(0.05)
-    r = client.post("/api/ptt/turn", json={"text": "Salsa, lo tim kopi atau teh?", "stt_ms": 300, "speech_ms": 1500})
-    assert r.status_code == 200 and r.json()["responder"] == "salsa"
-    client.post("/api/show/stop")
+    r = client.post("/api/show/start", json={"blocker_id": blocker["id"], "mode": "C"})
+    assert r.status_code == 422
+
+
+def test_invalid_ai_persona_does_not_lock_the_draft(client):
+    v = client.post("/api/blocker/generate", json={"tema": "Kopi", "jumlah_topik": 1, "jumlah_varian": 2}).json()["variants"][0]
+    r = client.post("/api/show/start", json={"blocker_id": v["id"], "mode": "A", "ai_persona": "tidak-ada"})
+    assert r.status_code == 422 and client.get(f"/api/blocker/{v['id']}").json()["locked"] is False

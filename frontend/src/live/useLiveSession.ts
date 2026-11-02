@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { OutputStatus, ShowSnapshot, ShowrunnerDecision, SupervisorEvent, TranscriptEntry, TurnEvent } from './types'
+import type { OutputStatus, PointClock, ShowSnapshot, ShowrunnerDecision, SupervisorEvent, TranscriptEntry, TurnEvent } from './types'
 
 type Role = 'console' | 'prompter'
 const RECONNECT_MS = 1500
@@ -13,6 +13,8 @@ export interface LiveSession {
   showrunner: ShowrunnerDecision[]
   supervisor: SupervisorEvent[]
   output: OutputStatus | null
+  /** Jam obrolan per poin terbaru dari server, beserta waktu terimanya (untuk menghitung mundur di klien). */
+  pointClock: { clock: PointClock; at: number } | null
   speaking: string | null
   alerts: { stage: string; message: string; turn: number }[]
   sttPartial: string
@@ -49,6 +51,7 @@ export function useLiveSession(role: Role): LiveSession {
   const [showrunner, setShowrunner] = useState<ShowrunnerDecision[]>([])
   const [supervisor, setSupervisor] = useState<SupervisorEvent[]>([])
   const [output, setOutput] = useState<OutputStatus | null>(null)
+  const [pointClock, setPointClock] = useState<{ clock: PointClock; at: number } | null>(null)
   const [speaking, setSpeaking] = useState<string | null>(null)
   const [alerts, setAlerts] = useState<LiveSession['alerts']>([])
   const [sttPartial, setSttPartial] = useState('')
@@ -237,6 +240,7 @@ export function useLiveSession(role: Role): LiveSession {
           case 'state': {
             const snap = data as ShowSnapshot
             setSnapshot(snap)
+            setPointClock(snap.point_clock ? { clock: snap.point_clock, at: Date.now() } : null)
             if (snap.session_id !== sessionRef.current) {
               // Sesi baru, atau sambung ulang: ambil ulang riwayat dari snapshot.
               sessionRef.current = snap.session_id
@@ -284,6 +288,9 @@ export function useLiveSession(role: Role): LiveSession {
           case 'topic_change':
             setSnapshot((s) => ({ ...s, topic: data, segment: data.id ? 'topic' : 'closing' }))
             break
+          case 'point_clock':
+            setPointClock({ clock: data as PointClock, at: Date.now() })
+            break
           case 'showrunner':
             setShowrunner((l) => [...l, data].slice(-KEEP))
             break
@@ -316,5 +323,5 @@ export function useLiveSession(role: Role): LiveSession {
     }
   }, [role, enqueue, pump, send, stopAudio])
 
-  return { connected, snapshot, transcript, showrunner, supervisor, output, speaking, alerts, sttPartial, micActive, level, audioBlocked, unlockAudio, send }
+  return { connected, snapshot, transcript, showrunner, supervisor, output, pointClock, speaking, alerts, sttPartial, micActive, level, audioBlocked, unlockAudio, send }
 }

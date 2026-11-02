@@ -76,12 +76,13 @@ class Showrunner:
         self._personas = personas
         self.prompt = load_prompt("showrunner")
 
-    def should_call(self, progress: TopicProgress) -> bool:
-        if progress.turns >= self.max_turns:
+    def should_call(self, progress: TopicProgress, min_turns: Optional[int] = None, max_turns: Optional[int] = None) -> bool:
+        if progress.turns >= (max_turns if max_turns is not None else self.max_turns):
             return True
         if self.policy == "fixed_turns":
             return progress.turns >= self.fixed_turns
-        return progress.turns > 0 and (progress.turns % self.every_k == 0 or progress.turns == self.min_turns)
+        low = min_turns if min_turns is not None else self.min_turns
+        return progress.turns > 0 and (progress.turns % self.every_k == 0 or progress.turns == low)
 
     def judgement_prompt(self, p: TopicProgress, target_hint: str = "") -> str:
         lines = [
@@ -146,15 +147,20 @@ class Showrunner:
             policy="budget",
         )
 
-    async def decide(self, p: TopicProgress, turn: int, target_hint: str = "") -> ShowrunnerDecision:
+    async def decide(
+        self, p: TopicProgress, turn: int, target_hint: str = "", min_turns: Optional[int] = None, max_turns: Optional[int] = None
+    ) -> ShowrunnerDecision:
+        """`min_turns`/`max_turns` menimpa batas topik; dipakai saat `p` mewakili satu poin (batas waktu per poin)."""
+        min_turns = self.min_turns if min_turns is None else min_turns
+        max_turns = self.max_turns if max_turns is None else max_turns
         valid_ids = {pt.id for pt in p.topic.poin}
-        if p.turns >= self.max_turns:
+        if p.turns >= max_turns:
             return ShowrunnerDecision(
                 turn=turn,
                 topic_id=p.topic.id,
                 points_covered=sorted(p.covered),
                 decision="close" if p.is_last else "transition",
-                reason=f"batas keras {self.max_turns} giliran",
+                reason=f"batas keras {max_turns} giliran",
                 policy=self.policy,
                 forced=True,
             )
@@ -188,10 +194,10 @@ class Showrunner:
                 decision, hint, reason = "steer", f"bahas {uncovered[0].id}: {uncovered[0].text}", f"{len(p.covered)}/{len(p.topic.poin)} poin"
 
         if decision in ("transition", "close"):
-            if p.turns < self.min_turns:
+            if p.turns < min_turns:
                 decision = "steer" if uncovered else "continue"
                 hint = f"bahas {uncovered[0].id}: {uncovered[0].text}" if uncovered else ""
-                reason = f"belum {self.min_turns} giliran; {reason}"
+                reason = f"belum {min_turns} giliran; {reason}"
             else:
                 decision = "close" if p.is_last else "transition"
         elif decision == "close" and not p.is_last:

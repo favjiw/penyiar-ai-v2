@@ -30,7 +30,7 @@ export function BlockerStudio() {
   const timer = useRef<number>()
 
   const refreshLocked = useCallback(() => {
-    api.lockedList().then(setLockedList).catch(() => setLockedList([]))
+    api.list().then(setLockedList).catch(() => setLockedList([]))
   }, [])
   useEffect(refreshLocked, [refreshLocked])
 
@@ -71,6 +71,7 @@ export function BlockerStudio() {
     window.clearInterval(timer.current)
     if (!res) return
     setVariants(res.variants)
+    refreshLocked()
     setActive(null)
     setDirty(false)
     setStatus(
@@ -91,6 +92,7 @@ export function BlockerStudio() {
     const res = await run(`regen:${v.id}`, () => api.regenerate(v.id, hindari))
     if (!res) return
     replaceVariant(v.id, res.variant)
+    refreshLocked()
     if (active?.id === v.id) {
       setActive(structuredClone(res.variant))
       setDirty(false)
@@ -101,10 +103,14 @@ export function BlockerStudio() {
   const save = async (): Promise<Blocker | undefined> => {
     if (!active || active.locked) return undefined
     const saved = await run('save', () => api.save(active))
-    if (!saved) return undefined
+    if (!saved) {
+      refreshLocked() // mis. blocking sudah terkunci oleh siaran
+      return undefined
+    }
     setActive(saved)
     setDirty(false)
     replaceVariant(saved.id, saved)
+    refreshLocked()
     setStatus('Tersimpan')
     return saved
   }
@@ -279,7 +285,7 @@ export function BlockerStudio() {
                     Simpan <kbd>Ctrl+S</kbd>
                   </button>
                   <button className="primary" onClick={() => void lock()} disabled={busy !== null}>
-                    Kunci blocker
+                    Kunci sekarang
                   </button>
                 </>
               )}
@@ -303,9 +309,9 @@ export function BlockerStudio() {
       </div>
 
       <aside className="panel side">
-        <h2>Blocker terkunci</h2>
+        <h2>Blocking tersimpan</h2>
         {lockedList.length === 0 ? (
-          <p className="empty">Belum ada. Blocker yang dikunci akan muncul di sini dan bisa dipakai untuk live (Tahap 2).</p>
+          <p className="empty">Belum ada. Setiap varian hasil generate tersimpan di sini dan bisa langsung dipakai live; blocking dikunci otomatis saat siaran dimulai.</p>
         ) : (
           <ul>
             {lockedList.map((b) => (
@@ -313,7 +319,7 @@ export function BlockerStudio() {
                 <button onClick={() => openLocked(b)}>
                   {b.tema} · {b.variant_label}
                   <span className="meta">
-                    v{b.versi} · {fmtTime(b.created_at)}
+                    v{b.versi} · {b.locked ? 'terkunci' : 'draf'} · {fmtTime(b.created_at)}
                   </span>
                 </button>
               </li>

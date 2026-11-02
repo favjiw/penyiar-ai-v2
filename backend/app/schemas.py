@@ -144,7 +144,7 @@ class GenerateBlockerRequest(BaseModel):
 
 # ── Show Engine (Tahap 2: FR-2, FR-4, FR-5, FR-12) ───────────────────────────
 
-ShowMode = Literal["A", "B", "C"]
+ShowMode = Literal["A", "B"]
 Segment = Literal["opening", "topic", "closing"]
 SupervisorMode = Literal["off", "rules", "full"]
 ShowrunnerPolicy = Literal["llm", "fixed_turns", "coverage_only"]
@@ -160,9 +160,14 @@ class ShowState(str, Enum):
 class StartShowRequest(BaseModel):
     blocker_id: str
     mode: ShowMode = "B"
-    ai_persona: Optional[str] = None  # mode A: raka | salsa (mode C memakai semua AI)
-    human_name: str = ""  # mode A dan C: nama tampilan penyiar manusia (§15.2 #2)
+    ai_persona: Optional[str] = None  # mode A: raka | salsa
+    human_name: str = ""  # mode A: nama tampilan penyiar manusia (§15.2 #2)
+    voices: dict[str, str] = Field(default_factory=dict)  # persona -> id suara dari daftar terkurasi; kosong = bawaan
     seed: Optional[int] = None
+
+
+class PrecheckRequest(BaseModel):
+    voices: dict[str, str] = Field(default_factory=dict)
 
 
 class PTTTurnRequest(BaseModel):
@@ -253,6 +258,7 @@ class TurnRecord(BaseModel):
     latency_ms: LatencyMs = Field(default_factory=LatencyMs)
     models: dict[str, str] = Field(default_factory=dict)
     tts_provider: str = ""
+    tts_voice: str = ""  # id suara yang benar-benar dipakai (provider utama atau cadangan)
     tts_fallback_reason: str = ""
     tts_fallback_used: bool = False  # ada bagian audio giliran ini yang berasal dari cadangan
     audio_url: Optional[str] = None
