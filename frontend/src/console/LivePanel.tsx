@@ -170,7 +170,7 @@ export function LivePanel({ live, blockers, onRefreshBlockers }: Props) {
                     ? api.startShow(blockerId, 'A', { ai_persona: aiPersona, human_name: humanName })
                     : api.startShow(blockerId, 'B'),
                 )
-              }
+              }}
               disabled={busy || !blockerId || (mode !== 'B' && !humanName.trim())}
             >
               Mulai
