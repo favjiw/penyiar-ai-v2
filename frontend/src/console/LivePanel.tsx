@@ -3,6 +3,7 @@ import { api, ApiError, type VoiceCatalog } from '../api'
 import type { LiveSession } from '../live/useLiveSession'
 import { ttsLabel } from '../live/tts'
 import type { Blocker } from '../types'
+import { PointCountdown } from './PointCountdown'
 import { VoiceStage } from './VoiceStage'
 
 const fmtElapsed = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
@@ -25,7 +26,7 @@ function segmentLabel(t: { segment: string; topic_id: string | null }, topics: s
 
 /** Kontrol dan pemantauan siaran (FR-11): orb giliran bicara, transkrip, dan panel agen. */
 export function LivePanel({ live, blockers, onRefreshBlockers }: Props) {
-  const { snapshot: snap, transcript, showrunner, supervisor, output } = live
+  const { snapshot: snap, transcript, showrunner, supervisor, output, pointClock } = live
   const [blockerId, setBlockerId] = useState('')
   const [mode, setMode] = useState<'A' | 'B'>('B')
   const [aiPersona, setAiPersona] = useState('salsa')
@@ -137,6 +138,7 @@ export function LivePanel({ live, blockers, onRefreshBlockers }: Props) {
               {` · mode ${snap.mode}`}
               {snap.mode !== 'B' && ` dengan ${snap.human?.name} · filler ${snap.fillers_ready ?? 0}`}
             </span>
+            <PointCountdown pointClock={pointClock} />
             <span className="spacer" />
             <button onClick={() => control(snap.state === 'paused' ? 'resume' : 'pause')} disabled={busy}>
               {snap.state === 'paused' ? 'Lanjut' : 'Pause'} <kbd>P</kbd>

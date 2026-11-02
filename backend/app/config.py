@@ -10,6 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -84,6 +85,10 @@ class Settings(BaseSettings):
     PIPELINE_DEPTH: int = 1
     OPENING_TURNS: int = 2  # batas lunak Opening (mode B)
     CLOSING_TURNS: int = 2
+    POINT_TIME_LIMIT_S: int = 60  # batas satu obrolan (satu poin) untuk kedua penyiar; 0 = mati (mode lama: Showrunner per topik). Rencana uji: 90
+    POINT_WRAP_S: int = 15  # sisa waktu ≤ ini → giliran berikutnya menutup poin secara natural
+    POINT_MIN_TURNS: int = 3  # Showrunner baru boleh menutup poin lebih awal setelah sekian giliran (mode B)
+    TTS_WORDS_PER_SEC: float = 2.0  # konversi sisa waktu → anggaran kata (Edge 2,3; gTTS 1,9; ElevenLabs belum terukur)
     SESSION_TARGET_MIN: int = 0  # petunjuk lunak durasi total untuk Showrunner; 0 = tanpa
     PERSONA_TEMPERATURE: float = 0.9
     SUMMARY_EVERY_TURNS: int = 10  # ringkasan obrolan diperbarui tiap sekian giliran yang keluar dari jendela riwayat; 0 = mati
@@ -100,6 +105,12 @@ class Settings(BaseSettings):
 
     # Variabel kosong (mis. `GEMINI_RPM_PERSONA=` di .env.example) berarti pakai default.
     model_config = {"env_file": str(REPO_ROOT / ".env"), "env_file_encoding": "utf-8", "extra": "ignore", "env_ignore_empty": True}
+
+    @model_validator(mode="after")
+    def _point_timer_is_consistent(self):
+        if self.POINT_TIME_LIMIT_S > 0 and self.POINT_WRAP_S >= self.POINT_TIME_LIMIT_S:
+            raise ValueError("POINT_WRAP_S harus lebih kecil dari POINT_TIME_LIMIT_S (kalau tidak, setiap giliran menutup poin)")
+        return self
 
     @property
     def sessions_path(self) -> Path:

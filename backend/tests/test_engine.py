@@ -13,6 +13,7 @@ from tests.test_persona import make_blocker
 
 
 def make_engine(tmp_path, time_scale=0.0, **overrides):
+    overrides.setdefault("POINT_TIME_LIMIT_S", 0)  # tes lama menguji perilaku Showrunner per topik; timer poin diuji di test_point_timer.py
     settings = Settings(
         LLM_MODE="mock", TTS_MODE="mock", LOG_DIR=str(tmp_path / "logs"), CACHE_DIR=str(tmp_path / "cache"), _env_file=None, **overrides
     )

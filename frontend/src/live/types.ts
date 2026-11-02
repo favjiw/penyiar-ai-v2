@@ -29,7 +29,13 @@ export interface TopicPoint {
   id: string
   text: string
   covered: boolean
+  current?: boolean // poin yang sedang dibahas (batas waktu per poin)
 }
+
+/** Jam satu obrolan (poin): `played_s` dari audio yang sudah diputar; `running` = ada giliran yang sedang diputar. */
+export type PointClock =
+  | { active: false }
+  | { active: true; topic_id: string; point_id: string; idx: number; total: number; text: string; limit_s: number; played_s: number; running: boolean; ts: number }
 
 export interface OnAirTopic {
   id: string | null
@@ -96,6 +102,7 @@ export interface ShowSnapshot {
   thinking?: string | null // id AI yang sedang menyiapkan jawaban (mode A)
   participants?: { id: string; name: string; kind: 'human' | 'ai' }[]
   topic_points?: TopicPoint[]
+  point_clock?: PointClock
   fillers_ready?: number
 }
 

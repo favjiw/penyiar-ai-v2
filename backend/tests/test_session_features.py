@@ -21,6 +21,7 @@ def read_rows(path):
 
 
 def make_a(tmp_path, llm=None, **overrides):
+    overrides.setdefault("POINT_TIME_LIMIT_S", 0)  # tes lama menguji perilaku Showrunner per topik; timer poin diuji di test_point_timer.py
     settings = Settings(LLM_MODE="mock", TTS_MODE="mock", LOG_DIR=str(tmp_path / "logs"), CACHE_DIR=str(tmp_path / "cache"),
                         SHOWRUNNER_EVERY_K=2, _env_file=None, **overrides)
     events = []

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
+import { PointCountdown } from '../console/PointCountdown'
 import { useLiveSession } from '../live/useLiveSession'
 import './prompter.css'
 import { speechSupported, usePushToTalk } from './usePushToTalk'
@@ -121,6 +122,7 @@ export function PrompterPage() {
         <span className={`state ${snap.state}`}>{snap.state === 'paused' ? 'PAUSE' : '● LIVE'}</span>
         <span className="tema">{snap.blocker?.tema}</span>
         <span className="with">bersama {aiNames} (AI)</span>
+        <PointCountdown pointClock={live.pointClock} />
         <button className="next" onClick={() => void next()}>
           Next topik <kbd>N</kbd>
         </button>
@@ -153,8 +155,8 @@ export function PrompterPage() {
         {points.length > 0 && (
           <ul className="points">
             {points.map((p) => (
-              <li key={p.id} className={p.covered ? 'done' : ''}>
-                <span className="check">{p.covered ? '✓' : '○'}</span> {p.text}
+              <li key={p.id} className={p.covered ? 'done' : p.current ? 'current' : ''}>
+                <span className="check">{p.covered ? '✓' : p.current ? '▶' : '○'}</span> {p.text}
               </li>
             ))}
           </ul>

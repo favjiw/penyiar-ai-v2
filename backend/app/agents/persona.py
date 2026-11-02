@@ -66,6 +66,13 @@ class TurnContext:
     human_name: str = ""
     others: list[tuple[str, str]] = field(default_factory=list)  # peserta lain: (nama, peran)
     summary: str = ""  # ringkasan obrolan di luar jendela riwayat
+    # Batas waktu per poin (R4): kosong/0 bila timer mati atau segmen bukan topik
+    point: str = ""  # poin yang sedang dibahas (satu obrolan)
+    point_no: int = 0
+    point_total: int = 0
+    max_words: int = 0  # anggaran kata giliran ini dari sisa waktu poin
+    close_point: bool = False  # giliran ini menutup poin secara natural
+    next_point: str = ""  # poin berikutnya dalam topik yang sama (kosong bila poin terakhir)
 
 
 @dataclass
@@ -147,7 +154,7 @@ class PersonaAgent:
     # ── Sampler (natural_v2) ─────────────────────────────────────────────────
 
     def _sample_act(self, ctx: TurnContext) -> Optional[str]:
-        if ctx.segment != "topic" or ctx.transition_to or ctx.to_closing:
+        if ctx.segment != "topic" or ctx.transition_to or ctx.to_closing or ctx.close_point:
             return None
         choices = [a for a in DIALOG_ACT_HINTS if a != self._last_act]
         if ctx.mode == "A":
@@ -157,6 +164,14 @@ class PersonaAgent:
         return act
 
     def _sample_length(self, ctx: TurnContext) -> str:
+        length = self._base_length(ctx)
+        if ctx.max_words:
+            length += f"; TOTAL tidak lebih dari {ctx.max_words} kata dan selesaikan semua kalimat dengan utuh"
+        return length
+
+    def _base_length(self, ctx: TurnContext) -> str:
+        if ctx.close_point:
+            return "1 sampai 2 kalimat pendek untuk menutup"
         if ctx.mode == "A":
             return "1 sampai 3 kalimat pendek; beri ruang penyiar manusia memandu"
         roll = self._rng.random()
@@ -198,7 +213,13 @@ class PersonaAgent:
         elif ctx.segment == "topic" and ctx.topic:
             t = ctx.topic
             parts.append(f"SEGMEN: Topik \"{t.judul}\" (sudut pandang: {t.sudut_pandang})")
-            parts.append("Poin yang belum dibahas:\n" + _bullets(ctx.uncovered_points))
+            if ctx.point:
+                parts.append(
+                    f"FOKUS OBROLAN SEKARANG (poin {ctx.point_no} dari {ctx.point_total}): {ctx.point}\n"
+                    "Bahas poin ini saja; jangan loncat ke poin lain."
+                )
+            else:
+                parts.append("Poin yang belum dibahas:\n" + _bullets(ctx.uncovered_points))
             parts.append(f"Pertanyaan untuk penonton (lempar sesekali, jangan tiap giliran): {t.pertanyaan_penonton}")
         else:
             parts.append(f"SEGMEN: Closing. Rangkuman: {b.closing.rangkuman}. Ajakan ke penonton: {b.closing.ajakan}")
@@ -223,6 +244,11 @@ class PersonaAgent:
             )
         elif ctx.to_closing:
             instructions.append("Giliran ini menutup topik terakhir dan mengantar ke penutup siaran.")
+        elif ctx.close_point and ctx.next_point:
+            instructions.append(
+                "Waktu obrolan poin ini hampir habis. Giliran ini menutup obrolan secara natural (rangkum singkat, jangan menggantung) "
+                f"dan mengantar ke poin berikutnya: \"{ctx.next_point}\". Jangan membuka hal baru di poin ini."
+            )
         elif ctx.closing_final:
             instructions.append("Ini giliran terakhir siaran: tutup dengan rapi, pamit ke penonton, jangan buka topik baru.")
         if ctx.steer_hint and ctx.segment == "topic" and ctx.transition_to is None:
@@ -293,6 +319,8 @@ def _mock_persona(prompt: str, n: int) -> dict:
     seg = segment.group(1) if segment else "Topik"
     if "giliran terakhir siaran" in prompt:
         text = "Oke Sobat Hits, makasih udah nemenin kita, sampai ketemu lagi!"
+    elif "mengantar ke poin berikutnya" in prompt:
+        text = "Oke, segitu dulu soal ini, kita lanjut ke bahasan berikutnya ya."
     elif "mengantar ke topik berikutnya" in prompt:
         text = "Oke, dari situ kita geser ke obrolan berikutnya ya."
     elif seg == "Opening":

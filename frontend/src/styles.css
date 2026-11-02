@@ -148,6 +148,8 @@ kbd { font-size: 11px; border: 1px solid var(--line); border-radius: 4px; paddin
 .live-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .live-bar select { width: auto; max-width: 360px; }
 .live-bar .spacer { flex: 1; }
+.point-countdown { font-variant-numeric: tabular-nums; font-weight: 600; padding: 2px 10px; border-radius: 999px; background: var(--panel-2, rgba(127,127,127,.18)); }
+.point-countdown.low { background: #8a2c2c; color: #fff; }
 .pill { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--line); }
 .pill.state-live { background: var(--accent); color: var(--accent-fg); }
 .pill.state-paused { background: var(--warn-bg); color: var(--warn-fg); }
