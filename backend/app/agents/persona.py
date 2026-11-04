@@ -22,10 +22,10 @@ from app.schemas import Blocker, BlockerTopic, CorrectionMemory, Emotion, Person
 
 _INTERROGATIVE_PATTERNS = (
     r"\?",
-    r"\b(siapa|apa|kenapa|kok|gimana|bagaimana|kapan|di mana|dimana|yang mana|mana)\b",
-    r"\b(setuju|bener|benar|serius|pernah)\s*(gak|nggak|ga|enggak|kah)?\b",
-    r"\b(zodiak|pilih)\b",
+    r"\b(siapa|apa|kenapa|kok|gimana|bagaimana|kapan|di mana|dimana|ke mana|kemana|yang mana|mana|berapa|ngapain)\b",
+    r"\b(setuju|bener|benar|serius|pernah|wajar|cocok|liat|bisa)\s*(gak|nggak|ga|enggak|kah)\b",
     r"\b(lu|lo|kamu)\s+pilih\s+mana\b",
+    r"\b(pilih|milih)\s+mana\b",
 )
 
 
