@@ -7,3 +7,8 @@ def test_env_example_loads_as_is():
     assert s.GEMINI_RPM_PERSONA == 0 and s.rpm_for("persona") == s.GEMINI_RPM_DEFAULT
     assert s.GEMINI_MODEL_PERSONA_FALLBACK == "compat:gemini-3.8-flash"
     assert s.OPENAI_COMPAT_BASE_URL.startswith("https://") and s.OPENAI_COMPAT_API_KEY == ""
+
+
+def test_pilot_condition_default_and_override():
+    assert Settings(_env_file=None).PILOT_CONDITION == "A"
+    assert Settings(_env_file=None, PILOT_CONDITION="D").PILOT_CONDITION == "D"

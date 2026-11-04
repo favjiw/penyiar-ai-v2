@@ -20,6 +20,21 @@ from app.llm import LLMClient, register_mock
 from app.prompts import load_prompt
 from app.schemas import Blocker, BlockerTopic, CorrectionMemory, Emotion, PersonaCard, PersonaOutput, Segment
 
+_INTERROGATIVE_PATTERNS = (
+    r"\?",
+    r"\b(siapa|apa|kenapa|kok|gimana|bagaimana|kapan|di mana|dimana|yang mana|mana)\b",
+    r"\b(setuju|bener|benar|serius|pernah)\s*(gak|nggak|ga|enggak|kah)?\b",
+    r"\b(zodiak|pilih)\b",
+    r"\b(lu|lo|kamu)\s+pilih\s+mana\b",
+)
+
+
+def detect_interrogative(text: str) -> bool:
+    txt = (text or "").strip().lower()
+    if not txt:
+        return False
+    return any(re.search(p, txt) for p in _INTERROGATIVE_PATTERNS)
+
 CATCHPHRASE_PROBABILITY = 1.0 / 6.0
 CATCHPHRASE_COOLDOWN_TURNS = 6
 HISTORY_TURNS = 12
@@ -66,6 +81,8 @@ class TurnContext:
     human_name: str = ""
     others: list[tuple[str, str]] = field(default_factory=list)  # peserta lain: (nama, peran)
     summary: str = ""  # ringkasan obrolan di luar jendela riwayat
+    pilot_condition: str = "A"
+    force_no_dialog_act: bool = False
     # Batas waktu per poin (R4): kosong/0 bila timer mati atau segmen bukan topik
     point: str = ""  # poin yang sedang dibahas (satu obrolan)
     point_no: int = 0
@@ -154,7 +171,7 @@ class PersonaAgent:
     # ── Sampler (natural_v2) ─────────────────────────────────────────────────
 
     def _sample_act(self, ctx: TurnContext) -> Optional[str]:
-        if ctx.segment != "topic" or ctx.transition_to or ctx.to_closing or ctx.close_point:
+        if ctx.segment != "topic" or ctx.transition_to or ctx.to_closing or ctx.close_point or ctx.force_no_dialog_act:
             return None
         choices = [a for a in DIALOG_ACT_HINTS if a != self._last_act]
         if ctx.mode == "A":
@@ -230,6 +247,12 @@ class PersonaAgent:
             parts.append(f"{ctx.human_name} penyiar manusia yang memandu siaran. Jawab singkat, beri ruang dia memandu.")
         elif not ctx.others:
             parts.append(f"Lawan bicaramu: {ctx.partner_name}.")
+
+        if ctx.pilot_condition == "B":
+            parts.append(
+                "Jika lawan bicara bertanya, prioritaskan menjawab pertanyaan tersebut secara tuntas sebelum "
+                "mengaitkan kembali ke rundown atau melempar topik ke penonton."
+            )
 
         if ctx.summary:
             parts.append("Ringkasan obrolan sebelumnya (sebelum giliran-giliran di bawah ini): " + ctx.summary)

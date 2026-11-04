@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     # Mode
     LLM_MODE: Literal["live", "mock"] = "mock"
     TTS_MODE: Literal["live", "mock"] = "mock"
+    PILOT_CONDITION: Literal["A", "B", "C", "D"] = "A"
 
     # Gemini
     GEMINI_API_KEY: str = ""

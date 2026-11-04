@@ -187,6 +187,9 @@ class SupervisorJudgement(BaseModel):
     persona: CheckResult
     blocker: CheckResult
     safety: CheckResult
+    responsiveness: CheckResult = "ok"
+    clarity_level: Optional[Literal["CR", "AMB", "CNR"]] = None
+    evasion_technique: Optional[str] = None
     evidence: str
     correction: str  # arahan singkat untuk regenerasi; kosong bila semua ok
     claims: list[str]  # klaim faktual baru tentang diri persona di ucapan ini
@@ -195,7 +198,7 @@ class SupervisorJudgement(BaseModel):
 class SupervisorVerdict(BaseModel):
     mode: SupervisorMode
     action: Literal["forward", "regenerate", "fallback"] = "forward"
-    checks: dict[str, str] = Field(default_factory=lambda: {"persona": "ok", "blocker": "ok", "safety": "ok"})
+    checks: dict[str, str] = Field(default_factory=lambda: {"persona": "ok", "blocker": "ok", "safety": "ok", "responsiveness": "ok"})
     rule_hits: list[str] = Field(default_factory=list)
     evidence: str = ""
     regenerations: int = 0
