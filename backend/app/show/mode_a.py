@@ -20,7 +20,7 @@ from typing import Any, Optional
 
 from dataclasses import replace
 
-from app.agents.persona import HistoryEntry, PersonaResult, TurnContext
+from app.agents.persona import HistoryEntry, PersonaResult, TurnContext, detect_interrogative
 from app.agents.supervisor import Supervisor
 from app.schemas import Emotion, LatencyMs, PersonaCard, PersonaOutput, ShowState, TurnRecord
 from app.show.engine import ShowEngine
@@ -58,15 +58,16 @@ class HumanLedEngine(ShowEngine):
             raise ValueError(f"Persona AI tidak dikenal: {ai_persona}")
         super().__init__(*args, personas=personas, mode="A", ai_ids=[ai_persona], human_name=human_name, **kwargs)
         # Supervisor lebih ketat waktunya: penyiar manusia menunggu jawaban.
+        mode = "full" if self.settings.PILOT_CONDITION == "D" else self.settings.SUPERVISOR_MODE
         self.supervisor = Supervisor(
             self.supervisor._llm,
             self.supervisor._model,
-            self.settings.SUPERVISOR_MODE,
+            mode,
             self.supervisor._rng,
             self.settings.SUPERVISOR_MAX_REGEN,
             self.settings.SUPERVISOR_TIMEOUT_MS_MODE_A,
         )
-        self._supervisor_mode = self.settings.SUPERVISOR_MODE
+        self._supervisor_mode = mode
         self.fillers = FillerBank(self.tts, self.audio_dir)
         self._reply: Optional[asyncio.Task] = None
         self._answering = False  # pertukaran AI sedang berjalan; False sebelum snapshot terakhir dari blok finally
@@ -193,8 +194,16 @@ class HumanLedEngine(ShowEngine):
             mode=self.mode,
             human_name=self.human_name,
             summary=self.summary.text,
+            pilot_condition=self.settings.PILOT_CONDITION,
         )
         self._decorate_point(ctx)
+        if self.settings.PILOT_CONDITION == "C" and self.history:
+            last = self.history[-1]
+            if last.persona_id == HUMAN_ID and detect_interrogative(last.text):
+                ctx.force_no_dialog_act = True
+                ctx.steer_hint = ""
+                ctx.uncovered_points = []
+                ctx.point = ""
         return ctx
 
     async def human_turn(self, text: str, stt_ms: int = 0, speech_ms: int = 0) -> Optional[dict[str, Any]]:
@@ -220,6 +229,8 @@ class HumanLedEngine(ShowEngine):
         self.log_turn(
             turn=self.turn_no, speaker=HUMAN_ID, speaker_name=self.human_name, is_human=True, segment=self.plan.segment, topic_id=self._topic_id(),
             text=text, raw_text=text, t_start=released - speech_ms / 1000, t_end=released, asr_ms=stt_ms, llm_ms=0, tts_ms=0, model="", tts_chars=0, filler=None,
+            condition=self.settings.PILOT_CONDITION, user_query=text,
+            timing_breakdown={"asr_ms": stt_ms, "persona_llm_ms": 0, "supervisor_ms": 0, "tts_first_chunk_ms": 0},
         )
         await self._emit("human_turn", entry)
         if self._point_key() is not None:  # ucapan penyiar ikut menghabiskan waktu obrolan ("berdua")
@@ -348,6 +359,17 @@ class HumanLedEngine(ShowEngine):
                 asr_ms=stt_ms, llm_ms=candidate.latency_ms, supervisor_ms=latency.supervisor, tts_ms=tts_ms, model=candidate.model,
                 tts_chars=tts_chars, filler=filler, supervisor_action=reviewed.verdict.action, tts_provider=",".join(sorted(providers)),
                 tts_fallback_used=fallback_used, dialog_act=candidate.dialog_act, gap_ms=latency.gap_before_play, interrupted=not completed,
+                condition=self.settings.PILOT_CONDITION,
+                user_query=next((h.text for h in reversed(self.history[:-1]) if h.persona_id == HUMAN_ID), ""),
+                draft_text=candidate.output.text,
+                supervisor_intervened=reviewed.verdict.action != "forward",
+                supervisor_verdict=reviewed.verdict.model_dump(mode="json"),
+                timing_breakdown={
+                    "asr_ms": stt_ms,
+                    "persona_llm_ms": candidate.latency_ms,
+                    "supervisor_ms": latency.supervisor,
+                    "tts_first_chunk_ms": latency.tts,
+                },
                 tts_voice=first["voice"] if first else "",
             )
         return turn, sum(durations)

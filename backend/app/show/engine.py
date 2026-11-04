@@ -29,7 +29,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional, Sequence
 
-from app.agents.persona import HistoryEntry, PersonaAgent, PersonaResult, TurnContext
+from app.agents.persona import HistoryEntry, PersonaAgent, PersonaResult, TurnContext, detect_interrogative
 from app.agents.showrunner import Showrunner, TopicProgress
 from app.agents.summary import ConversationSummary
 from app.agents.supervisor import Supervisor
@@ -132,8 +132,9 @@ class ShowEngine:
         self.audio_dir.mkdir(parents=True, exist_ok=True)
 
         self.persona_agent = PersonaAgent(llm, settings.model_for("persona"), rng, settings.PERSONA_TEMPERATURE)
+        supervisor_mode = "full" if settings.PILOT_CONDITION == "D" else settings.SUPERVISOR_MODE
         self.supervisor = Supervisor(
-            llm, settings.model_for("supervisor"), settings.SUPERVISOR_MODE, rng, settings.SUPERVISOR_MAX_REGEN, settings.SUPERVISOR_TIMEOUT_MS
+            llm, settings.model_for("supervisor"), supervisor_mode, rng, settings.SUPERVISOR_MAX_REGEN, settings.SUPERVISOR_TIMEOUT_MS
         )
         self.showrunner = Showrunner(
             llm,
@@ -182,7 +183,7 @@ class ShowEngine:
         self.error: Optional[str] = None
         self._persona_failures = 0
         self._persona_failing_since = 0.0
-        self._supervisor_mode = settings.SUPERVISOR_MODE
+        self._supervisor_mode = supervisor_mode
 
     # ── Event dan status ─────────────────────────────────────────────────────
 
@@ -339,13 +340,17 @@ class ShowEngine:
         if not self._last_speakers:
             choice = ids[0]
         else:
-            choice = after(self._last_speakers[-1])
+            prev = self._last_speakers[-1]
+            choice = after(prev)
             if self.next_speaker in ids:
-                choice = self.next_speaker
+                requested = self.next_speaker
                 self.next_speaker = None
-            # hindari satu persona >2 kali berturut-turut (FR-2)
-            if self._last_speakers[-2:] == [choice, choice]:
-                choice = after(choice)
+                if len(ids) == 2 and requested == prev:
+                    choice = after(prev)  # mode 2 AI wajib bergantian ketat
+                else:
+                    choice = requested
+            if choice == prev:
+                choice = after(prev)
         self._last_speakers.append(choice)
         return next(p for p in self.personas if p.id == choice)
 
@@ -457,8 +462,16 @@ class ShowEngine:
             mode=self.mode,
             others=others if len(others) > 1 else [],  # satu lawan bicara cukup lewat partner_name
             summary=self.summary.text,
+            pilot_condition=self.settings.PILOT_CONDITION,
         )
         self._decorate_point(ctx)
+        if self.settings.PILOT_CONDITION == "C" and ctx.history:
+            last = ctx.history[-1]
+            if last.persona_id != speaker.id and detect_interrogative(last.text):
+                ctx.force_no_dialog_act = True
+                ctx.steer_hint = ""
+                ctx.uncovered_points = []
+                ctx.point = ""
         return ctx
 
     # ── Membuat satu giliran ─────────────────────────────────────────────────
@@ -556,6 +569,11 @@ class ShowEngine:
             # Siaran tidak boleh bisu tanpa kabar: operator melihat peringatan di konsol.
             await self._alert("tts", f"Giliran {turn} tanpa suara: {str(e)[:200]}")
 
+        final_text = reviewed.text
+        if self.history and final_text.strip() and final_text.strip() == self.history[-1].text.strip():
+            final_text = self.supervisor.fallback(speaker, ctx.segment, self.history)
+            reviewed = replace(reviewed, text=final_text)
+
         record = TurnRecord(
             session_id=self.session_id,
             mode=self.mode,
@@ -564,7 +582,7 @@ class ShowEngine:
             turn=turn,
             persona=speaker.id,
             raw_text=candidate.output.text,
-            final_text=reviewed.text,
+            final_text=final_text,
             emotion=reviewed.emotion,
             dialog_act=candidate.dialog_act,
             supervisor=reviewed.verdict,
@@ -595,7 +613,9 @@ class ShowEngine:
         self, *, turn: int, speaker: str, speaker_name: str, is_human: bool, segment: str, topic_id: Optional[str], text: str, raw_text: str,
         t_start: float, t_end: float, asr_ms: int, llm_ms: int, tts_ms: int, model: str, tts_chars: int, filler: Optional[str],
         supervisor_ms: int = 0, supervisor_action: str = "forward", tts_provider: str = "", tts_fallback_used: bool = False,
-        dialog_act: Optional[str] = None, gap_ms: int = 0, interrupted: bool = False, tts_voice: str = "",
+        dialog_act: Optional[str] = None, gap_ms: int = 0, interrupted: bool = False, tts_voice: str = "", condition: str = "A",
+        user_query: str = "", draft_text: str = "", supervisor_intervened: bool = False, supervisor_verdict: Optional[dict[str, Any]] = None,
+        timing_breakdown: Optional[dict[str, Any]] = None,
     ) -> None:
         """Satu baris `sessions/<id>/turns.jsonl` (lihat turnlog.py untuk arti tiap medan)."""
         try:
@@ -606,6 +626,15 @@ class ShowEngine:
                 latency_tts_ms=tts_ms, gap_before_play_ms=gap_ms, model=model, tts_chars=tts_chars, filler_used=filler,
                 supervisor_action=supervisor_action, tts_provider=tts_provider, tts_fallback_used=tts_fallback_used,
                 dialog_act=dialog_act, interrupted=interrupted, tts_voice=tts_voice,
+                condition=condition, user_query=user_query, draft_text=draft_text,
+                supervisor_intervened=supervisor_intervened,
+                supervisor_verdict=supervisor_verdict or {},
+                timing_breakdown=timing_breakdown or {
+                    "asr_ms": asr_ms,
+                    "persona_llm_ms": llm_ms,
+                    "supervisor_ms": supervisor_ms,
+                    "tts_first_chunk_ms": tts_ms,
+                },
             )
         except OSError as e:
             self.log.event("error", stage="turn_log", message=str(e)[:300])
@@ -786,6 +815,15 @@ class ShowEngine:
                 tts_ms=t.record.latency_ms.tts, model=t.record.models.get("persona", ""), tts_chars=t.tts_chars, filler=None,
                 supervisor_action=t.record.supervisor.action, tts_provider=t.record.tts_provider, tts_fallback_used=t.record.tts_fallback_used,
                 dialog_act=t.record.dialog_act, gap_ms=gap, interrupted=not completed, tts_voice=t.record.tts_voice,
+                condition=self.settings.PILOT_CONDITION, draft_text=t.record.raw_text,
+                supervisor_verdict=t.record.supervisor.model_dump(mode="json"),
+                supervisor_intervened=t.record.supervisor.action != "forward",
+                timing_breakdown={
+                    "asr_ms": 0,
+                    "persona_llm_ms": t.record.latency_ms.persona,
+                    "supervisor_ms": t.record.latency_ms.supervisor,
+                    "tts_first_chunk_ms": t.record.latency_ms.tts,
+                },
             )
 
     # ── Loop utama ───────────────────────────────────────────────────────────

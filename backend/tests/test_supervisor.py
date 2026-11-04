@@ -83,7 +83,17 @@ class _ClaimJudge(LLMClient):
 
     async def generate(self, prompt, *, model, system_instruction="", response_schema=None, temperature=1.0):
         await asyncio.sleep(self.delay)
-        parsed = {"persona": "ok", "blocker": "ok", "safety": "ok", "evidence": "", "correction": "", "claims": ["Raka pernah ngekos di Dago"]}
+        parsed = {
+            "persona": "ok",
+            "blocker": "ok",
+            "safety": "ok",
+            "responsiveness": "ok",
+            "clarity_level": "CR",
+            "evasion_technique": "Direct Answer",
+            "evidence": "",
+            "correction": "",
+            "claims": ["Raka pernah ngekos di Dago"],
+        }
         return LLMResponse(raw=json.dumps(parsed), parsed=parsed, model=model)
 
 
@@ -112,3 +122,27 @@ async def test_fallback_lines_skip_the_llm_check():
     r = PersonaResult(PersonaOutput(text="Oke, lanjut.", emotion=Emotion.NEUTRAL), raw="", model="fallback", latency_ms=0, dialog_act=None, catchphrase=None)
     out = await sup("full", llm).review(RAKA, r, ctx(), regen_with(), 1)
     assert out.text == "Oke, lanjut." and out.verdict.action == "forward" and llm.calls == 0
+
+
+class _ResponsiveViolationJudge(LLMClient):
+    async def generate(self, prompt, *, model, system_instruction="", response_schema=None, temperature=1.0):
+        parsed = {
+            "persona": "ok",
+            "blocker": "ok",
+            "safety": "ok",
+            "responsiveness": "violation",
+            "clarity_level": "CNR",
+            "evasion_technique": "Dodging via Audience Hook",
+            "evidence": "tidak menjawab pertanyaan",
+            "correction": "jawab dulu pertanyaannya",
+            "claims": [],
+        }
+        return LLMResponse(raw=json.dumps(parsed), parsed=parsed, model=model)
+
+
+async def test_responsiveness_violation_triggers_regeneration_and_check_flag():
+    regen = regen_with("Oke, jawaban gue gini ya.")
+    r = await sup("full", _ResponsiveViolationJudge()).review(RAKA, result("Sobat Hits kalian gimana?"), ctx(), regen, 1)
+    assert r.verdict.action == "regenerate"
+    assert r.verdict.checks["responsiveness"] == "violation"
+    assert "Jawab pertanyaan lawan bicara" in regen.calls[0].persona_reminder

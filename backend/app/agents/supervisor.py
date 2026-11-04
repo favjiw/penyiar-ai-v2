@@ -88,6 +88,21 @@ def rule_violations(text: str, history: list[HistoryEntry]) -> list[str]:
     return hits
 
 
+def _repeat_free_pick(candidates: list[str], history: list[HistoryEntry], rng: random.Random, persona_id: str, used: dict[str, int]) -> str:
+    if not candidates:
+        return ""
+    offset = used.get(persona_id, 0)
+    recent = {_normalize(h.text) for h in history[-REPEAT_WINDOW:]}
+    for i in range(len(candidates)):
+        c = candidates[(offset + i) % len(candidates)]
+        if _normalize(c) not in recent:
+            used[persona_id] = offset + i + 1
+            return c
+    choice = candidates[offset % len(candidates)]
+    used[persona_id] = offset + 1
+    return choice
+
+
 @dataclass
 class Reviewed:
     text: str
@@ -154,17 +169,18 @@ class Supervisor:
             return SupervisorJudgement.model_validate(resp.parsed), latency, prompt
         except Exception:
             # Keluaran rusak tidak boleh menahan siaran; dianggap lolos dan dicatat.
-            return SupervisorJudgement(persona="ok", blocker="ok", safety="ok", evidence="judgement_unparsed", correction="", claims=[]), latency, prompt
+            return SupervisorJudgement(
+                persona="ok", blocker="ok", safety="ok", responsiveness="ok", clarity_level=None, evasion_technique=None,
+                evidence="judgement_unparsed", correction="", claims=[]
+            ), latency, prompt
 
     # ── Alur pemeriksaan ─────────────────────────────────────────────────────
 
-    def fallback(self, persona: PersonaCard, segment: str = "topic") -> str:
+    def fallback(self, persona: PersonaCard, segment: str = "topic", history: Optional[list[HistoryEntry]] = None) -> str:
         """Kalimat aman sesuai segmen (sapaan di opening, pamit di closing), bergiliran supaya tidak berulang."""
         bank = fallback_bank().get(persona.id, {}).get(segment) or fallback_bank().get(persona.id, {}).get("topic") or ["Oke, lanjut."]
         key = f"{persona.id}:{segment}"
-        i = self._fallback_used.get(key, self._rng.randrange(len(bank)))
-        self._fallback_used[key] = i + 1
-        return bank[i % len(bank)]
+        return _repeat_free_pick(bank, history or [], self._rng, key, self._fallback_used)
 
     def _record_claims(self, persona: PersonaCard, claims: list[str], turn: int) -> None:
         for claim in claims[:3]:
@@ -192,7 +208,7 @@ class Supervisor:
     def _violates(hits: list[str], sanitized_only: set[str], judgement: Optional[SupervisorJudgement]) -> bool:
         if any(h not in sanitized_only for h in hits):
             return True
-        return bool(judgement and "violation" in (judgement.persona, judgement.blocker, judgement.safety))
+        return bool(judgement and "violation" in (judgement.persona, judgement.blocker, judgement.safety, judgement.responsiveness))
 
     async def check(self, persona: PersonaCard, candidate: PersonaResult, ctx: TurnContext, regenerate: Regenerate, turn: int) -> Reviewed:
         """Hook di antara LLM dan TTS (`teruskan | koreksi | ganti`, lihat `Reviewed.hook`).
@@ -225,7 +241,12 @@ class Supervisor:
         verdict.rule_hits = hits
         verdict.llm_latency_ms = latency
         if judgement:
-            verdict.checks = {"persona": judgement.persona, "blocker": judgement.blocker, "safety": judgement.safety}
+            verdict.checks = {
+                "persona": judgement.persona,
+                "blocker": judgement.blocker,
+                "safety": judgement.safety,
+                "responsiveness": judgement.responsiveness,
+            }
             verdict.evidence = judgement.evidence
         if not self._violates(hits, cleanup, judgement):
             if judgement:
@@ -233,9 +254,14 @@ class Supervisor:
             return Reviewed(clean, out.emotion, verdict, candidate, prompt)
 
         # Pelanggaran: buat ulang sekali dengan memori koreksi, lalu periksa lagi.
+        correction_text = (judgement.correction if judgement and judgement.correction else "") or f"Tulis ulang tanpa: {', '.join(h for h in hits if h not in cleanup)}."
+        if judgement and judgement.responsiveness == "violation":
+            correction_text = (
+                f"{correction_text} Jawab pertanyaan lawan bicara secara langsung, lugas, dan tuntas dulu sebelum "
+                "mengaitkan ke rundown atau melempar ke penonton."
+            )
         correction = CorrectionMemory(
-            persona_reminder=(judgement.correction if judgement and judgement.correction else "")
-            or f"Tulis ulang tanpa: {', '.join(h for h in hits if h not in cleanup)}.",
+            persona_reminder=correction_text,
             facts_to_enforce=[f"{e.claim}" for e in self.ledger if e.persona == persona.id][-3:],
             conversation_summary=verdict.evidence,
         )
@@ -261,7 +287,7 @@ class Supervisor:
                 return Reviewed(clean2, retry.output.emotion, verdict, retry, prompt2)
 
         verdict.action = "fallback"
-        return Reviewed(self.fallback(persona, ctx.segment), Emotion.NEUTRAL, verdict, candidate, prompt)
+        return Reviewed(self.fallback(persona, ctx.segment, ctx.history), Emotion.NEUTRAL, verdict, candidate, prompt)
 
 
 # ── Mock ─────────────────────────────────────────────────────────────────────
@@ -274,6 +300,9 @@ def _mock_judgement(prompt: str, n: int) -> dict:
         "persona": "ok",
         "blocker": "violation" if bad else "ok",
         "safety": "ok",
+        "responsiveness": "ok",
+        "clarity_level": "CR",
+        "evasion_technique": "Direct Answer",
         "evidence": "kandidat memuat penanda uji LANGGAR" if bad else "",
         "correction": "jangan ulangi penanda uji" if bad else "",
         "claims": [],

@@ -279,6 +279,21 @@ async def test_producer_failure_ends_session_with_error(tmp_path):
     assert list(read_log(engine.log.path))[-1]["reason"] == "error"
 
 
+async def test_pilot_condition_d_forces_supervisor_full(tmp_path):
+    engine, _ = make_engine(tmp_path, PILOT_CONDITION="D", SUPERVISOR_MODE="off")
+    assert engine.supervisor.mode == "full"
+
+
+async def test_turnlog_contains_pilot_fields(tmp_path):
+    engine, _ = make_engine(tmp_path, PILOT_CONDITION="C")
+    engine.start()
+    await wait_end(engine)
+    rows = [r for r in read_log(engine.turn_log.path.parent / "turns.jsonl")]
+    ai = next(r for r in rows if not r["is_human"])
+    assert ai["condition"] == "C"
+    assert "draft_text" in ai and "supervisor_verdict" in ai and "timing_breakdown" in ai
+
+
 
 async def test_short_network_blip_does_not_wrap_up(tmp_path):
     from app.llm import LLMError

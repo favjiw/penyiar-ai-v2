@@ -18,7 +18,7 @@ from typing import Any, Optional
 
 REQUIRED = (
     "session_id", "mode", "turn_idx", "speaker", "is_human", "topic_idx", "text", "t_start", "t_end",
-    "latency_asr_ms", "latency_llm_ms", "latency_tts_ms", "model", "tts_chars", "filler_used",
+    "latency_asr_ms", "latency_llm_ms", "latency_tts_ms", "model", "tts_chars", "filler_used", "condition",
 )
 
 

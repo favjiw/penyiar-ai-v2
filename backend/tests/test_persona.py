@@ -1,7 +1,7 @@
 import json
 import random
 
-from app.agents.persona import HistoryEntry, PersonaAgent, TurnContext, repetition_triggered
+from app.agents.persona import HistoryEntry, PersonaAgent, TurnContext, detect_interrogative, repetition_triggered
 from app.data.personas import load_personas
 from app.llm import LLMClient, LLMResponse, MockLLMClient
 from app.schemas import Blocker, BlockerClosing, BlockerOpening, BlockerPoint, BlockerTopic, CorrectionMemory
@@ -99,3 +99,18 @@ async def test_mock_persona_has_no_markdown():
     for _ in range(10):
         res = await agent.generate(load_personas()["salsa"], ctx())
         assert not any(ch in res.output.text for ch in "*#_`")
+
+
+def test_detect_interrogative_variants():
+    assert detect_interrogative("Lo tim teh atau kopi?")
+    assert detect_interrogative("Menurut lo setuju gak?")
+    assert detect_interrogative("Zodiak lo apa")
+    assert not detect_interrogative("Gue setuju sama pendapat lo")
+
+
+async def test_condition_b_injects_priority_instruction():
+    llm = _Echo(["Iya gue jawab dulu ya."])
+    agent = PersonaAgent(llm, "m", random.Random(1))
+    await agent.generate(load_personas()["raka"], ctx(pilot_condition="B"))
+    prompt = llm.prompts[0][1]
+    assert "prioritaskan menjawab pertanyaan" in prompt
