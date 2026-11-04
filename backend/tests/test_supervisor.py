@@ -125,16 +125,21 @@ async def test_fallback_lines_skip_the_llm_check():
 
 
 class _ResponsiveViolationJudge(LLMClient):
+    def __init__(self):
+        self.calls = 0
+
     async def generate(self, prompt, *, model, system_instruction="", response_schema=None, temperature=1.0):
+        self.calls += 1
+        is_first = self.calls == 1
         parsed = {
             "persona": "ok",
             "blocker": "ok",
             "safety": "ok",
-            "responsiveness": "violation",
-            "clarity_level": "CNR",
-            "evasion_technique": "Dodging via Audience Hook",
-            "evidence": "tidak menjawab pertanyaan",
-            "correction": "jawab dulu pertanyaannya",
+            "responsiveness": "violation" if is_first else "ok",
+            "clarity_level": "CNR" if is_first else "CR",
+            "evasion_technique": "Dodging via Audience Hook" if is_first else "Direct Answer",
+            "evidence": "tidak menjawab pertanyaan" if is_first else "",
+            "correction": "jawab dulu pertanyaannya" if is_first else "",
             "claims": [],
         }
         return LLMResponse(raw=json.dumps(parsed), parsed=parsed, model=model)
