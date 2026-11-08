@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { OutputStatus, PointClock, ShowSnapshot, ShowrunnerDecision, SupervisorEvent, TranscriptEntry, TurnEvent } from './types'
 
-type Role = 'console' | 'prompter'
+export type Role = 'console' | 'prompter' | 'stage'
 const RECONNECT_MS = 1500
 const RECONNECT_MAX_MS = 10000
 const KEEP = 200
+const LEVEL_SEND_MS = 100
+const REMOTE_LEVEL_STALE_MS = 500
 
 export interface LiveSession {
   connected: boolean
@@ -23,6 +25,8 @@ export interface LiveSession {
   /** Amplitudo audio yang sedang diputar, 0..1; null bila klien ini bukan pemilik audio. */
   level: () => number | null
   audioBlocked: boolean
+  /** /stage: Web Audio sudah menyala (gestur pengguna); suara AI bisa diputar tanpa klik lagi. */
+  audioReady: boolean
   unlockAudio: () => void
   send: (action: string, data?: Record<string, unknown>) => void
 }
@@ -57,6 +61,7 @@ export function useLiveSession(role: Role): LiveSession {
   const [sttPartial, setSttPartial] = useState('')
   const [micActive, setMicActive] = useState(false)
   const [audioBlocked, setAudioBlocked] = useState(false)
+  const [audioReady, setAudioReady] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
   const ownerRef = useRef(false)
@@ -67,6 +72,11 @@ export function useLiveSession(role: Role): LiveSession {
   const queueRef = useRef<PlayItem[]>([])
   const playingRef = useRef(false)
   const sessionRef = useRef<string | undefined>()
+  // Naik setiap stopAudio: callback pemutaran lama (resume/play yang masih menunggu) diabaikan.
+  const genRef = useRef(0)
+  const reportedReadyRef = useRef<boolean | null>(null)
+  // Level dari stage (lewat WS) untuk klien yang bukan pemilik audio: konsol dan prompter.
+  const remoteLevelRef = useRef<{ level: number; at: number }>({ level: 0, at: 0 })
 
   const send = useCallback((action: string, data: Record<string, unknown> = {}) => {
     const ws = wsRef.current
@@ -99,7 +109,12 @@ export function useLiveSession(role: Role): LiveSession {
   const level = useCallback((): number | null => {
     const analyser = analyserRef.current
     const samples = samplesRef.current
-    if (!analyser || !samples || !ownerRef.current) return null
+    if (!ownerRef.current) {
+      if (role === 'stage') return null
+      const r = remoteLevelRef.current
+      return Date.now() - r.at < REMOTE_LEVEL_STALE_MS ? r.level : 0
+    }
+    if (!analyser || !samples) return null
     analyser.getByteTimeDomainData(samples)
     let sum = 0
     for (const v of samples) {
@@ -107,9 +122,10 @@ export function useLiveSession(role: Role): LiveSession {
       sum += x * x
     }
     return Math.min(1, Math.sqrt(sum / samples.length) * 3.2)
-  }, [])
+  }, [role])
 
   const stopAudio = useCallback(() => {
+    genRef.current++
     const a = audioRef.current
     if (a) {
       a.onended = a.onerror = null
@@ -139,6 +155,8 @@ export function useLiveSession(role: Role): LiveSession {
     if (url === undefined) return // tunggu audio_part
     if (url === null) return finish('error')
     const a = getAudio()
+    const gen = genRef.current
+    const stale = () => gen !== genRef.current || queueRef.current[0] !== item
     playingRef.current = true
     a.src = url
     setSpeaking(item.persona) // indikator mulai berganti selagi audio dimuat
@@ -160,11 +178,14 @@ export function useLiveSession(role: Role): LiveSession {
         await Promise.race([ctx.resume().catch(() => undefined), new Promise((r) => window.setTimeout(r, 250))])
         if (!running()) throw new DOMException('AudioContext suspended', 'NotAllowedError')
       }
+      if (stale()) return // dihentikan (sela, lompat, stop) selagi menunggu: jangan putar URL lama
       await a.play()
     }
     begin()
       .then(() => {
+        if (stale()) return
         setAudioBlocked(false)
+        setAudioReady(true)
         send('audio_state', { blocked: false })
         setSpeaking(item.persona)
         if (!item.started) {
@@ -173,12 +194,15 @@ export function useLiveSession(role: Role): LiveSession {
         }
       })
       .catch((err: DOMException) => {
+        if (stale()) return // AbortError dari pause/ganti src setelah stopAudio: bukan galat item baru
         playingRef.current = false
         setSpeaking(null)
         if (err.name === 'NotAllowedError') {
           // Autoplay diblokir browser: item tetap di antrean sampai operator mengklik halaman.
           setAudioBlocked(true)
-          send('audio_state', { blocked: true })
+          setAudioReady(false)
+          reportedReadyRef.current = false
+          send('audio_state', { blocked: true, ready: false })
         } else finish('error')
       })
   }, [send, getAudio])
@@ -191,29 +215,52 @@ export function useLiveSession(role: Role): LiveSession {
     [pump],
   )
 
+  /** Gestur pengguna membuka izin autoplay; stage melaporkan siap bersuara ke server (cek kesiapan). */
   const unlockAudio = useCallback(() => {
-    // Gestur pengguna membuka izin autoplay untuk giliran berikutnya.
     getAudio()
-    void ctxRef.current?.resume().catch(() => undefined)
-    if (queueRef.current.length) pump()
-    setAudioBlocked(false)
-    send('audio_state', { blocked: false })
+    const ctx = ctxRef.current
+    const done = () => {
+      const ready = !ctx || ctx.state === 'running'
+      setAudioReady(ready)
+      if (ready) setAudioBlocked(false)
+      // Kirim hanya bila berubah: listener ini jalan di setiap klik/tombol pada jendela stage.
+      if (reportedReadyRef.current !== ready) {
+        reportedReadyRef.current = ready
+        send('audio_state', { blocked: !ready, ready })
+      }
+      if (ready && queueRef.current.length) pump()
+    }
+    if (ctx && ctx.state !== 'running') void ctx.resume().catch(() => undefined).then(done)
+    else done()
   }, [pump, send, getAudio])
 
-  // Klik atau tombol pertama (mis. "Mulai") menyiapkan Web Audio sebelum giliran pertama tiba.
+  // Hanya /stage yang memutar audio (PRD v2.7 FR-10): klik atau tombol pertama di layar itu
+  // menyiapkan Web Audio sebelum giliran pertama tiba.
   useEffect(() => {
-    if (role !== 'console') return
-    const arm = () => {
-      getAudio()
-      void ctxRef.current?.resume().catch(() => undefined)
-    }
+    if (role !== 'stage') return
+    // Klik di mana pun pada jendela stage menyalakan suara (juga saat on air, tanpa teks di layar).
+    const arm = () => unlockAudio()
     window.addEventListener('pointerdown', arm)
     window.addEventListener('keydown', arm)
     return () => {
       window.removeEventListener('pointerdown', arm)
       window.removeEventListener('keydown', arm)
     }
-  }, [role, getAudio])
+  }, [role, unlockAudio])
+
+  // Stage meneruskan level audio yang sedang diputar ke konsol/prompter (±10 kali per detik).
+  useEffect(() => {
+    if (role !== 'stage') return
+    let lastSent = -1
+    const t = window.setInterval(() => {
+      if (!ownerRef.current) return
+      const lv = playingRef.current ? Math.round((level() ?? 0) * 20) / 20 : 0
+      if (lv === 0 && lastSent === 0) return
+      lastSent = lv
+      send('level', { level: lv, persona: queueRef.current[0]?.persona ?? null })
+    }, LEVEL_SEND_MS)
+    return () => window.clearInterval(t)
+  }, [role, level, send])
 
   useEffect(() => {
     let closed = false
@@ -226,6 +273,7 @@ export function useLiveSession(role: Role): LiveSession {
       wsRef.current = ws
       ws.onopen = () => {
         attempts = 0
+        reportedReadyRef.current = null // server baru/terhubung ulang belum tahu status suara stage
         setConnected(true)
       }
       ws.onclose = () => {
@@ -300,8 +348,12 @@ export function useLiveSession(role: Role): LiveSession {
           case 'alert':
             setAlerts((l) => [...l, data].slice(-20))
             break
+          case 'level':
+            remoteLevelRef.current = { level: Number(data.level) || 0, at: Date.now() }
+            break
           case 'output_status':
-            ownerRef.current = data.is_audio_owner
+            // Pengaman di klien: selain /stage tidak pernah memutar audio, apa pun kata server.
+            ownerRef.current = role === 'stage' && data.is_audio_owner
             setOutput(data)
             if (!data.is_audio_owner) stopAudio()
             break
@@ -323,5 +375,5 @@ export function useLiveSession(role: Role): LiveSession {
     }
   }, [role, enqueue, pump, send, stopAudio])
 
-  return { connected, snapshot, transcript, showrunner, supervisor, output, pointClock, speaking, alerts, sttPartial, micActive, level, audioBlocked, unlockAudio, send }
+  return { connected, snapshot, transcript, showrunner, supervisor, output, pointClock, speaking, alerts, sttPartial, micActive, level, audioBlocked, audioReady, unlockAudio, send }
 }

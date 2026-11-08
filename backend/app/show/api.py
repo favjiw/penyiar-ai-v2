@@ -196,7 +196,16 @@ async def ws_session(ws: WebSocket, role: str = "console"):
             elif action == "audio_state":
                 blocked = bool(data.get("blocked"))
                 (manager.audio_blocked.add if blocked else manager.audio_blocked.discard)(ws)
+                if "ready" in data:
+                    (manager.audio_ready.add if data.get("ready") else manager.audio_ready.discard)(ws)
                 await manager.broadcast_output_status()
+            elif action == "level" and ws is manager.audio_owner():
+                # Level audio dari stage (pemilik audio) diteruskan ke konsol/prompter (indikator bicara).
+                try:
+                    lv = max(0.0, min(1.0, float(data.get("level", 0))))
+                except (TypeError, ValueError):
+                    continue
+                await manager.broadcast("level", {"persona": data.get("persona"), "level": round(lv, 2)})
     except WebSocketDisconnect:
         pass
     finally:

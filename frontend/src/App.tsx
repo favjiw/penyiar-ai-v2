@@ -4,7 +4,9 @@ import { BlockerStudio } from './console/BlockerStudio'
 import { LivePanel } from './console/LivePanel'
 import { ttsLabel, type TtsStatus } from './live/tts'
 import { useLiveSession, type LiveSession } from './live/useLiveSession'
+import { NotFound } from './NotFound'
 import { PrompterPage } from './prompter/PrompterPage'
+import { StagePage } from './stage/StagePage'
 import type { Blocker } from './types'
 
 type Tab = 'blocker' | 'live'
@@ -37,7 +39,7 @@ function ModeBadge({ health, tts }: { health: Health; tts?: TtsStatus }) {
 }
 
 function Console() {
-  // Konsol selalu tersambung dan menjadi pemilik audio, di tab mana pun.
+  // Konsol selalu tersambung tetapi bisu; audio hanya diputar di /stage (PRD v2.7 FR-10).
   const live = useLiveSession('console')
   const { health, tts } = useHealth(live)
   const onAir = live.snapshot.state === 'live' || live.snapshot.state === 'paused'
@@ -86,14 +88,18 @@ function Console() {
 
 const DevGallery = import.meta.env.DEV ? lazy(() => import('./ui/DevGallery').then((m) => ({ default: m.DevGallery }))) : null
 
+const stripSlash = (p: string) => (p.length > 1 ? p.replace(/\/+$/, '') : p)
+
 export function App() {
-  const path = window.location.pathname
-  if (path.startsWith('/prompter')) return <PrompterPage />
+  const path = stripSlash(window.location.pathname)
+  if (path === '/prompter') return <PrompterPage />
+  if (path === '/stage') return <StagePage />
   if (DevGallery && path === '/_ui')
     return (
       <Suspense fallback={null}>
         <DevGallery />
       </Suspense>
     )
-  return <Console />
+  if (path === '/') return <Console />
+  return <NotFound />
 }

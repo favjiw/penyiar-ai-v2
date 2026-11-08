@@ -1,9 +1,10 @@
 """Manajer WebSocket /ws/session (PRD §6.3), pola dari main.py repo lama.
 
-Setiap klien menyatakan role: `console` (konsol operator) atau `prompter`
-(penyiar manusia, mode A). Hanya satu klien yang memutar audio
-(pemilik audio): konsol pertama yang tersambung. Hanya laporan pemutaran dari
-pemilik audio yang dipakai Show Engine.
+Setiap klien menyatakan role: `console` (konsol operator), `prompter`
+(penyiar manusia, mode A), atau `stage` (layar untuk OBS, FR-10). Hanya satu
+klien yang memutar audio (pemilik audio): `stage` pertama yang tersambung
+(PRD v2.7). Konsol dan prompter bisu. Hanya laporan pemutaran dari pemilik
+audio yang dipakai Show Engine.
 """
 
 from __future__ import annotations
@@ -14,13 +15,15 @@ from typing import Any, Optional
 from fastapi import WebSocket
 
 logger = logging.getLogger(__name__)
-ROLES = ("console", "prompter")
+ROLES = ("console", "prompter", "stage")
+AUDIO_ROLE = "stage"
 
 # Event yang dikirim ke role tertentu saja; selain ini dikirim ke semua.
 EVENT_ROLES: dict[str, tuple[str, ...]] = {
     "supervisor": ("console",),
     "output_status": ("console",),
     "stt_partial": ("console",),
+    "level": ("console", "prompter"),  # level audio yang diputar stage, untuk indikator di konsol/prompter
 }
 
 
@@ -28,6 +31,7 @@ class ConnectionManager:
     def __init__(self) -> None:
         self.clients: dict[WebSocket, str] = {}
         self.audio_blocked: set[WebSocket] = set()
+        self.audio_ready: set[WebSocket] = set()  # stage yang audionya sudah dinyalakan (gestur pengguna)
 
     async def connect(self, ws: WebSocket, role: str) -> None:
         await ws.accept()
@@ -36,11 +40,12 @@ class ConnectionManager:
 
     def disconnect(self, ws: WebSocket) -> None:
         self.audio_blocked.discard(ws)
+        self.audio_ready.discard(ws)
         self.clients.pop(ws, None)
 
     def audio_owner(self) -> Optional[WebSocket]:
         for ws, r in self.clients.items():
-            if r == "console":
+            if r == AUDIO_ROLE:
                 return ws
         return None
 
@@ -50,7 +55,8 @@ class ConnectionManager:
         return {
             "is_audio_owner": ws is not None and ws is owner,
             "audio_owner_role": self.clients.get(owner) if owner else None,
-            "audio_blocked": any(self.clients.get(w) == "console" for w in self.audio_blocked),
+            "audio_blocked": owner is not None and owner in self.audio_blocked,
+            "audio_ready": owner is not None and owner in self.audio_ready and owner not in self.audio_blocked,
             "clients": {r: roles.count(r) for r in ROLES},
         }
 

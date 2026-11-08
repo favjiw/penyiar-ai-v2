@@ -3,6 +3,7 @@ import { api, ApiError, type VoiceCatalog } from '../api'
 import type { LiveSession } from '../live/useLiveSession'
 import { ttsLabel } from '../live/tts'
 import type { Blocker } from '../types'
+import { openStageWindow } from '../stage/openStageWindow'
 import { PointCountdown } from './PointCountdown'
 import { VoiceStage } from './VoiceStage'
 
@@ -39,6 +40,11 @@ export function LivePanel({ live, blockers, onRefreshBlockers }: Props) {
   const [elapsed, setElapsed] = useState(0)
   const transcriptEnd = useRef<HTMLDivElement>(null)
   const onAir = snap.state === 'live' || snap.state === 'paused'
+  const stageOpen = (output?.clients?.stage ?? 0) > 0
+  const openStage = () => {
+    const m = onAir ? (snap.mode === 'A' ? 'A' : 'B') : mode
+    openStageWindow(m, onAir ? snap.ai_persona : aiPersona)
+  }
 
   useEffect(() => {
     if (!blockerId && blockers.length) setBlockerId(blockers[0].id)
@@ -217,6 +223,8 @@ export function LivePanel({ live, blockers, onRefreshBlockers }: Props) {
                 if (mode === 'A' && !output?.clients?.prompter) {
                   window.open('/prompter', 'hits-prompter')
                 }
+                // Layar OBS adalah satu-satunya pemutar suara: buka sekarang bila belum (klik ini = gestur pengguna).
+                if (!stageOpen) openStageWindow(mode, aiPersona)
                 void act(() =>
                   mode === 'A'
                     ? api.startShow(blockerId, 'A', { ai_persona: aiPersona, human_name: humanName, voices: chosenVoices })
@@ -230,8 +238,15 @@ export function LivePanel({ live, blockers, onRefreshBlockers }: Props) {
           </>
         )}
         <a className="button-link" href="/prompter" target="hits-prompter" title="Prompter (tablet atau monitor kedua)">
-          {output?.clients?.prompter ? 'Prompter ✓' : 'Buka Prompter'}
+          {output?.clients?.prompter ? 'Prompter terbuka' : 'Buka Prompter'}
         </a>
+        <button
+          type="button"
+          onClick={openStage}
+          title="Layar karakter untuk ditangkap OBS; satu-satunya pemutar suara AI"
+        >
+          {!stageOpen ? 'Buka layar OBS' : output?.audio_ready ? 'Layar OBS siap' : 'Layar OBS belum bersuara'}
+        </button>
       </section>
 
       {precheck && !onAir && <div className="status">{precheck}</div>}
@@ -243,11 +258,21 @@ export function LivePanel({ live, blockers, onRefreshBlockers }: Props) {
           {live.alerts.length > 1 && <span className="angle"> (+{live.alerts.length - 1} peringatan sebelumnya)</span>}
         </div>
       )}
-      {live.audioBlocked && (
+      {onAir && !stageOpen && (
         <div className="error" role="alert">
-          Browser memblokir audio otomatis.{' '}
-          <button className="small" onClick={live.unlockAudio}>
-            Aktifkan audio
+          Layar untuk OBS belum terbuka. Penonton tidak mendengar suara AI.{' '}
+          <button className="small" onClick={openStage}>
+            Buka layar OBS
+          </button>
+        </div>
+      )}
+      {stageOpen && !output?.audio_ready && (
+        <div className={onAir ? 'error' : 'status'} role={onAir ? 'alert' : 'status'}>
+          {onAir
+            ? 'Suara AI tertahan: browser butuh satu klik di jendela layar OBS.'
+            : 'Layar OBS terbuka. Klik sekali di jendelanya supaya suara AI bisa diputar.'}{' '}
+          <button className="small" onClick={openStage}>
+            Tampilkan jendelanya
           </button>
         </div>
       )}

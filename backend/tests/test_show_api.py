@@ -27,9 +27,9 @@ def test_start_rejects_draft_that_cannot_be_locked(client):
     assert client.post("/api/show/pause").status_code == 409  # tidak ada siaran
 
 
-def test_console_plays_whole_show_over_websocket(client):
+def test_stage_plays_whole_show_over_websocket(client):
     blocker = locked_blocker(client)
-    with client.websocket_connect("/ws/session?role=console") as stage:
+    with client.websocket_connect("/ws/session?role=stage") as stage:
         assert stage.receive_json()["type"] == "state"
         started = client.post("/api/show/start", json={"blocker_id": blocker["id"], "seed": 3})
         assert started.status_code == 200
@@ -54,6 +54,62 @@ def test_console_plays_whole_show_over_websocket(client):
     assert session_id in [l["session_id"] for l in client.get("/api/logs").json()]
     log = client.get(f"/api/logs/{session_id}").json()
     assert log[-1]["type"] == "session_end" and log[-1]["reason"] == "completed"
+
+
+def _output_status(ws):
+    while True:
+        msg = ws.receive_json()
+        if msg["type"] == "output_status":
+            return msg["data"]
+
+
+def test_only_first_stage_owns_audio_console_is_muted(client):
+    """PRD v2.7 FR-10: /stage satu-satunya pemutar audio; konsol bisu; stage kedua tidak ikut memutar."""
+    with client.websocket_connect("/ws/session?role=console") as console:
+        console.receive_json()  # state
+        st = _output_status(console)
+        assert st["is_audio_owner"] is False and st["audio_owner_role"] is None
+        with client.websocket_connect("/ws/session?role=stage") as stage:
+            stage.receive_json()  # state
+            assert _output_status(stage)["is_audio_owner"] is True
+            st = _output_status(console)
+            assert st["is_audio_owner"] is False and st["audio_owner_role"] == "stage" and st["clients"]["stage"] == 1
+            with client.websocket_connect("/ws/session?role=stage") as second:
+                second.receive_json()
+                assert _output_status(second)["is_audio_owner"] is False
+            # Stage pertama tetap pemilik setelah stage kedua pergi
+        st = _output_status(console)
+        for _ in range(5):
+            if st["clients"]["stage"] == 0:
+                break
+            st = _output_status(console)
+        assert st["clients"]["stage"] == 0 and st["audio_owner_role"] is None
+
+
+def test_stage_audio_ready_and_level_relay(client):
+    with client.websocket_connect("/ws/session?role=console") as console:
+        console.receive_json()
+        _output_status(console)
+        with client.websocket_connect("/ws/session?role=stage") as stage:
+            stage.receive_json()
+            _output_status(stage)
+            assert _output_status(console)["audio_ready"] is False
+            stage.send_json({"action": "audio_state", "data": {"blocked": False, "ready": True}})
+            assert _output_status(console)["audio_ready"] is True
+            stage.send_json({"action": "level", "data": {"persona": "raka", "level": 3}})
+            for _ in range(10):
+                msg = console.receive_json()
+                if msg["type"] == "level":
+                    break
+            assert msg["type"] == "level" and msg["data"] == {"persona": "raka", "level": 1.0}
+        # konsol tidak boleh mengirim level atas nama stage
+        console.send_json({"action": "level", "data": {"persona": "raka", "level": 0.5}})
+        console.send_json({"action": "ping"})
+        for _ in range(5):
+            msg = console.receive_json()
+            assert msg["type"] != "level"
+            if msg["type"] == "pong":
+                break
 
 
 def test_precheck_and_stop(client):

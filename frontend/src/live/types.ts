@@ -110,5 +110,6 @@ export interface OutputStatus {
   is_audio_owner: boolean
   audio_owner_role: string | null
   audio_blocked: boolean
+  audio_ready?: boolean
   clients: Record<string, number>
 }
