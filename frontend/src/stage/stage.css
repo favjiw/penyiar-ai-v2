@@ -1,6 +1,8 @@
 /* Layar untuk OBS: hanya karakter (DESIGN.md §1, §4). Mengisi jendela popup apa pun ukurannya. */
-html, body { margin: 0; height: 100%; overflow: hidden; background: #FFFFFF; }
-#root { height: 100%; }
+/* CSS ini ikut termuat di semua rute (bundel satu), jadi aturan halaman penuh dibatasi ke halaman yang memuat .stage;
+   tanpa :has(), konsol dan editor ikut tidak bisa digulir. */
+html:has(.stage), html:has(.stage) body { margin: 0; height: 100%; overflow: hidden; background: #FFFFFF; }
+html:has(.stage) #root { height: 100%; }
 
 .stage { width: 100vw; height: 100vh; display: flex; flex-direction: column; overflow: hidden; background: #FFFFFF; }
 .stage-panel { position: relative; flex: 1 1 0; min-height: 0; overflow: hidden; }
