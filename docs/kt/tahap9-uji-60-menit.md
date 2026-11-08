@@ -16,7 +16,7 @@ cd backend && LLM_MODE=mock TTS_MODE=mock .venv/bin/python scripts/sim_60min.py 
 | Kebijakan Showrunner | Menit audio | Giliran | Penutupan poin | Per topik | Opening / Closing | Galat |
 |---|---|---|---|---|---|---|
 | `fixed_turns` (hanya batas waktu) | 53,0 | 857 | 24× timer | 8,3–8,4 mnt (rencana 9) | 1,1 / 1,5 mnt | 0 |
-| `llm` (Showrunner **mock**) | 6,1 | 100 | 24× early | 1,0 mnt | 0,1 / 0,1 mnt | 0 |
+| `llm` (Showrunner **mock**) | 8,5 | 144 | 24× early | 1,0 mnt | 1,1 / 1,5 mnt | 0 |
 
 - Batas per poin dari menit topik bekerja: 9 mnt × 60 ÷ 4 poin = 135 dtk; poin ditutup sedikit sebelum batas
   (giliran penutup saat sisa ≤ `POINT_WRAP_S`), jadi topik ±8,4 mnt.
@@ -30,7 +30,9 @@ cd backend && LLM_MODE=mock TTS_MODE=mock .venv/bin/python scripts/sim_60min.py 
 ### Mode A (penyiar + AI), jam tiruan
 
 Penyiar skrip bicara terus sampai menit topik lewat dengan lewat waktu acak (0–200 dtk), lalu membaca kalimat pindah
-topik dari materi (atau frasa eksplisit bila tidak terdeteksi).
+topik dari materi (atau frasa eksplisit bila tidak terdeteksi). Catatan: kalimat pindah buatan generator mock berbunyi
+"Oke, lanjut ke obrolan berikutnya ya", yang sudah cocok dengan aturan `frasa`; aturan `transisi` (kalimat pindah
+khas materi) tidak teruji di simulasi ini, hanya di `tests/test_intent.py`.
 
 | Seed | Menit siaran | Pertukaran | Pindah lewat ucapan | Kode halus | Galat |
 |---|---|---|---|---|---|
@@ -38,7 +40,8 @@ topik dari materi (atau frasa eksplisit bila tidak terdeteksi).
 | 11 | 70,4 | 547 | 7/7 | 3 (tepat topik yang lewat ≥120 dtk) | 0 |
 
 - Tidak ada pindah otomatis: topik hanya berganti lewat ucapan penyiar (diperiksa tiap topik di skrip).
-- Kode halus muncul sekali per topik, saat lewat 122–129 dtk (ambang 120), tidak pada topik yang lewat <120 dtk.
+- Kode halus muncul sekali per topik setelah ambang 120 dtk (seed 7: lewat 122–129 dtk; seed 11: t1 134, t4 121,
+  t5 122 dtk), tidak pada topik yang lewat <120 dtk.
 - Total >60 menit karena penyiar skrip sengaja melewati waktu; ini menguji kode halus, bukan disiplin waktu.
 
 ## 2. Uji singkat LLM nyata, mode B (3 menit)

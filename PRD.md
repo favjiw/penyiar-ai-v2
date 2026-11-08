@@ -51,7 +51,7 @@ Riset difokuskan ke **kualitas percakapan** (target obrolan 40+ menit). Yang dit
 
 Yang ditambah:
 - ~~**Mode C**: 1 penyiar manusia (pemegang sesi) + 2 AI (Raka dan Salsa).~~ Dicabut di v2.6 atas arahan pembimbing (§1.3.2); kodenya hanya ada di riwayat git sebelum commit `396f06a`.
-- **Indikator giliran bicara (orb)** di konsol sebagai pengganti avatar (FR-15).
+- ~~**Indikator giliran bicara (orb)** di konsol sebagai pengganti avatar (FR-15).~~ Dihapus di v2.7: diganti kartu "siapa bicara" dengan bar level suara nyata (FR-11, `docs/design/DESIGN.md` §1).
 - **Lapisan TTS yang bisa diganti** (FR-6): Edge TTS gratis sebagai default selama pengembangan dan uji panjang; ElevenLabs dipakai untuk demo ke pembimbing dengan mengganti satu variabel `.env`.
 - Log riset per sesi: `sessions/<id>/turns.jsonl` dan `blocker.json` (FR-12).
 
@@ -120,7 +120,7 @@ Hasil diskusi desain bersama Claude Design. Acuan visual dan perilaku: `docs/des
 | FR-12 Logging | ✓ | ✓ | ✓ |
 | ~~FR-13 Panel komentar + Supervisor~~ ditunda | – | – | – |
 | FR-14 Harness eksperimen | – | ✓ | ✓ |
-| FR-15 Indikator giliran bicara (orb) | ✓ | ✓ | – |
+| ~~FR-15 Indikator giliran bicara (orb)~~ dihapus v2.7 (diganti kartu siapa bicara, FR-11) | – | – | – |
 
 ### 2.3 Tidak dikerjakan
 - Pemutaran dan rekomendasi lagu.
@@ -263,7 +263,7 @@ IDLE → BLOCKER_LOCKED → READY → LIVE{ OPENING → TOPIC(1..n) → CLOSING 
 | TOPIC_i → TOPIC_i+1 | Penyiar menekan "next" | Showrunner `transition` |
 | TOPIC_n → CLOSING | Penyiar menekan "next" / "closing" | Showrunner `close` |
 | Batas keras | Tidak ada | `MAX_TURNS_PER_TOPIC` (default 60; 40 membatasi tiga topik ke ±34 menit pada uji 30 Okt) memaksa transisi; tercatat sebagai `forced`. Tidak berlaku bila batas waktu poin aktif |
-| Batas waktu poin (`POINT_TIME_LIMIT_S` > 0) | Waktu habis → jawaban AI menutup poin, lalu poin pindah otomatis; poin terakhir → topik berikutnya / Closing | Waktu habis atau Showrunner menilai poin jenuh → giliran penutup → poin berikutnya / topik berikutnya / Closing |
+| Batas waktu poin (`POINT_TIME_LIMIT_S` > 0) | Sejak v2.7 tidak berlaku: tidak ada pindah poin/topik otomatis; waktu topik dari `menit` materi hanya panduan, kode halus satu kali, pindah lewat ucapan penyiar atau tombol N | Waktu habis atau Showrunner menilai poin jenuh → giliran penutup → poin berikutnya / topik berikutnya / Closing |
 | Override operator | skip / pause / stop | skip / pause / stop |
 
 ### 6.3 Event WebSocket (minimal) [C]
@@ -274,9 +274,10 @@ IDLE → BLOCKER_LOCKED → READY → LIVE{ OPENING → TOPIC(1..n) → CLOSING 
 | `turn` | server → console, stage | persona, teks, emosi, `audio_url`, durasi, `playback_id` |
 | `filler` | server → stage | persona, `audio_url` |
 | `speaking` | stage → server | mulai / selesai putar (untuk sinkron dan latensi) |
-| `point_clock` | server → console, prompter | poin aktif, sisa waktu obrolan (`limit_s`, `played_s`, `running`); `{active: false}` bila tidak ada batas waktu. v2.7: ditambah `total_played_s` dan `target_s` (progres siaran) |
+| `point_clock` | server → console, prompter | poin aktif, sisa waktu obrolan (`limit_s`, `played_s`, `running`); `{active: false}` bila tidak ada batas waktu (termasuk mode A sejak v2.7) |
+| `show_clock` | server → semua | (v2.7) jam siaran tanpa jeda: `elapsed_s`, `target_s` (durasi materi), `segment_elapsed_s`, `segment_target_s` (menit topik / ±3 menit Opening-Closing), `running`; juga di snapshot |
 | `nudge` | server → console, prompter | (v2.7, mode A) kode halus satu kali per topik saat lewat ≥120 dtk |
-| `alert` | server → console | (v2.7) `{level: red\|yellow\|blue, code, message, actions[]}`: mic hening ≥8 dtk, layar OBS terputus, kuota suara ≤5 menit, cadangan aktif |
+| `alert` | server → semua (dipakai konsol) | (v2.7) `{level: red\|yellow\|blue, code, title, message, detail, stage, turn, at}`: `title`/`message` memakai istilah UI, `detail` pesan mentah untuk Detail teknis; kode antara lain `tts_silent`, `tts_fallback`, `tts_quota_low`, `llm_fallback`, `ai_failing`, `supervisor_rules`. Peringatan merah dari kondisi (mic penyiar tidak terdengar ≥8 dtk, dilaporkan prompter lewat `mic_state` → `output_status.mic`; layar OBS tertutup/belum bersuara; prompter tertutup) dibuat di konsol, bukan event server |
 | `showrunner` | server → console, prompter | keputusan, poin tercakup, alasan singkat |
 | `supervisor` | server → console | verdict, aksi, bukti |
 | `topic_change` | server → semua | id topik, judul; v2.7: `reason: 'voice'` (+ `said`, `from`, `rule`, `undo_s`) bila dipicu ucapan penyiar, `reason: 'undo'` saat dibatalkan |
@@ -343,7 +344,7 @@ Format setiap FR: deskripsi → aturan → kriteria terima (KT).
   - riwayat N giliran terakhir (default 12) dan ringkasan sebelumnya;
   - arahan Showrunner terakhir (`steer`);
   - memori koreksi Supervisor (bila ada).
-- **Pipelining mode B:** buat giliran n+1 (teks, Supervisor, TTS, dan render T2 bila aktif) selagi giliran n diputar. Kedalaman buffer `PIPELINE_DEPTH` default 1; 2–3 bila memakai T2.
+- **Pipelining mode B:** buat giliran n+1 (teks, Supervisor, TTS, dan render T2 bila aktif) selagi giliran n diputar. Kedalaman buffer `PIPELINE_DEPTH` default 2 (sejak gerbang Tahap 2); 2–3 bila memakai T2.
 - **Pemilihan pembicara mode B:**
   - default bergantian menurut daftar peserta AI (bukan pasangan tetap; lebih dari dua AI cukup menambah daftar);
   - boleh Showrunner `steer` dengan `next_speaker`;
@@ -451,7 +452,7 @@ Kode Supervisor di repo lama masih **stub**: prompt satu baris, tanpa koreksi da
   - provider utama diulang **sekali** bila galat, timeout (`TTS_TIMEOUT_SEC`, default 12 s), atau audio kosong; lalu cadangan; setiap kejadian dicatat (`tts_fallback_used`, `tts_fallback_reason`) dan operator melihat peringatan. Bila semua gagal, giliran tanpa suara memunculkan peringatan, bukan diam;
   - `TTS_PROVIDER=elevenlabs` tanpa key: peringatan jelas di konsol dan jatuh ke Edge, bukan crash;
   - Edge: Raka `id-ID-ArdiNeural`, Salsa `id-ID-GadisNeural`, dengan rate dan pitch per persona (`EDGE_RATE_*`, `EDGE_PITCH_*`); gTTS (`id`) satu suara untuk semua persona;
-  - label provider aktif tampil di header konsol, dan audio apa pun diputar lewat jalur Web Audio yang sama (orb bereaksi ke amplitudo);
+  - label provider aktif tampil di header konsol, dan audio apa pun diputar lewat jalur Web Audio yang sama di `/stage` (bar level di konsol/prompter mengikuti amplitudo yang diteruskan stage; orb dihapus v2.7);
   - uji: `backend/scripts/test_tts.py` (audio tidak kosong, durasi > 0, suara Raka dan Salsa berbeda).
 - **ElevenLabs [F]:** ElevenLabs, model `eleven_flash_v2_5` (diatur lewat `ELEVENLABS_MODEL`, tidak di-hard-code), endpoint streaming.
   - Raka: suara **Pratama** (`q8qwd1jY2jS3AWOBeq25`); cadangan Ginanjar (`JjCMg2oeB7ExbMJUJHSK`).
@@ -527,7 +528,7 @@ Kode Supervisor di repo lama masih **stub**: prompt satu baris, tanpa koreksi da
 - Bila gerbang gagal, catat angka RTF sebagai temuan dan tetap pakai T1.
 
 ### FR-10 Stage / output OBS
-- **Versi ringan, dihidupkan lagi [F, 8 Nov 2026]:** `/stage` **tanpa teks atau komponen apa pun**, hanya karakter; satu-satunya pemutar audio (konsol bisu). Dibuka sebagai popup bernama tetap `hits-stage`: mode B 540×960 dua panel, mode A 540×480 satu panel AI (kamera studio ditumpuk di OBS). Avatar final = klip video realistis (gaya Google Flow, FR-8); sementara memakai ilustrasi. Rute tak dikenal → 404. Spesifikasi lama di bawah (HUD, zona aman) tetap sebagai rujukan untuk avatar final.
+- **Versi ringan, dihidupkan lagi [F, 8 Nov 2026]:** `/stage` **tanpa teks atau komponen apa pun**, hanya karakter; satu-satunya pemutar audio (konsol bisu). Dibuka sebagai popup bernama tetap `hits-stage`: mode B 540×960 dua panel, mode A 540×480 satu panel AI (kamera studio ditumpuk di OBS). Avatar final = klip video realistis (gaya Google Flow, FR-8); sementara memakai ilustrasi. Satu pengecualian, hanya sebelum live: bila browser belum mengizinkan suara, stage menampilkan ajakan "Klik sekali untuk menyalakan suara AI" (tidak pernah saat on air; saat live, klik di mana pun pada jendela menyalakan suara dan konsol yang memberi peringatan). Rute tak dikenal → 404. Spesifikasi lama di bawah (HUD, zona aman) tetap sebagai rujukan untuk avatar final.
 - Kanvas 9:16 (1080×1920). Pakai ulang zona aman TikTok dari `stageLayout.ts`:
   - header 0–10%;
   - bar bawah 93–100%;
@@ -617,7 +618,7 @@ Kode Supervisor di repo lama masih **stub**: prompt satu baris, tanpa koreksi da
 | Kuota | Rate limiter per model (`GEMINI_RPM_*`). Model berbeda per peran untuk membagi beban: persona, Supervisor, Showrunner, blocker. Status kuota tampil di konsol. Bila kuota atau kredit habis: TTS ElevenLabs ke Edge, Supervisor ke `rules`, Showrunner ke `fixed_turns`; semua tercatat. v2.7 [F]: penghitung kuota harian per model (Gemini tidak memberi sisa RPD; reset 00.00 waktu Pasifik, disimpan ke file `QUOTA_FILE`; satu ember per model, dibagi semua peran yang memakainya; ditandai habis saat Google menolak kuota harian); target siaran 60 menit harus tercapai dengan cadangan otomatis. Menit aman = sisa ÷ laju per menit (laju dari log sesi ≥3 menit, atau `AI_TURNS_PER_MIN_A/B`, `TTS_CREDITS_PER_MIN`); semua angka ditampilkan sebagai perkiraan. Sisa kredit ElevenLabs dibaca dari `/v1/user/subscription` (butuh izin `user_read` pada kunci; tanpa itu "belum diketahui", tidak dianggap 0 atau penuh). |
 | Latensi | Mode B: jeda antargiliran p95 ≤4 s (T1). Mode A: §FR-7. |
 | Keandalan | Live uji 20 menit tanpa crash (KP); 60 menit (target akhir). v2.7 [F]: mode A dan B **60 menit** tanpa crash; mode A tanpa klik penyiar. Reconnect WS otomatis. Status live tetap benar setelah reload. |
-| Kepatuhan TikTok | Label AI di layar, penyampaian di pembukaan bahwa penyiar adalah AI, dan pengaturan label konten AI TikTok diaktifkan. Uji coba di akun pribadi dulu. |
+| Kepatuhan TikTok | Label AI di layar, penyampaian di pembukaan bahwa penyiar adalah AI, dan pengaturan label konten AI TikTok diaktifkan. Uji coba di akun pribadi dulu. Sejak v2.7 `/stage` tanpa teks: label AI berasal dari setelan konten AI bawaan TikTok (DESIGN.md §4); bila perlu label di gambar, ditambahkan sebagai sumber teks di OBS. |
 | Privasi data | Data free tier Gemini boleh dipakai Google untuk pengembangan produk. Jangan memasukkan data pribadi penonton atau dokumen rahasia HITS ke prompt. |
 | Perangkat | Laptop streaming MX250: hanya T1 dan OBS. PC lab GTX 1080: T2 dan/atau faster-whisper. Chrome/OBS diatur ke GPU "High performance". |
 | Kode | Python 3.12 + FastAPI; React + Vite + TypeScript; tes unit untuk modul backend; `LLM_MODE=mock` dan `TTS_MODE=mock` untuk uji tanpa kuota. |
@@ -1006,7 +1007,7 @@ STT_PROVIDER=webspeech|faster_whisper|gemini   FASTER_WHISPER_URL=
 SHOWRUNNER_POLICY=llm|fixed_turns|coverage_only
 SHOWRUNNER_EVERY_K=3   MIN_TURNS_PER_TOPIC=6   MAX_TURNS_PER_TOPIC=60   FIXED_TURNS_PER_TOPIC=
 SUPERVISOR_MODE=off|rules|full (default off)   SUPERVISOR_MAX_REGEN=1   SUPERVISOR_TIMEOUT_MS=5000
-PIPELINE_DEPTH=1
+PIPELINE_DEPTH=2
 POINT_TIME_LIMIT_S=60   POINT_WRAP_S=15   POINT_MIN_TURNS=3   TTS_WORDS_PER_SEC=2.0   # batas waktu obrolan per poin; 0 = mati
 GEMINI_RPD_DEFAULT=500   GEMINI_RPD_<PERAN>=   QUOTA_FILE=   AI_TURNS_PER_MIN_A=4   AI_TURNS_PER_MIN_B=7   TTS_CREDITS_PER_MIN=200   TTS_QUOTA_ALERT_MIN=5   # v2.7: cek kesiapan berbasis kuota
 POINT_LIMIT_FROM_TOPIC=true   MODE_A_NUDGE_AFTER_S=120   # v2.7: batas mode B dari menit topik; kode halus mode A

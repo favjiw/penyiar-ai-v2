@@ -103,7 +103,7 @@ export function useLiveSession(role: Role): LiveSession {
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ action, data }))
   }, [])
 
-  /** Satu elemen audio, dialirkan lewat Web Audio supaya amplitudonya bisa dibaca orb. */
+  /** Satu elemen audio, dialirkan lewat Web Audio supaya amplitudonya bisa dibaca (mulut avatar, bar level). */
   const getAudio = useCallback((): HTMLAudioElement => {
     let a = audioRef.current
     if (!a) {
@@ -120,7 +120,7 @@ export function useLiveSession(role: Role): LiveSession {
         analyserRef.current = analyser
         samplesRef.current = new Uint8Array(analyser.fftSize)
       } catch {
-        // Tanpa Web Audio audio tetap diputar lewat elemen; orb jatuh ke animasi bicara tanpa amplitudo.
+        // Tanpa Web Audio audio tetap diputar lewat elemen; level dianggap nol (bar diam).
       }
     }
     return a
