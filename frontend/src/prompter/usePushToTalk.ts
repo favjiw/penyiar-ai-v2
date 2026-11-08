@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 /**
- * Push-to-talk dengan Web Speech API Chrome (`id-ID`, FR-7). Mulai saat tombol
- * ditekan, berhenti saat dilepas; transkrip final dikirim lewat onFinal beserta
- * waktu lepas-tombol → transkrip final (stt_ms). Esc membatalkan.
+ * Pendengar suara penyiar dengan Web Speech API Chrome (`id-ID`, FR-7). Sejak v2.7 dipakai
+ * hands-free: prompter menyalakannya saat giliran penyiar dan transkrip final dikirim otomatis
+ * setelah jeda bicara (`autoSendSilenceMs`), beserta jeda → transkrip final (stt_ms).
  */
 
 // Web Speech belum ada di lib DOM TypeScript.
@@ -38,6 +38,8 @@ interface Options {
 export function usePushToTalk({ onPartial, onFinal, autoSendSilenceMs = 0, keepAlive = false }: Options) {
   const [listening, setListening] = useState(false)
   const [error, setError] = useState('')
+  /** Kode galat Web Speech terakhir (mis. audio-capture, not-allowed); kosong bila normal. */
+  const [errorCode, setErrorCode] = useState('')
   const rec = useRef<SpeechRecognitionLike | null>(null)
   const finalText = useRef('')
   const interim = useRef('')
@@ -59,6 +61,7 @@ export function usePushToTalk({ onPartial, onFinal, autoSendSilenceMs = 0, keepA
     if (!SR || rec.current) return
     clearTimers()
     setError('')
+    setErrorCode('')
     finalText.current = ''
     interim.current = ''
     cancelled.current = false
@@ -70,6 +73,7 @@ export function usePushToTalk({ onPartial, onFinal, autoSendSilenceMs = 0, keepA
     r.interimResults = true
     r.continuous = true
     r.onresult = (e) => {
+      setErrorCode('')
       if (!firstSpeechAt.current) firstSpeechAt.current = performance.now()
       let partial = ''
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -92,7 +96,10 @@ export function usePushToTalk({ onPartial, onFinal, autoSendSilenceMs = 0, keepA
       }
     }
     r.onerror = (e) => {
-      if (e.error !== 'aborted' && e.error !== 'no-speech') setError(`STT: ${e.error}`)
+      if (e.error !== 'aborted' && e.error !== 'no-speech') {
+        setError(`STT: ${e.error}`)
+        setErrorCode(e.error)
+      }
     }
     r.onend = () => {
       window.clearTimeout(silenceTimer.current)
@@ -144,5 +151,5 @@ export function usePushToTalk({ onPartial, onFinal, autoSendSilenceMs = 0, keepA
     [],
   )
 
-  return { listening, error, start, stop, cancel }
+  return { listening, error, errorCode, start, stop, cancel }
 }

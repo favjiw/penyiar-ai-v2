@@ -269,6 +269,7 @@ class HumanLedEngine(ShowEngine):
             self._answering = False
             self._thinking = None
             self.on_air["speaking"] = None
+            await self._emit("speaking", {"persona": None})
             await self._broadcast_state()
 
     async def _ai_turn(self, speaker: PersonaCard, received: float, filler: Optional[str], stt_ms: int) -> tuple[int, float]:

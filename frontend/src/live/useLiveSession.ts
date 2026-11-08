@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { OutputStatus, PointClock, ShowSnapshot, ShowrunnerDecision, SupervisorEvent, TranscriptEntry, TurnEvent } from './types'
+import type { OnAirTopic, OutputStatus, PointClock, ShowClock, ShowSnapshot, ShowrunnerDecision, SupervisorEvent, TranscriptEntry, TurnEvent } from './types'
 
 export type Role = 'console' | 'prompter' | 'stage'
 const RECONNECT_MS = 1500
@@ -17,6 +17,10 @@ export interface LiveSession {
   output: OutputStatus | null
   /** Jam obrolan per poin terbaru dari server, beserta waktu terimanya (untuk menghitung mundur di klien). */
   pointClock: { clock: PointClock; at: number } | null
+  /** Jam siaran terbaru dari server beserta waktu terimanya (performance.now()). */
+  showClock: { clock: ShowClock; at: number } | null
+  /** Pindah topik terakhir yang terjadi saat klien ini tersambung (untuk band "Pindah topik"). */
+  lastTopicChange: { topic: OnAirTopic | { id: null; judul: string }; at: number } | null
   speaking: string | null
   alerts: { stage: string; message: string; turn: number }[]
   sttPartial: string
@@ -56,6 +60,8 @@ export function useLiveSession(role: Role): LiveSession {
   const [supervisor, setSupervisor] = useState<SupervisorEvent[]>([])
   const [output, setOutput] = useState<OutputStatus | null>(null)
   const [pointClock, setPointClock] = useState<{ clock: PointClock; at: number } | null>(null)
+  const [showClock, setShowClock] = useState<{ clock: ShowClock; at: number } | null>(null)
+  const [lastTopicChange, setLastTopicChange] = useState<LiveSession['lastTopicChange']>(null)
   const [speaking, setSpeaking] = useState<string | null>(null)
   const [alerts, setAlerts] = useState<LiveSession['alerts']>([])
   const [sttPartial, setSttPartial] = useState('')
@@ -293,12 +299,16 @@ export function useLiveSession(role: Role): LiveSession {
             const snap = data as ShowSnapshot
             setSnapshot(snap)
             setPointClock(snap.point_clock ? { clock: snap.point_clock, at: Date.now() } : null)
+            setShowClock(snap.show_clock ? { clock: snap.show_clock, at: performance.now() } : null)
+            // Selain pemutar, siapa yang bicara mengikuti server (termasuk null setelah giliran selesai).
+            if (!ownerRef.current) setSpeaking(snap.speaking ?? null)
             if (snap.session_id !== sessionRef.current) {
               // Sesi baru, atau sambung ulang: ambil ulang riwayat dari snapshot.
               sessionRef.current = snap.session_id
               setShowrunner(snap.showrunner ? [snap.showrunner] : [])
               setSupervisor([])
               setAlerts([])
+              setLastTopicChange(null)
             }
             if (snap.transcript) setTranscript(snap.transcript)
             if (snap.state === 'ended') stopAudio()
@@ -339,6 +349,10 @@ export function useLiveSession(role: Role): LiveSession {
             break
           case 'topic_change':
             setSnapshot((s) => ({ ...s, topic: data, segment: data.id ? 'topic' : 'closing' }))
+            setLastTopicChange({ topic: data, at: performance.now() })
+            break
+          case 'show_clock':
+            setShowClock({ clock: data as ShowClock, at: performance.now() })
             break
           case 'point_clock':
             setPointClock({ clock: data as PointClock, at: Date.now() })
@@ -379,5 +393,5 @@ export function useLiveSession(role: Role): LiveSession {
     }
   }, [role, enqueue, pump, send, stopAudio])
 
-  return { connected, snapshot, transcript, showrunner, supervisor, output, pointClock, speaking, alerts, sttPartial, micActive, level, audioBlocked, audioReady, unlockAudio, send }
+  return { connected, snapshot, transcript, showrunner, supervisor, output, pointClock, showClock, lastTopicChange, speaking, alerts, sttPartial, micActive, level, audioBlocked, audioReady, unlockAudio, send }
 }

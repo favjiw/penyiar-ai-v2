@@ -60,6 +60,7 @@ logger = logging.getLogger(__name__)
 Emit = Callable[[str, dict[str, Any]], Awaitable[None]]
 PLAYBACK_GRACE_SEC = 5.0
 TRANSCRIPT_KEEP = 60
+OPENING_CLOSING_TARGET_S = 180  # Opening ±3 menit, Closing ±3 menit (PRD v2.7 FR-1, §1.3.3)
 
 
 @dataclass
@@ -174,6 +175,11 @@ class ShowEngine:
         self.last_showrunner: Optional[ShowrunnerDecision] = None
         self._on_air_pos: tuple[Segment, int] = ("opening", 0)  # posisi yang sedang terdengar
         self.started_at = 0.0
+        # Jam siaran aktif (tanpa waktu jeda) untuk prompter/konsol: "Siaran m:ss / target" + cincin waktu segmen.
+        self._paused_total = 0.0
+        self._paused_at: Optional[float] = None
+        self._ended_at: Optional[float] = None
+        self._segment_started_active = 0.0
         self._resume = asyncio.Event()
         self._resume.set()
         self._playback_id: Optional[str] = None
@@ -188,10 +194,43 @@ class ShowEngine:
     # ── Event dan status ─────────────────────────────────────────────────────
 
     async def _emit(self, type_: str, data: dict[str, Any]) -> None:
+        if type_ == "topic_change":
+            self._segment_started_active = self._active_s()
         try:
             await self._emit_raw(type_, data)
         except Exception as e:  # klien putus tidak boleh menghentikan siaran
             logger.warning("Emit %s gagal: %s", type_, e)
+        if type_ == "topic_change":
+            await self._emit("show_clock", self.show_clock())
+
+    def _active_s(self) -> float:
+        """Detik siaran berjalan sejak mulai, tanpa waktu jeda."""
+        if not self.started_at:
+            return 0.0
+        now = self._ended_at or time.monotonic()
+        paused = self._paused_total + ((now - self._paused_at) if self._paused_at is not None else 0.0)
+        return max(0.0, now - self.started_at - paused)
+
+    def _segment_target_s(self) -> int:
+        topic = self.on_air.get("topic")
+        if self.on_air.get("segment") == "topic" and topic:
+            t = next((x for x in self.blocker.topics if x.id == topic.get("id")), None)
+            if t is not None:
+                return t.menit * 60
+        return OPENING_CLOSING_TARGET_S
+
+    def show_clock(self) -> dict[str, Any]:
+        """Jam siaran (PRD v2.7): total aktif vs target durasi, dan waktu segmen (topik/Opening/Closing)
+        vs perkiraan menitnya. Klien menghitung maju sendiri selama `running`."""
+        active = self._active_s()
+        plan_min = OPENING_CLOSING_TARGET_S * 2 / 60 + sum(t.menit for t in self.blocker.topics)
+        return {
+            "elapsed_s": round(active, 1),
+            "target_s": int((self.blocker.durasi_menit or plan_min) * 60),
+            "segment_elapsed_s": round(max(0.0, active - self._segment_started_active), 1),
+            "segment_target_s": self._segment_target_s(),
+            "running": self.state == ShowState.LIVE,
+        }
 
     def snapshot(self) -> dict[str, Any]:
         """Status lengkap untuk klien yang baru tersambung atau reload (FR-8 keandalan)."""
@@ -215,6 +254,7 @@ class ShowEngine:
             "topic_points": self._topic_points(),
             "tts": self.tts.status(),
             "point_clock": self._clock_payload(self._clock_running),
+            "show_clock": self.show_clock(),
             "error": self.error,
         }
 
@@ -275,6 +315,7 @@ class ShowEngine:
     async def pause(self) -> None:
         if self.state == ShowState.LIVE:
             self.state = ShowState.PAUSED
+            self._paused_at = time.monotonic()
             self._resume.clear()
             self.log.event("operator_action", action="pause")
             await self._broadcast_state()
@@ -282,6 +323,9 @@ class ShowEngine:
     async def resume(self) -> None:
         if self.state == ShowState.PAUSED:
             self.state = ShowState.LIVE
+            if self._paused_at is not None:
+                self._paused_total += time.monotonic() - self._paused_at
+                self._paused_at = None
             self._resume.set()
             self.log.event("operator_action", action="resume")
             await self._broadcast_state()
@@ -825,6 +869,8 @@ class ShowEngine:
             await self._emit_clock(False)
         finally:
             self.on_air["speaking"] = None
+            # Klien selain pemutar (konsol, prompter) perlu tahu giliran selesai; pemutar hanya melapor "started".
+            await self._emit("speaking", {"persona": None})
             self._last_play_end = time.monotonic()
             self.log_turn(
                 turn=t.turn, speaker=t.persona.id, speaker_name=t.persona.name, is_human=False, segment=t.segment,
@@ -913,6 +959,7 @@ class ShowEngine:
         if self.state == ShowState.ENDED:
             return
         self.state = ShowState.ENDED
+        self._ended_at = time.monotonic()
         self._resume.set()
         self.summary.cancel()
         self._end_point("stop" if reason == "stopped" else "end")

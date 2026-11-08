@@ -1,36 +1,87 @@
-import { useEffect, useRef, useState } from 'react'
+/**
+ * Prompter penyiar (PRD v2.7 FR-11, mockup Prompter*): dibaca dari 1–1,5 m, tanpa pengaturan,
+ * dan siaran bisa berjalan tanpa satu klik pun dari penyiar.
+ * - Band status berganti warna: Giliranmu (kuning) · AI bicara (biru) · AI mikir (abu) ·
+ *   Pindah topik (hijau) · Mic tidak terdengar (merah muda).
+ * - Topik + TANYA PENONTON besar + bahan obrolan; cincin waktu segmen; "Siaran m:ss / target".
+ * - Mic hands-free (Web Speech), dijeda saat AI berpikir/bicara (giliran ketat, tanpa menyela).
+ * - Tombol "Topik selanjutnya" (N) hanya opsional.
+ */
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
-import { PointCountdown } from '../console/PointCountdown'
+import { shout } from '../lib/materi'
 import { useLiveSession } from '../live/useLiveSession'
+import { fmtClock, IconCheck, IconMicOff, LevelBars, Ring, ringState } from '../ui'
 import './prompter.css'
+import { useMicMonitor } from './useMicMonitor'
 import { speechSupported, usePushToTalk } from './usePushToTalk'
 
-const isTyping = (el: Element | null) => !!el && ['INPUT', 'TEXTAREA'].includes(el.tagName)
+const TOPIC_BAND_MS = 6000 // lama band "Pindah topik" tampil setelah topik berganti
+const AUTO_SEND_SILENCE_MS = 1200
+const MIC_ERROR_CODES = new Set(['audio-capture', 'not-allowed', 'service-not-allowed'])
 
-/**
- * Prompter mode A (FR-11): blocker layar besar untuk penyiar manusia, push-to-talk
- * (FR-7), dan saran Showrunner. Terbaca dari 1–1,5 m; semua kontrol punya pintasan:
- * tahan Spasi = bicara, Esc = batal, N = next topik.
- */
+type Band =
+  | { kind: 'turn' }
+  | { kind: 'ai-speak'; name: string }
+  | { kind: 'ai-think'; name: string }
+  | { kind: 'switch'; title: string }
+  | { kind: 'mic-down' }
+  | { kind: 'paused' }
+  | { kind: 'ai-between' }
+
+/** Detik berjalan lokal: setiap `ms` render ulang selama `active`. */
+function useTicker(active: boolean, ms = 250) {
+  const [, setN] = useState(0)
+  useEffect(() => {
+    if (!active) return
+    const t = window.setInterval(() => setN((n) => n + 1), ms)
+    return () => window.clearInterval(t)
+  }, [active, ms])
+}
+
+/** Level audio AI yang diputar di layar OBS (diteruskan server), dibaca per frame. */
+function useRelayedLevel(getLevel: () => number | null, active: boolean) {
+  const [level, setLevel] = useState(0)
+  useEffect(() => {
+    if (!active) {
+      setLevel(0)
+      return
+    }
+    let raf = 0
+    let last = -1
+    const tick = () => {
+      const lv = Math.round((getLevel() ?? 0) * 20) / 20
+      if (lv !== last) setLevel((last = lv))
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [getLevel, active])
+  return level
+}
+
 export function PrompterPage() {
   const live = useLiveSession('prompter')
-  const { snapshot: snap, transcript, showrunner } = live
-  const [autoMic, setAutoMic] = useState(true)
-  const [toggleMode, setToggleMode] = useState(false)
+  const { snapshot: snap, transcript, showClock, lastTopicChange, send } = live
   const [partial, setPartial] = useState('')
-  const [typed, setTyped] = useState('')
   const [message, setMessage] = useState('')
   const lastPartialSent = useRef(0)
   const onAir = snap.state === 'live' || snap.state === 'paused'
-  const isModeA = snap.mode !== 'B'
-  const aiNames = (snap.personas ?? []).map((p) => p.name).join(' dan ')
-  const advice = [...showrunner].reverse().find((d) => d.advisory)
-  const aiSpeaking = snap.busy || (snap.personas ?? []).some((p) => p.id === live.speaking)
-  const shouldAutoListen = isModeA && snap.state === 'live' && autoMic && !aiSpeaking
+  const paused = snap.state === 'paused'
+  const isModeA = snap.mode === 'A'
+  const personas = snap.personas ?? []
+  const ai = personas.find((p) => p.id === snap.ai_persona) ?? personas[0]
+  const speakingAi = personas.find((p) => p.id === live.speaking)
+  const thinkingAi = personas.find((p) => p.id === snap.thinking) ?? (snap.busy ? ai : undefined)
+  const aiBusy = !!speakingAi || !!thinkingAi || !!snap.busy
+  const shouldListen = isModeA && snap.state === 'live' && !aiBusy
 
+  useTicker(onAir)
+
+  // ── Mic hands-free ──────────────────────────────────────────────────────
   const sendTurn = async (text: string, sttMs: number, speechMs = 0) => {
     setPartial('')
-    live.send('stt_partial', { text: '', final: true })
+    send('stt_partial', { text: '', final: true })
     try {
       await api.pttTurn(text, sttMs, speechMs)
       setMessage('')
@@ -38,249 +89,252 @@ export function PrompterPage() {
       setMessage(e instanceof ApiError ? e.message : String(e))
     }
   }
-
-  const ptt = usePushToTalk({
+  const stt = usePushToTalk({
     onPartial: (text) => {
       setPartial(text)
       const now = performance.now()
       if (now - lastPartialSent.current > 300) {
         lastPartialSent.current = now
-        live.send('stt_partial', { text })
+        send('stt_partial', { text })
       }
     },
     onFinal: (text, sttMs, speechMs) => void sendTurn(text, sttMs, speechMs),
-    autoSendSilenceMs: autoMic ? 1200 : 0,
-    keepAlive: shouldAutoListen,
+    autoSendSilenceMs: AUTO_SEND_SILENCE_MS,
+    keepAlive: shouldListen,
   })
-
-  // Otomatis nyalakan mikrofon begitu siaran Mode A live dan AI selesai bicara; matikan sementara saat AI menjawab.
-  const { start: startMic, cancel: cancelMic, listening } = ptt
+  const { start: startMic, cancel: cancelMic, listening } = stt
   useEffect(() => {
     if (!speechSupported) return
-    if (shouldAutoListen && !listening) {
-      startMic()
-    } else if (autoMic && (!onAir || snap.state === 'paused' || aiSpeaking) && listening && !partial) {
-      cancelMic()
-    }
-  }, [shouldAutoListen, listening, autoMic, onAir, snap.state, aiSpeaking, partial, startMic, cancelMic])
-
-  // Konsol menyalakan indikator mikrofon selama mikrofon aktif.
-  const { send } = live
+    if (shouldListen && !listening) startMic()
+    // Giliran ketat: AI mikir/bicara, jeda, atau selesai → mic dijeda (ucapan yang belum selesai tetap dikirim).
+    else if (!shouldListen && listening && !partial) cancelMic()
+  }, [shouldListen, listening, partial, startMic, cancelMic])
   useEffect(() => {
-    send('stt_partial', { text: '', active: ptt.listening })
-  }, [ptt.listening, send])
+    send('stt_partial', { text: '', active: listening })
+  }, [listening, send])
 
-  const next = async () => {
+  const mic = useMicMonitor(isModeA && snap.state === 'live')
+  const micDown = isModeA && onAir && (mic.down || MIC_ERROR_CODES.has(stt.errorCode))
+  const aiLevel = useRelayedLevel(live.level, !!speakingAi)
+
+  const next = useCallback(async () => {
     try {
       await api.control('next')
     } catch (e) {
       setMessage(e instanceof ApiError ? e.message : String(e))
     }
-  }
-
-  // Pintasan keyboard (FR-11)
-  useEffect(() => {
-    const down = (e: KeyboardEvent) => {
-      if (!onAir || isTyping(document.activeElement)) return
-      if (e.code === 'Space' && isModeA) {
-        e.preventDefault()
-        if (e.repeat) return
-        if ((autoMic || toggleMode) && ptt.listening) ptt.stop()
-        else ptt.start()
-      } else if (e.key === 'Escape' && isModeA) ptt.cancel()
-      else if (e.key.toLowerCase() === 'n') void next()
-    }
-    const up = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && isModeA && !autoMic && !toggleMode && !isTyping(document.activeElement)) {
-        e.preventDefault()
-        ptt.stop()
-      }
-    }
-    window.addEventListener('keydown', down)
-    window.addEventListener('keyup', up)
-    return () => {
-      window.removeEventListener('keydown', down)
-      window.removeEventListener('keyup', up)
-    }
-  })
-
-  useEffect(() => {
-    document.title = 'Prompter · Penyiar AI'
   }, [])
 
+  // N = Topik selanjutnya (opsional). Tidak ada pintasan lain: penyiar tidak perlu menekan apa pun.
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (!onAir || !isModeA || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return
+      if (e.key.toLowerCase() === 'n') void next()
+    }
+    window.addEventListener('keydown', down)
+    return () => window.removeEventListener('keydown', down)
+  }, [onAir, isModeA, next])
+
+  useEffect(() => {
+    document.title = 'Prompter · Penyiar AI HITS'
+  }, [])
+
+  // ── Sebelum dan sesudah siaran ──────────────────────────────────────────
   if (!onAir) {
     return (
-      <div className="prompter idle">
-        <h1>Prompter</h1>
-        <p>{snap.state === 'ended' ? 'Siaran selesai.' : 'Menunggu operator memulai siaran dari konsol.'}</p>
-        {!live.connected && <p className="warn">Belum tersambung ke server…</p>}
+      <div className="pr pr--wait">
+        <img src="/logo-hits.png" alt="HITS Unikom Radio 103.9 FM" className="pr-wait__logo" />
+        <h1 className="pr-wait__title">{snap.state === 'ended' ? 'Siaran selesai' : 'Menunggu produser…'}</h1>
+        <p className="pr-wait__hint">
+          {snap.state === 'ended'
+            ? 'Terima kasih! Layar ini siap untuk siaran berikutnya.'
+            : 'Layar ini otomatis berganti saat siaran dimulai dari konsol. Kamu tidak perlu menekan apa pun.'}
+        </p>
+        {!speechSupported && <p className="pr-wait__warn">Buka prompter di Google Chrome supaya mikrofon bisa mendengar suaramu.</p>}
+        {!live.connected && <p className="pr-wait__warn">Belum tersambung ke server…</p>}
       </div>
     )
   }
 
-  const segment = snap.segment === 'topic' ? snap.topic?.judul : snap.segment === 'closing' ? 'Closing' : 'Opening'
+  // ── Isi segmen ──────────────────────────────────────────────────────────
+  const rundown = snap.rundown
+  const topics = rundown?.topics ?? []
+  const ti = snap.segment === 'topic' ? topics.findIndex((t) => t.id === snap.topic?.id) : -1
+  const topic = ti >= 0 ? topics[ti] : null
+  const nextTopic = ti >= 0 ? topics[ti + 1] : snap.segment === 'opening' ? topics[0] : undefined
+  const chip = topic ? `Topik ${ti + 1} dari ${topics.length}` : snap.segment === 'closing' ? 'Closing' : 'Opening'
+  const title = topic?.judul ?? (snap.segment === 'closing' ? 'Closing' : 'Opening')
+  const box = topic
+    ? { label: 'TANYA PENONTON', text: shout(topic.pertanyaan_penonton) }
+    : snap.segment === 'closing'
+      ? { label: 'AJAKAN', text: shout(rundown?.closing.ajakan ?? '') }
+      : { label: 'KALIMAT PEMBUKA', text: shout(rundown?.opening.hook ?? '') }
   const points = snap.topic_points ?? []
-  const currentTopic = snap.rundown?.topics.find((t) => t.id === snap.topic?.id)
-  const covered = points.filter((p) => p.covered).length
-  const recent = transcript.slice(-4)
+  const currentIdx = topic ? Math.max(points.findIndex((p) => p.current), points.findIndex((p) => !p.covered)) : -1
+  const items: { text: string; state: 'done' | 'now' | 'todo' }[] = topic
+    ? (points.length ? points : topic.poin.map((p) => ({ ...p, covered: false }))).map((p, i) => ({
+        text: p.text,
+        state: p.covered && i !== currentIdx ? 'done' : i === currentIdx ? 'now' : 'todo',
+      }))
+    : snap.segment === 'closing'
+      ? rundown?.closing.rangkuman
+        ? [{ text: rundown.closing.rangkuman, state: 'todo' }]
+        : []
+      : (rundown?.opening.poin ?? []).map((t) => ({ text: t, state: 'todo' as const }))
+
+  // ── Jam ──────────────────────────────────────────────────────────────────
+  const clock = showClock?.clock
+  const drift = clock?.running ? (performance.now() - (showClock?.at ?? 0)) / 1000 : 0
+  const elapsed = (clock?.elapsed_s ?? 0) + drift
+  const segElapsed = (clock?.segment_elapsed_s ?? 0) + drift
+  const segTarget = clock?.segment_target_s ?? 0
+  const remaining = segTarget - segElapsed
+  const rs = ringState(remaining)
+  const nearEnd = rs !== 'normal'
+
+  // ── Band status ─────────────────────────────────────────────────────────
+  const recentSwitch = lastTopicChange && performance.now() - lastTopicChange.at < TOPIC_BAND_MS ? lastTopicChange : null
+  const band: Band = micDown
+    ? { kind: 'mic-down' }
+    : paused
+      ? { kind: 'paused' }
+      : recentSwitch
+        ? { kind: 'switch', title: recentSwitch.topic.id ? `Lanjut ke ${chip.replace(/ dari \d+$/, '')}` : 'Masuk Closing' }
+        : speakingAi
+          ? { kind: 'ai-speak', name: speakingAi.name }
+          : thinkingAi
+            ? { kind: 'ai-think', name: thinkingAi.name }
+            : isModeA
+              ? { kind: 'turn' }
+              : { kind: 'ai-between' }
+  const lastHuman = [...transcript].reverse().find((t) => t.persona === 'human')?.text
 
   return (
-    <div className="prompter">
-      <header>
-        <span className={`state ${snap.state}`}>{snap.state === 'paused' ? 'PAUSE' : '● LIVE'}</span>
-        <span className="tema">{snap.blocker?.tema}</span>
-        <span className="with">{isModeA ? `bersama ${aiNames} (AI)` : `${aiNames} (AI + AI)`}</span>
-        <PointCountdown pointClock={live.pointClock} />
-        <button className="next" onClick={() => void next()}>
-          Next topik <kbd>N</kbd>
-        </button>
-      </header>
+    <div className="pr">
+      <section className={`pr-band pr-band--${band.kind}`} aria-live="polite" role={band.kind === 'mic-down' ? 'alert' : undefined}>
+        <div className="pr-band__text">
+          {band.kind === 'turn' && (
+            <>
+              <h1>Giliranmu</h1>
+              <p>Ngomong aja. {ai?.name ?? 'AI'} jawab begitu kamu jeda.</p>
+              {partial && <p className="pr-band__quote">“{partial}”</p>}
+            </>
+          )}
+          {band.kind === 'ai-speak' && (
+            <>
+              <h1>{band.name} bicara</h1>
+              <p>{isModeA ? 'Tunggu sampai selesai. Mic kamu dijeda.' : 'Siaran AI + AI berjalan sendiri.'}</p>
+            </>
+          )}
+          {band.kind === 'ai-think' && (
+            <>
+              <h1>{band.name} mikir</h1>
+              <p>{isModeA ? 'Sebentar, jawaban sedang disiapkan. Mic kamu dijeda.' : 'Giliran berikutnya sedang disiapkan.'}</p>
+              {isModeA && lastHuman && <p className="pr-band__quote">Kamu: “{lastHuman}”</p>}
+            </>
+          )}
+          {band.kind === 'switch' && (
+            <>
+              <h1>{band.title}</h1>
+              <p>{snap.topic?.judul && snap.segment === 'topic' ? snap.topic.judul : 'Saatnya merangkum obrolan.'}</p>
+            </>
+          )}
+          {band.kind === 'mic-down' && (
+            <>
+              <h1>Mic tidak terdengar</h1>
+              <p>{mic.reason === 'denied' || stt.errorCode === 'not-allowed' ? 'Izin mikrofon di browser ini belum diberikan. Minta produser memeriksanya.' : 'Tunggu sebentar, produser sedang memeriksa mixer.'}</p>
+              <p>{ai?.name ?? 'AI'} diam dulu sampai suaramu terdengar lagi.</p>
+            </>
+          )}
+          {band.kind === 'ai-between' && (
+            <>
+              <h1>AI + AI</h1>
+              <p>Siaran berjalan sendiri. Giliran berikutnya segera.</p>
+            </>
+          )}
+          {band.kind === 'paused' && (
+            <>
+              <h1>Siaran dijeda</h1>
+              <p>Tunggu produser melanjutkan siaran.</p>
+            </>
+          )}
+        </div>
+        <div className="pr-band__side">
+          {band.kind === 'turn' && <LevelBars level={mic.level} height={160} className="pr-bars" />}
+          {band.kind === 'ai-speak' && <LevelBars level={aiLevel} height={160} className="pr-bars" />}
+          {band.kind === 'ai-think' && (
+            <span className="pr-dots" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </span>
+          )}
+          {band.kind === 'mic-down' && <IconMicOff size={140} />}
+        </div>
+      </section>
 
-      <section className="topic">
-        <div className="segment">{segment}</div>
-        {snap.segment === 'opening' && snap.rundown && (
-          <>
-            <div className="lead">{snap.rundown.opening.hook}</div>
-            {snap.rundown.opening.poin.length > 0 && (
-              <ul className="points">
-                {snap.rundown.opening.poin.map((p) => (
-                  <li key={p}>
-                    <span className="check">○</span> {p}
+      <section className="pr-body">
+        <div className="pr-main">
+          <span className="pr-chip">{chip}</span>
+          <h2 className="pr-title">{title}</h2>
+          {box.text && (
+            <div className="pr-box">
+              <span className="pr-box__label">{box.label}</span>
+              <span className="pr-box__text">{box.text}</span>
+            </div>
+          )}
+          {items.length > 0 && (
+            <>
+              <span className="pr-label">{topic ? 'Bahan obrolan' : snap.segment === 'closing' ? 'Rangkuman' : 'Pembukaan'}</span>
+              <ul className="pr-items">
+                {items.map((it, i) => (
+                  <li key={i} className={`pr-item pr-item--${it.state}`}>
+                    {it.state === 'done' ? (
+                      <span className="pr-item__mark" role="img" aria-label="Sudah dibahas">
+                        <IconCheck size={36} />
+                      </span>
+                    ) : (
+                      <span className="pr-item__mark pr-item__dot" role="img" aria-label={it.state === 'now' ? 'Sedang dibahas' : 'Belum dibahas'} />
+                    )}
+                    {it.text}
                   </li>
                 ))}
               </ul>
-            )}
-          </>
-        )}
-        {snap.segment === 'closing' && snap.rundown && (
-          <>
-            <div className="lead">{snap.rundown.closing.rangkuman}</div>
-            <div className="question">📣 {snap.rundown.closing.ajakan}</div>
-          </>
-        )}
-        {snap.segment === 'topic' && currentTopic && <div className="angle">Sudut pandang: {currentTopic.sudut_pandang}</div>}
-        {snap.topic?.pertanyaan_penonton && <div className="question">❓ {snap.topic.pertanyaan_penonton}</div>}
-        {points.length > 0 && (
-          <ul className="points">
-            {points.map((p) => (
-              <li key={p.id} className={p.covered ? 'done' : p.current ? 'current' : ''}>
-                <span className="check">{p.covered ? '✓' : p.current ? '▶' : '○'}</span> {p.text}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {snap.segment === 'topic' && currentTopic?.transisi && <div className="transition">➡ Transisi: {currentTopic.transisi}</div>}
-
-      {advice && (
-        <section className="advice">
-          Poin tercakup {covered}/{points.length}
-          {advice.steer_hint && <> · saran: {advice.steer_hint.replace(/^bahas t\d+p\d+: /, '').replace(/^sudut baru: /, '')}</>}
-          {(advice.decision === 'transition' || advice.decision === 'close') && <strong> · siap pindah</strong>}
-        </section>
-      )}
-
-      {snap.rundown && (
-        <section className="rundown" aria-label="Rundown blocker">
-          <ol className="steps">
-            {[
-              { key: 'opening', label: 'Opening', on: snap.segment === 'opening' },
-              ...snap.rundown.topics.map((t) => ({ key: t.id, label: t.judul, on: snap.segment === 'topic' && snap.topic?.id === t.id })),
-              { key: 'closing', label: 'Closing', on: snap.segment === 'closing' },
-            ].map((s, i, all) => {
-              const here = all.findIndex((x) => x.on)
-              return (
-                <li key={s.key} className={s.on ? 'now' : i < here ? 'past' : ''}>
-                  {s.label}
-                </li>
-              )
-            })}
-          </ol>
-          <details>
-            <summary>Seluruh blocker</summary>
-            <div className="full">
-              <p>
-                <b>Opening:</b> {snap.rundown.opening.hook}
-                {snap.rundown.opening.poin.length > 0 && <> ({snap.rundown.opening.poin.join(' · ')})</>}
-              </p>
-              {snap.rundown.topics.map((t, i) => (
-                <div key={t.id} className={snap.topic?.id === t.id ? 'cur' : ''}>
-                  <p>
-                    <b>
-                      Topik {i + 1}: {t.judul}
-                    </b>{' '}
-                    <i>({t.sudut_pandang})</i>
-                  </p>
-                  <ul>
-                    {t.poin.map((p) => (
-                      <li key={p.id}>{p.text}</li>
-                    ))}
-                  </ul>
-                  <p>❓ {t.pertanyaan_penonton}</p>
-                  <p>➡ {t.transisi}</p>
-                </div>
-              ))}
-              <p>
-                <b>Closing:</b> {snap.rundown.closing.rangkuman} — {snap.rundown.closing.ajakan}
-              </p>
-            </div>
-          </details>
-        </section>
-      )}
-
-      {isModeA && (
-        <section className="talk">
-          {speechSupported ? (
-            <button
-              className={`ptt ${ptt.listening ? 'on' : ''}`}
-              onPointerDown={() => ((autoMic || toggleMode) && ptt.listening ? ptt.stop() : ptt.start())}
-              onPointerUp={() => !autoMic && !toggleMode && ptt.stop()}
-              onPointerLeave={() => !autoMic && !toggleMode && ptt.listening && ptt.stop()}
-            >
-              {ptt.listening
-                ? autoMic
-                  ? '🎤 Mic Aktif (otomatis kirim saat jeda bicara · klik/Spasi untuk kirim sekarang)'
-                  : 'Mendengarkan… lepas untuk kirim'
-                : autoMic
-                  ? 'Klik atau bicara untuk mengaktifkan mic'
-                  : toggleMode
-                    ? 'Tekan untuk bicara'
-                    : 'Tahan untuk bicara'}
-              <kbd>Spasi</kbd>
-            </button>
-          ) : (
-            <form
-              className="typed"
-              onSubmit={(e) => {
-                e.preventDefault()
-                if (typed.trim()) void sendTurn(typed.trim(), 0)
-                setTyped('')
-              }}
-            >
-              <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Browser ini tanpa Web Speech: ketik ucapan lalu Enter" />
-            </form>
+            </>
           )}
-          <label className="toggle">
-            <input type="checkbox" checked={autoMic} onChange={(e) => setAutoMic(e.target.checked)} /> mikrofon otomatis menyala (hands-free)
-          </label>
-          {!autoMic && (
-            <label className="toggle">
-              <input type="checkbox" checked={toggleMode} onChange={(e) => setToggleMode(e.target.checked)} /> tekan sekali mulai, tekan lagi selesai
-            </label>
-          )}
-          <div className="partial">{partial || (aiSpeaking ? `${aiNames} sedang menjawab…` : '')}</div>
-          {(ptt.error || message) && <div className="warn">{ptt.error || message}</div>}
-          {ptt.listening && <div className="hint">Esc = batal</div>}
-        </section>
-      )}
+        </div>
 
-      <section className="recent">
-        {recent.map((t) => (
-          <div key={t.turn} className={t.persona === 'human' ? 'me' : 'ai'}>
-            <b>{t.name}:</b> {t.text}
+        <aside className="pr-side">
+          <div className="pr-total">
+            Siaran {fmtClock(elapsed)} / {fmtClock(clock?.target_s ?? 0)}
+            {paused && ' · dijeda'}
           </div>
-        ))}
+          {segTarget > 0 && (
+            <div className="pr-ring">
+              <Ring remainingS={remaining} limitS={segTarget} size={240} label={paused ? 'dijeda' : rs === 'normal' ? 'tersisa' : undefined} />
+            </div>
+          )}
+          {isModeA && snap.segment !== 'closing' && (
+            <div className="pr-next">
+              {nearEnd && topic?.transisi ? (
+                <>
+                  <span className="pr-next__label">Siap pindah? Ucapkan:</span>
+                  <span className="pr-next__say">{shout(topic.transisi)}</span>
+                </>
+              ) : (
+                <span className="pr-next__label">Berikutnya: {nextTopic?.judul ?? 'Closing'}</span>
+              )}
+              <button type="button" className="pr-next__btn" onClick={() => void next()}>
+                {nearEnd ? 'atau klik Topik selanjutnya' : 'Topik selanjutnya'} <kbd>N</kbd>
+              </button>
+            </div>
+          )}
+          {message && (
+            <p className="pr-msg" role="alert">
+              {message}
+            </p>
+          )}
+        </aside>
       </section>
     </div>
   )

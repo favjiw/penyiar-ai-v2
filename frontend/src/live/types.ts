@@ -37,6 +37,15 @@ export type PointClock =
   | { active: false; limit_s?: number }
   | { active: true; topic_id: string; point_id: string; idx: number; total: number; text: string; limit_s: number; played_s: number; running: boolean; ts: number }
 
+/** Jam siaran dari server (PRD v2.7): waktu aktif tanpa jeda; klien menghitung maju selama `running`. */
+export interface ShowClock {
+  elapsed_s: number
+  target_s: number
+  segment_elapsed_s: number
+  segment_target_s: number
+  running: boolean
+}
+
 export interface OnAirTopic {
   id: string | null
   judul: string
@@ -103,6 +112,7 @@ export interface ShowSnapshot {
   participants?: { id: string; name: string; kind: 'human' | 'ai' }[]
   topic_points?: TopicPoint[]
   point_clock?: PointClock
+  show_clock?: ShowClock
   fillers_ready?: number
 }
 
