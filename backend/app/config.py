@@ -88,6 +88,12 @@ class Settings(BaseSettings):
     CLOSING_TURNS: int = 2
     POINT_TIME_LIMIT_S: int = 60  # batas satu obrolan (satu poin) untuk kedua penyiar; 0 = mati (mode lama: Showrunner per topik). Rencana uji: 90
     POINT_WRAP_S: int = 15  # sisa waktu ≤ ini → giliran berikutnya menutup poin secara natural
+    # Mode B (PRD v2.7, keputusan Favian 8 Nov 2026): batas per poin = menit topik ÷ jumlah poin
+    # (POINT_TIME_LIMIT_S tetap batas bawah dan sakelar timer; 0 = timer mati untuk baseline eksperimen).
+    POINT_LIMIT_FROM_TOPIC: bool = True
+    # Mode A (PRD v2.7): tidak ada pindah otomatis; AI memberi kode halus satu kali per topik saat
+    # topik lewat waktu sekian detik. 0 = kode halus mati.
+    MODE_A_NUDGE_AFTER_S: int = 120
     POINT_MIN_TURNS: int = 3  # Showrunner baru boleh menutup poin lebih awal setelah sekian giliran (mode B)
     TTS_WORDS_PER_SEC: float = 2.0  # konversi sisa waktu → anggaran kata (Edge 2,3; gTTS 1,9; ElevenLabs belum terukur)
     SESSION_TARGET_MIN: int = 0  # petunjuk lunak durasi total untuk Showrunner; 0 = tanpa

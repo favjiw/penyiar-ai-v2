@@ -69,7 +69,7 @@ function adviceText(d: ShowrunnerDecision | undefined, totalPoints: number): str
 }
 
 export function LivePanel({ live }: { live: LiveSession }) {
-  const { snapshot: snap, transcript, showrunner, supervisor, output, showClock, alerts } = live
+  const { snapshot: snap, transcript, showrunner, supervisor, output, showClock, alerts, lastNudge } = live
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [confirmStop, setConfirmStop] = useState(false)
@@ -382,6 +382,14 @@ export function LivePanel({ live }: { live: LiveSession }) {
                 <Ring remainingS={clock.remaining} limitS={clock.segTarget} size={160} label={paused ? 'dijeda' : clock.remaining > 30 ? 'tersisa' : undefined} />
               )}
             </div>
+            {topic && lastNudge?.topic_id === topic.id && (
+              <div className="lv-advice">
+                <IconInfo size={22} />
+                <span>
+                  <strong>Kode halus terkirim:</strong> topik lewat ±{Math.round(lastNudge.overrun_s / 60)} mnt, AI menawarkan pindah ke “{lastNudge.to}”. Penyiar yang memutuskan.
+                </span>
+              </div>
+            )}
             {advice && (
               <div className="lv-advice">
                 <IconInfo size={22} />

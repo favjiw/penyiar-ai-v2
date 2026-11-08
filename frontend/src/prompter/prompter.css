@@ -29,6 +29,9 @@
 .pr-band--paused, .pr-band--ai-between { background: var(--n-100); }
 .pr-band--ai-speak .pr-band__quote, .pr-band--ai-think .pr-band__quote { color: var(--n-700); }
 
+.pr-nudge { margin-top: 8px; background: var(--n-0); border: 2px solid var(--ink); border-radius: var(--r-card); padding: 14px 20px; display: flex; flex-direction: column; gap: 4px; }
+.pr-nudge__label { font-size: 22px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--blue-700); }
+.pr-nudge p { font-size: 34px; font-weight: 700; }
 .pr-bars { gap: 10px; }
 .pr-bars .ui-level__bar { width: 18px; border-radius: 9px; }
 

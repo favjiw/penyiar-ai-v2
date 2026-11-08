@@ -74,7 +74,8 @@ Hasil diskusi desain bersama Claude Design. Acuan visual dan perilaku: `docs/des
 3. **Stage dihidupkan lagi versi ringan** (`/stage`): satu-satunya pemutar audio, tanpa teks. Mode B satu jendela 9:16 dua panel; mode A satu panel AI (kamera studio ditumpuk di OBS) (FR-10).
 4. **Siaran 1 jam:** ±6 topik × ±9 menit + Opening 3 + Closing 3. Jumlah topik mengikuti durasi; ini menggantikan batas "maksimal 3 topik" di §1.3 (FR-1).
 5. **Istilah HITS:** "materi" menggantikan "rundown/blocker" di UI; pertanyaan penonton menjadi elemen utama topik, bahan obrolan pendukung (§3).
-6. Konsol satu halaman (tema → pilih materi → Siap live), editor materi, cek kesiapan berbasis kuota, progres siaran, peringatan tiga tingkat, panduan pengguna baru; prompter tanpa pengaturan dengan band status (FR-11). Light mode, Plus Jakarta Sans, warna merek HITS.
+6. **Lanjutan 8 Nov 2026 [F]:** (a) mode B tetap memakai batas per poin (R4), tetapi batasnya = menit topik ÷ jumlah poin (`POINT_LIMIT_FROM_TOPIC`, minimal `POINT_TIME_LIMIT_S`), supaya durasi siaran mengikuti materi (±60 menit); (b) mikrofon penyiar tidak dipilih di aplikasi: Web Speech Chrome selalu memakai input bawaan, jadi prompter menampilkan nama mic bawaan + meter level, dan mic diganti lewat setelan Chrome/OS.
+7. Konsol satu halaman (tema → pilih materi → Siap live), editor materi, cek kesiapan berbasis kuota, progres siaran, peringatan tiga tingkat, panduan pengguna baru; prompter tanpa pengaturan dengan band status (FR-11). Light mode, Plus Jakarta Sans, warna merek HITS.
 
 ### 1.3 Keputusan lanjutan Favian (24 Okt 2026)
 - Fokus hanya ke **siaran live TikTok**; jalur suara AI ke on-air radio belum dipikirkan [F].
@@ -352,6 +353,7 @@ Format setiap FR: deskripsi → aturan → kriteria terima (KT).
 - **Batas waktu obrolan per poin [P, R4; F, 2 Nov 2026]:** `POINT_TIME_LIMIT_S` (default 60, rencana uji 90, 0 = mati) membatasi satu poin untuk kedua penyiar; berlaku di topik, bukan di Opening/Closing. Poin berjalan berurutan dalam topik.
   - **Waktu dari audio, bukan dari waktu generate.** Dua jam: `committed_s` (durasi audio giliran yang sudah dibuat, termasuk yang antre karena pipelining; dasar keputusan dan anggaran kata) dan `played_s` (audio yang sudah selesai diputar; untuk countdown di konsol dan prompter). Di mode A, durasi ucapan manusia (`speech_ms`, atau perkiraan dari jumlah kata) ikut dihitung.
   - **Penutupan natural, tanpa terpotong.** Sisa waktu ≤ `POINT_WRAP_S` (15 s) → giliran berikutnya diminta menutup poin dan mengantar ke poin berikutnya; pada poin terakhir topik, ke topik berikutnya atau Closing. Prompt memuat anggaran kata = sisa waktu × `TTS_WORDS_PER_SEC` (2,0; Edge 2,3, gTTS 1,9, ElevenLabs belum terukur). Audio tidak pernah dipotong; teks yang melewati 1,3× anggaran dirapikan dengan membuang kalimat utuh (kalimat jembatan pada giliran penutup dipertahankan).
+  - **Batas mode B sejak v2.7 [F, 8 Nov 2026]:** `limit = max(POINT_TIME_LIMIT_S, menit topik × 60 ÷ jumlah poin)` bila `POINT_LIMIT_FROM_TOPIC=true` (bawaan); `false` = batas tetap R4 untuk eksperimen.
   - **Mode B:** waktu adalah batas atas; Showrunner (kebijakan `llm`) boleh menutup poin lebih awal setelah `POINT_MIN_TURNS` giliran bila obrolan jenuh. ~~**Mode A:** setelah waktu menipis, jawaban AI menutup obrolan, lalu poin pindah otomatis; tombol "next topik" tetap manual.~~ Sejak v2.7 batas waktu per poin hanya berlaku di mode B; mode A memakai waktu per topik tanpa pindah otomatis (aturan giliran mode A di atas).
   - **Pengontrol tunggal:** saat batas waktu poin aktif, `MIN/MAX_TURNS_PER_TOPIC` dan jatah `SESSION_TARGET_MIN` tidak dipakai, dan kebijakan baseline `fixed_turns`/`coverage_only` hanya bermakna dengan `POINT_TIME_LIMIT_S=0` (eksperimen FR-14, §14.2).
   - **KT:** tiap poin tidak melewati batas lebih dari satu giliran penutup; tidak ada audio atau kalimat yang terpotong; countdown sinkron dengan audio yang diputar.
@@ -473,7 +475,7 @@ Kode Supervisor di repo lama masih **stub**: prompt satu baris, tanpa koreksi da
   - failover teruji.
 
 ### FR-7 Input penyiar mode A (hands-free + STT)
-- **Sejak v2.7 [F, 8 Nov 2026]:** hands-free (Web Speech), **tanpa menyela**: mic dijeda saat AI berpikir atau bicara. Sumber suara = mikrofon studio lewat mixer; pemilihan perangkat input dan meter level ada di cek kesiapan. Penyiar memakai headphone. Status mic tampil lewat band status di prompter. PTT di bawah tetap sebagai rujukan sejarah.
+- **Sejak v2.7 [F, 8 Nov 2026]:** hands-free (Web Speech), **tanpa menyela**: mic dijeda saat AI berpikir atau bicara; ucapan yang tetap masuk saat AI menjawab diantrekan dan dijawab sesudahnya (tidak pernah memotong AI). Pemilihan perangkat tidak dibuat (Web Speech tidak mendukung): prompter menampilkan nama mic bawaan + meter level. Sumber suara = mikrofon studio lewat mixer; pemilihan perangkat input dan meter level ada di cek kesiapan. Penyiar memakai headphone. Status mic tampil lewat band status di prompter. PTT di bawah tetap sebagai rujukan sejarah.
 - ~~**Push-to-talk:**~~
   - penyiar atau operator menahan tombol (spasi di laptop prompter, atau tombol layar besar);
   - saat dilepas, transkrip final dikirim;
@@ -573,6 +575,7 @@ Kode Supervisor di repo lama masih **stub**: prompt satu baris, tanpa koreksi da
 - **Log giliran riset [F, 30 Okt 2026]:** `sessions/<session_id>/turns.jsonl`, satu baris per giliran (manusia dan AI) dengan medan `session_id, mode, turn_idx, speaker, is_human, topic_idx, text, t_start, t_end, latency_asr_ms, latency_llm_ms, latency_tts_ms, model, tts_chars, filler_used` (plus nama, segmen, `raw_text`, verdict Supervisor, provider TTS, `tts_fallback_used`, `interrupted`). Blocker terkunci disalin ke `sessions/<session_id>/blocker.json`. `t_start`/`t_end` = detik epoch: audio mulai dan selesai diputar (AI), tombol bicara ditekan dan dilepas (manusia). `latency_asr_ms` pada giliran AI pertama sesudah manusia = ASR ucapan yang memicunya.
 - Satu JSONL per sesi (`logs/{session_id}.jsonl`) dengan event bertipe:
   - `session_start`, `turn`, `showrunner`, `supervisor`, `topic_change`, `point_start`, `point_end` (alasan: timer / early / skip / advance / wrap / stop; batas, audio dibuat, jumlah giliran), `point_trim`, `operator_action`, `stt`, `error`, `quota`, `session_end`.
+  - v2.7: `nudge` (mode A: kode halus, topik, tujuan, lewat berapa detik, teks) dan `topic_time` (mode A: lama topik vs perkiraan menit setiap topik ditinggalkan: N, ucapan, stop). Baris `turns.jsonl` memuat `nudge` (true pada giliran AI yang memuat kode halus) supaya analisis evasi bisa memisahkannya; `session_start.effective` mencatat nilai yang benar-benar berlaku di mode A.
   - `session_start` memuat `voices` (suara tiap AI); tiap baris `turns.jsonl` memuat `tts_voice` (suara yang benar-benar dipakai, termasuk saat jatuh ke cadangan).
 - `turn` memuat:
   - mode, topik, persona, `raw_text`, `final_text`, emosi;
@@ -1004,4 +1007,5 @@ SHOWRUNNER_EVERY_K=3   MIN_TURNS_PER_TOPIC=6   MAX_TURNS_PER_TOPIC=60   FIXED_TU
 SUPERVISOR_MODE=off|rules|full (default off)   SUPERVISOR_MAX_REGEN=1   SUPERVISOR_TIMEOUT_MS=5000
 PIPELINE_DEPTH=1
 POINT_TIME_LIMIT_S=60   POINT_WRAP_S=15   POINT_MIN_TURNS=3   TTS_WORDS_PER_SEC=2.0   # batas waktu obrolan per poin; 0 = mati
+POINT_LIMIT_FROM_TOPIC=true   MODE_A_NUDGE_AFTER_S=120   # v2.7: batas mode B dari menit topik; kode halus mode A
 ```

@@ -151,6 +151,7 @@ class Supervisor:
             "Klaim sebelumnya (ledger):\n" + ("\n".join(claims) if claims else "- (belum ada)"),
             f"SEGMEN: {ctx.segment}; topik aktif: {topic}"
             + (f"; giliran ini transisi ke \"{ctx.transition_to.judul}\"" if ctx.transition_to else "")
+            + (f"; giliran ini boleh menawarkan pindah ke \"{ctx.nudge_to}\" di akhir (kode halus dari produser, bukan pelanggaran)" if ctx.nudge_to else "")
             + ("; giliran pembukaan (boleh menyebut diri AI)" if ctx.segment == "opening" and ctx.turn_in_segment == 0 else ""),
             "Topik yang sudah lewat: " + ("; ".join(ctx.topics_done) or "(belum ada)"),
             "Obrolan terakhir:\n" + ("\n".join(f"{h.name}: {h.text}" for h in ctx.history[-6:]) or "(belum ada)"),

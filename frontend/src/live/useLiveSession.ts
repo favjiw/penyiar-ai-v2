@@ -21,6 +21,8 @@ export interface LiveSession {
   showClock: { clock: ShowClock; at: number } | null
   /** Pindah topik terakhir yang terjadi saat klien ini tersambung (untuk band "Pindah topik"). */
   lastTopicChange: { topic: OnAirTopic | { id: null; judul: string }; at: number } | null
+  /** Kode halus pindah topik terakhir dari AI (mode A, PRD v2.7 FR-4). */
+  lastNudge: { turn: number; topic_id: string; to: string; text: string; overrun_s: number } | null
   speaking: string | null
   /** Peringatan dari server (PRD v2.7 §6.3); `id` lokal untuk menutup per item. */
   alerts: AlertEvent[]
@@ -63,6 +65,7 @@ export function useLiveSession(role: Role): LiveSession {
   const [pointClock, setPointClock] = useState<{ clock: PointClock; at: number } | null>(null)
   const [showClock, setShowClock] = useState<{ clock: ShowClock; at: number } | null>(null)
   const [lastTopicChange, setLastTopicChange] = useState<LiveSession['lastTopicChange']>(null)
+  const [lastNudge, setLastNudge] = useState<LiveSession['lastNudge']>(null)
   const [speaking, setSpeaking] = useState<string | null>(null)
   const [alerts, setAlerts] = useState<LiveSession['alerts']>([])
   const [sttPartial, setSttPartial] = useState('')
@@ -311,6 +314,7 @@ export function useLiveSession(role: Role): LiveSession {
               setSupervisor([])
               setAlerts([])
               setLastTopicChange(null)
+              setLastNudge(null)
             }
             if (snap.transcript) setTranscript(snap.transcript)
             if (snap.state === 'ended') stopAudio()
@@ -352,6 +356,9 @@ export function useLiveSession(role: Role): LiveSession {
           case 'topic_change':
             setSnapshot((s) => ({ ...s, topic: data, segment: data.id ? 'topic' : 'closing' }))
             setLastTopicChange({ topic: data, at: performance.now() })
+            break
+          case 'nudge':
+            setLastNudge(data)
             break
           case 'show_clock':
             setShowClock({ clock: data as ShowClock, at: performance.now() })
@@ -395,5 +402,5 @@ export function useLiveSession(role: Role): LiveSession {
     }
   }, [role, enqueue, pump, send, stopAudio])
 
-  return { connected, snapshot, transcript, showrunner, supervisor, output, pointClock, showClock, lastTopicChange, speaking, alerts, sttPartial, micActive, level, audioBlocked, audioReady, unlockAudio, send }
+  return { connected, snapshot, transcript, showrunner, supervisor, output, pointClock, showClock, lastTopicChange, lastNudge, speaking, alerts, sttPartial, micActive, level, audioBlocked, audioReady, unlockAudio, send }
 }

@@ -33,6 +33,8 @@ EVENT_TYPES = {
     "error",
     "quota",
     "session_end",
+    "nudge",  # mode A: kode halus pindah topik (PRD v2.7 FR-4)
+    "topic_time",  # mode A: lama topik vs perkiraan menit setiap topik ditinggalkan
 }
 
 

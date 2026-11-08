@@ -73,6 +73,12 @@ class HumanLedEngine(ShowEngine):
         self._answering = False  # pertukaran AI sedang berjalan; False sebelum snapshot terakhir dari blok finally
         self._thinking: Optional[str] = None  # id AI yang sedang menyiapkan jawaban (LLM/TTS), belum bersuara
         self._exchanges_in_topic = 0
+        # PRD v2.7 (§1.3.3): mode A tanpa pindah otomatis. Batas waktu per poin (R4) hanya untuk mode B;
+        # waktu topik dari menit materi (show_clock) hanya panduan + kode halus satu kali per topik.
+        self.timed = False
+        self.point_clock.limit_s = 0
+        self._nudged: set[str] = set()  # topik yang sudah diberi kode halus
+        self._queued: Optional[tuple[float, int]] = None  # ucapan penyiar yang masuk saat AI masih menjawab
 
     @property
     def ai(self) -> PersonaCard:
@@ -123,7 +129,8 @@ class HumanLedEngine(ShowEngine):
             config={k: getattr(self.settings, k) for k in (
                 "LLM_MODE", "TTS_MODE", "TTS_PROVIDER", "TTS_FALLBACK", "SUPERVISOR_MODE", "SHOWRUNNER_POLICY", "SHOWRUNNER_EVERY_K",
                 "SUPERVISOR_TIMEOUT_MS_MODE_A", "SUMMARY_EVERY_TURNS",
-                "POINT_TIME_LIMIT_S", "POINT_WRAP_S", "TTS_WORDS_PER_SEC")},
+                "POINT_TIME_LIMIT_S", "POINT_WRAP_S", "TTS_WORDS_PER_SEC", "MODE_A_NUDGE_AFTER_S")},
+            effective={"point_timer": False, "auto_advance": False, "nudge_after_s": self.settings.MODE_A_NUDGE_AFTER_S},
             models={r: self.settings.model_for(r) for r in ("persona", "supervisor", "showrunner")},
             prompts={a.prompt.name: a.prompt.version for a in (self.persona_agent, self.supervisor, self.showrunner, self.summary)},
         )
@@ -138,6 +145,8 @@ class HumanLedEngine(ShowEngine):
         await self._broadcast_state()
 
     async def stop(self) -> None:
+        if self.state != ShowState.ENDED:
+            self._log_topic_exit("stop")
         if self._reply and not self._reply.done():
             self._reply.cancel()
         await super().stop()
@@ -147,6 +156,7 @@ class HumanLedEngine(ShowEngine):
         if self.state not in (ShowState.LIVE, ShowState.PAUSED) or self.plan.finished:
             return
         before = (self.plan.segment, self.plan.topic_idx)
+        self._log_topic_exit("skip")
         self._advance_segment("skip")
         self._exchanges_in_topic = 0
         self.log.event("operator_action", action="next", from_segment=before[0], from_topic_idx=before[1], to_segment=self.plan.segment)
@@ -197,6 +207,7 @@ class HumanLedEngine(ShowEngine):
             pilot_condition=self.settings.PILOT_CONDITION,
         )
         self._decorate_point(ctx)
+        ctx.nudge_to = self._nudge_target()
         if self.settings.PILOT_CONDITION == "C" and self.history:
             last = self.history[-1]
             if last.persona_id == HUMAN_ID and detect_interrogative(last.text):
@@ -213,11 +224,6 @@ class HumanLedEngine(ShowEngine):
             return None
         received = time.monotonic()
         arrived = wall_clock()
-        if self._reply and not self._reply.done():
-            # Penyiar memotong: jawaban AI yang sedang berjalan dihentikan.
-            self._reply.cancel()
-            await self._emit("stop_audio", {"reason": "interrupt"})
-            self.log.event("operator_action", action="interrupt", turn=self.turn_no)
 
         self.turn_no += 1
         entry = {"turn": self.turn_no, "persona": HUMAN_ID, "name": self.human_name, "text": text, "emotion": "neutral",
@@ -240,11 +246,51 @@ class HumanLedEngine(ShowEngine):
             await self._emit_clock(False)
 
         responder = self.ai.id
+        # Dicek tepat sebelum bercabang (tanpa await di antaranya): jawaban bisa selesai selama emit di atas,
+        # dan dua ucapan yang tiba bersamaan tidak boleh memulai dua jawaban.
+        if self._reply and not self._reply.done():
+            # Giliran ketat (PRD v2.7): AI tidak pernah disela. Ucapan ini masuk riwayat dan dijawab
+            # setelah jawaban yang sedang berjalan selesai (tanpa filler, karena AI masih bicara).
+            # Satu jawaban untuk semua ucapan yang menumpuk (semuanya sudah masuk riwayat); waktu tunggu dari ucapan pertama.
+            first = self._queued[0] if self._queued else received
+            self._queued = (first, stt_ms)
+            self.log.event("operator_action", action="queued_while_ai_busy", turn=self.turn_no)
+            return {"filler": None, "responder": responder, "queued": True}
         filler = self.fillers.pick(responder)
         if filler:
             await self._emit("filler", {"persona": responder, "audio_url": filler.url, "duration_s": filler.duration_s, "text": filler.text})
         self._reply = asyncio.create_task(self._exchange(received, filler.text if filler else None, stt_ms))
         return {"filler": filler.text if filler else None, "responder": responder}
+
+    def _topic_overrun_s(self) -> float:
+        """Detik lewat dari perkiraan menit topik aktif (negatif = masih ada sisa)."""
+        clock = self.show_clock()
+        return clock["segment_elapsed_s"] - clock["segment_target_s"]
+
+    def _nudge_target(self) -> str:
+        """Kode halus (FR-4 v2.7): sekali per topik, saat topik lewat ≥ MODE_A_NUDGE_AFTER_S, dan TIDAK pada giliran
+        yang menjawab pertanyaan penyiar (supaya AI tidak mengelak; bahan riset question evasion)."""
+        after = self.settings.MODE_A_NUDGE_AFTER_S
+        if after <= 0 or self.plan.segment != "topic":
+            return ""
+        topic = self.blocker.topics[self.plan.topic_idx]
+        if topic.id in self._nudged or self._topic_overrun_s() < after:
+            return ""
+        last = self.history[-1] if self.history else None
+        if last and last.persona_id == HUMAN_ID and detect_interrogative(last.text):
+            return ""
+        nxt = self.blocker.topics[self.plan.topic_idx + 1].judul if self.plan.topic_idx + 1 < len(self.blocker.topics) else "penutup"
+        return nxt
+
+    def _log_topic_exit(self, reason: str) -> None:
+        """Catat lama topik vs perkiraan menitnya setiap kali topik ditinggalkan (N, ucapan, Closing, stop)."""
+        if self.plan.segment != "topic":
+            return
+        topic = self.blocker.topics[self.plan.topic_idx]
+        clock = self.show_clock()
+        self.log.event("topic_time", topic_id=topic.id, reason=reason, elapsed_s=clock["segment_elapsed_s"],
+                       target_s=clock["segment_target_s"], overrun_s=round(clock["segment_elapsed_s"] - clock["segment_target_s"], 1),
+                       nudged=topic.id in self._nudged)
 
     def _topic_id(self) -> Optional[str]:
         return self.blocker.topics[self.plan.topic_idx].id if self.plan.segment == "topic" else None
@@ -271,6 +317,10 @@ class HumanLedEngine(ShowEngine):
             self.on_air["speaking"] = None
             await self._emit("speaking", {"persona": None})
             await self._broadcast_state()
+        if self._queued and self.state != ShowState.ENDED:
+            received, queued_stt = self._queued
+            self._queued = None
+            self._reply = asyncio.create_task(self._exchange(received, None, queued_stt))
 
     async def _ai_turn(self, speaker: PersonaCard, received: float, filler: Optional[str], stt_ms: int) -> tuple[int, float]:
         """Satu giliran AI sampai selesai diputar. Kembalikan (nomor giliran, durasi audio detik)."""
@@ -305,6 +355,11 @@ class HumanLedEngine(ShowEngine):
                  "tts_provider": first["provider"] if first else "", "gap_ms": latency.gap_before_play, "ts": round(wall_clock(), 1)}
         self.transcript.append(entry)
         self._remember(HistoryEntry(speaker.id, speaker.name, reviewed.text))
+        if ctx.nudge_to and ctx.topic is not None and candidate.model != "fallback":  # kalimat aman tidak memuat kode halus
+            self._nudged.add(ctx.topic.id)
+            overrun = round(self._topic_overrun_s(), 1)
+            self.log.event("nudge", turn=turn, topic_id=ctx.topic.id, to=ctx.nudge_to, overrun_s=overrun, text=reviewed.text)
+            await self._emit("nudge", {"turn": turn, "topic_id": ctx.topic.id, "to": ctx.nudge_to, "overrun_s": overrun, "text": reviewed.text})
         self.on_air["speaking"] = speaker.id
         await self._set_thinking(None)  # siarkan: klien tidak boleh menyimpan "thinking" basi selama suara diputar
         total = sum(len(p.split()) for p in parts) / 3.0
@@ -372,6 +427,7 @@ class HumanLedEngine(ShowEngine):
                     "tts_first_chunk_ms": latency.tts,
                 },
                 tts_voice=first["voice"] if first else "",
+                nudge=bool(ctx.nudge_to),
             )
         return turn, sum(durations)
 
@@ -411,6 +467,8 @@ class HumanLedEngine(ShowEngine):
 
     async def _close_point_if_due(self) -> None:
         """Jawaban AI barusan menutup poin (waktu habis): pindah ke poin berikutnya, atau ke topik/Closing bila poin terakhir."""
+        if not self.timed:  # mode A sejak v2.7: tidak ada pindah poin otomatis
+            return
         key, self._closed_point = self._closed_point, None
         if key is None or key != self._point_key():  # poin sudah berganti (mis. Next topik saat jawaban diputar)
             return

@@ -30,6 +30,12 @@ type Band =
   | { kind: 'paused' }
   | { kind: 'ai-between' }
 
+/** Kalimat terakhir (kode halus selalu di akhir giliran). */
+const lastSentence = (text: string) => {
+  const parts = text.trim().split(/(?<=[.!?])\s+/)
+  return parts[parts.length - 1] ?? text
+}
+
 /** Detik berjalan lokal: setiap `ms` render ulang selama `active`. */
 function useTicker(active: boolean, ms = 250) {
   const [, setN] = useState(0)
@@ -63,7 +69,7 @@ function useRelayedLevel(getLevel: () => number | null, active: boolean) {
 
 export function PrompterPage() {
   const live = useLiveSession('prompter')
-  const { snapshot: snap, transcript, showClock, lastTopicChange, send } = live
+  const { snapshot: snap, transcript, showClock, lastTopicChange, lastNudge, send } = live
   const [partial, setPartial] = useState('')
   const [message, setMessage] = useState('')
   const lastPartialSent = useRef(0)
@@ -216,6 +222,9 @@ export function PrompterPage() {
               ? { kind: 'turn' }
               : { kind: 'ai-between' }
   const lastHuman = [...transcript].reverse().find((t) => t.persona === 'human')?.text
+  // Kode halus ditonjolkan selama giliran AI yang memuatnya masih diputar.
+  const lastAiTurn = [...transcript].reverse().find((t) => t.persona !== 'human')?.turn
+  const nudgeNow = lastNudge && lastNudge.turn === lastAiTurn && topic?.id === lastNudge.topic_id ? lastNudge : null
 
   return (
     <div className="pr">
@@ -232,6 +241,12 @@ export function PrompterPage() {
             <>
               <h1>{band.name} bicara</h1>
               <p>{isModeA ? 'Tunggu sampai selesai. Mic kamu dijeda.' : 'Siaran AI + AI berjalan sendiri.'}</p>
+              {nudgeNow && (
+                <div className="pr-nudge">
+                  <span className="pr-nudge__label">Kode pindah topik</span>
+                  <p>“{lastSentence(nudgeNow.text)}”</p>
+                </div>
+              )}
             </>
           )}
           {band.kind === 'ai-think' && (

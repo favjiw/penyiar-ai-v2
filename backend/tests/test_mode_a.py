@@ -81,7 +81,8 @@ async def test_next_topic_is_manual_and_showrunner_only_advises(tmp_path):
     assert [d["judul"] for t, d in events if t == "topic_change"] == ["Topik 1", "Topik 2", "Closing"]
 
 
-async def test_new_human_turn_interrupts_ai(tmp_path):
+async def test_new_human_turn_waits_for_ai_strict_turns(tmp_path):
+    """PRD v2.7: AI tidak pernah disela. Ucapan yang masuk saat AI menjawab diantrekan lalu dijawab setelahnya."""
     engine, events = make(tmp_path)
     engine._time_scale = 50.0  # jawaban AI "diputar" lama
     engine.start()
@@ -89,9 +90,42 @@ async def test_new_human_turn_interrupts_ai(tmp_path):
     await engine.human_turn("halo Salsa")
     while not any(t == "turn" for t, _ in events):
         await asyncio.sleep(0.01)
-    await engine.human_turn("eh bentar, gue potong ya")
-    assert any(t == "stop_audio" and d["reason"] == "interrupt" for t, d in events)
+    info = await engine.human_turn("eh bentar, gue mau nambahin")
+    assert info["queued"] is True
+    assert not any(t == "stop_audio" for t, _ in events)
     engine._time_scale = 0.0
     engine._playback_done.set()
     await settle(engine)
-    assert [e["persona"] for e in engine.transcript].count("human") == 2
+    personas = [e["persona"] for e in engine.transcript]
+    assert personas.count("human") == 2 and personas.count("salsa") == 2  # kedua ucapan dijawab, tidak ada yang terpotong
+
+
+async def test_turn_arriving_while_answer_finishes_is_not_stranded(tmp_path):
+    """Jawaban selesai di tengah human_turn (saat emit): ucapan baru harus langsung dijawab, bukan menunggu PTT berikutnya."""
+    engine, events = make(tmp_path)
+    engine.start()
+    await settle(engine)
+    await engine.human_turn("halo Salsa")
+    real_emit = engine._emit
+
+    async def slow_emit(type_, data):
+        if type_ == "human_turn":
+            await settle(engine)  # jawaban sebelumnya selesai di sini
+        await real_emit(type_, data)
+
+    engine._emit = slow_emit
+    info = await engine.human_turn("terus gimana lagi?")
+    assert "queued" not in info
+    await settle(engine)
+    assert [e["persona"] for e in engine.transcript].count("salsa") == 2
+
+
+async def test_two_simultaneous_turns_start_only_one_answer(tmp_path):
+    engine, events = make(tmp_path)
+    engine.start()
+    await settle(engine)
+    a, b = await asyncio.gather(engine.human_turn("satu"), engine.human_turn("dua"))
+    assert [("queued" in x) for x in (a, b)].count(True) == 1
+    await settle(engine)
+    turns = [d for t, d in events if t == "turn"]
+    assert len(turns) == 2  # satu jawaban per giliran, berurutan, tidak tumpang tindih

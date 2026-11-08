@@ -400,6 +400,7 @@ class ShowEngine:
             p.announce_closing = True
         else:
             p.finished = True
+        self._sync_point_limit()
 
     def _pick_speaker(self) -> PersonaCard:
         """Bergiliran menurut daftar peserta AI; Showrunner boleh menunjuk `next_speaker`."""
@@ -426,6 +427,19 @@ class ShowEngine:
         return next(p for p in self.personas if p.id == choice)
 
     # ── Batas waktu per poin (R4) ────────────────────────────────────────────
+
+    def _sync_point_limit(self) -> None:
+        """Mode B: batas poin = menit topik ÷ jumlah poin (keputusan Favian 8 Nov 2026), minimal POINT_TIME_LIMIT_S
+        dan cukup untuk giliran penutup; tanpa POINT_LIMIT_FROM_TOPIC tetap POINT_TIME_LIMIT_S (R4 asli)."""
+        if not self.timed:  # mode A atau timer mati: tidak ada batas per poin
+            self.point_clock.limit_s = 0
+            return
+        base = float(self.settings.POINT_TIME_LIMIT_S)
+        limit = base
+        if self.timed and self.settings.POINT_LIMIT_FROM_TOPIC and self.plan.segment == "topic":
+            t = self.blocker.topics[self.plan.topic_idx]
+            limit = max(base, t.menit * 60 / max(1, len(t.poin)))
+        self.point_clock.limit_s = limit
 
     def _point_key(self) -> Optional[tuple[str, str]]:
         if not self.timed or self.plan.segment != "topic":
@@ -604,6 +618,7 @@ class ShowEngine:
             self._end_point("wrap")
             self.point_clock.reset()
             p.segment, p.seg_turns, p.pending, p.announce_closing, p.announce_topic = "closing", 0, None, True, None
+            self._sync_point_limit()
         # Kuota/jaringan: kalimat aman dari bank supaya siaran tetap jalan.
         text = self.supervisor.fallback(speaker, ctx.segment)
         return PersonaResult(PersonaOutput(text=text, emotion=Emotion.NEUTRAL), raw="", model="fallback", latency_ms=0, dialog_act=None, catchphrase=None)
@@ -697,7 +712,7 @@ class ShowEngine:
         supervisor_ms: int = 0, supervisor_action: str = "forward", tts_provider: str = "", tts_fallback_used: bool = False,
         dialog_act: Optional[str] = None, gap_ms: int = 0, interrupted: bool = False, tts_voice: str = "", condition: str = "A",
         user_query: str = "", draft_text: str = "", supervisor_intervened: bool = False, supervisor_verdict: Optional[dict[str, Any]] = None,
-        timing_breakdown: Optional[dict[str, Any]] = None,
+        timing_breakdown: Optional[dict[str, Any]] = None, nudge: bool = False,
     ) -> None:
         """Satu baris `sessions/<id>/turns.jsonl` (lihat turnlog.py untuk arti tiap medan)."""
         try:
@@ -708,6 +723,7 @@ class ShowEngine:
                 latency_tts_ms=tts_ms, gap_before_play_ms=gap_ms, model=model, tts_chars=tts_chars, filler_used=filler,
                 supervisor_action=supervisor_action, tts_provider=tts_provider, tts_fallback_used=tts_fallback_used,
                 dialog_act=dialog_act, interrupted=interrupted, tts_voice=tts_voice,
+                nudge=nudge,  # mode A: giliran ini memuat kode halus pindah topik (dipisah di analisis evasi)
                 condition=condition, user_query=user_query, draft_text=draft_text,
                 supervisor_intervened=supervisor_intervened,
                 supervisor_verdict=supervisor_verdict or {},
@@ -783,6 +799,7 @@ class ShowEngine:
             if ctx.next_point:
                 p.point_idx += 1
                 self.point_clock.reset()
+                self._sync_point_limit()
                 self.steer_hint, self.next_speaker = "", None
             else:
                 self._advance_segment()  # topik berikutnya atau Closing
