@@ -207,7 +207,10 @@ export function PrompterPage() {
   const nearEnd = rs !== 'normal'
 
   // ── Band status ─────────────────────────────────────────────────────────
-  const recentSwitch = lastTopicChange && performance.now() - lastTopicChange.at < TOPIC_BAND_MS ? lastTopicChange : null
+  // Pindah lewat ucapan: band tampil selama jendela batal (sama dengan server); pindah lain 6 dtk.
+  const switchMs = lastTopicChange?.topic.reason === 'voice' ? (lastTopicChange.topic.undo_s ?? 0) * 1000 : TOPIC_BAND_MS
+  const recentSwitch = lastTopicChange && performance.now() - lastTopicChange.at < switchMs ? lastTopicChange : null
+  const voiceSwitch = recentSwitch?.topic.reason === 'voice' ? recentSwitch.topic : null
   const band: Band = micDown
     ? { kind: 'mic-down' }
     : paused
@@ -259,7 +262,11 @@ export function PrompterPage() {
           {band.kind === 'switch' && (
             <>
               <h1>{band.title}</h1>
-              <p>{snap.topic?.judul && snap.segment === 'topic' ? snap.topic.judul : 'Saatnya merangkum obrolan.'}</p>
+              {voiceSwitch?.said ? (
+                <p>Dari ucapanmu: “{voiceSwitch.said}”</p>
+              ) : (
+                <p>{snap.topic?.judul && snap.segment === 'topic' ? snap.topic.judul : 'Saatnya merangkum obrolan.'}</p>
+              )}
             </>
           )}
           {band.kind === 'mic-down' && (
@@ -293,6 +300,15 @@ export function PrompterPage() {
             </span>
           )}
           {band.kind === 'mic-down' && <IconMicOff size={140} />}
+          {band.kind === 'switch' && voiceSwitch && (
+            <button
+              type="button"
+              className="pr-undo"
+              onClick={() => void api.undoTopic().catch(() => setMessage('Waktu batal sudah lewat. Pakai Topik selanjutnya bila perlu.'))}
+            >
+              Batal, kembali ke {voiceSwitch.from}
+            </button>
+          )}
         </div>
       </section>
 

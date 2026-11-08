@@ -69,7 +69,7 @@ function adviceText(d: ShowrunnerDecision | undefined, totalPoints: number): str
 }
 
 export function LivePanel({ live }: { live: LiveSession }) {
-  const { snapshot: snap, transcript, showrunner, supervisor, output, showClock, alerts, lastNudge } = live
+  const { snapshot: snap, transcript, showrunner, supervisor, output, showClock, alerts, lastNudge, lastTopicChange } = live
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [confirmStop, setConfirmStop] = useState(false)
@@ -197,6 +197,19 @@ export function LivePanel({ live }: { live: LiveSession }) {
       actions: (
         <Button variant="ink" onClick={() => window.open('/prompter', 'hits-prompter')}>
           Buka prompter
+        </Button>
+      ),
+    })
+  const sw = lastTopicChange?.topic
+  if (sw?.reason === 'voice' && performance.now() - (lastTopicChange?.at ?? 0) < (sw.undo_s ?? 0) * 1000)
+    derived.push({
+      id: `voice-${lastTopicChange?.at}`,
+      level: 'blue',
+      title: `Pindah ke ${segLabel.replace(/ dari \d+$/, '')} dari ucapan penyiar`,
+      message: `“${sw.said ?? ''}”. Salah dengar? Batalkan dalam ${sw.undo_s} detik.`,
+      actions: (
+        <Button variant="ink" onClick={() => void act(() => api.undoTopic())}>
+          Batalkan, kembali ke {sw.from}
         </Button>
       ),
     })

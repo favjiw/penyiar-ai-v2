@@ -32,6 +32,8 @@
 .pr-nudge { margin-top: 8px; background: var(--n-0); border: 2px solid var(--ink); border-radius: var(--r-card); padding: 14px 20px; display: flex; flex-direction: column; gap: 4px; }
 .pr-nudge__label { font-size: 22px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--blue-700); }
 .pr-nudge p { font-size: 34px; font-weight: 700; }
+.pr-undo { font: inherit; font-size: 28px; font-weight: 700; min-height: 72px; padding: 0 28px; border: 2px solid var(--ink); border-radius: var(--r-input); background: var(--n-0); color: var(--ink); cursor: pointer; }
+.pr-undo:focus-visible { outline: 3px solid var(--brand-blue); outline-offset: 3px; }
 .pr-bars { gap: 10px; }
 .pr-bars .ui-level__bar { width: 18px; border-radius: 9px; }
 

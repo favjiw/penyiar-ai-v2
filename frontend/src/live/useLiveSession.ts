@@ -4,6 +4,15 @@ import type { AlertEvent, OnAirTopic, OutputStatus, PointClock, ShowClock, ShowS
 export type Role = 'console' | 'prompter' | 'stage'
 const RECONNECT_MS = 1500
 const RECONNECT_MAX_MS = 10000
+/** Keterangan tambahan di event topic_change (PRD v2.7): pindah lewat ucapan penyiar atau pembatalannya. */
+export interface TopicChangeInfo {
+  reason?: 'voice' | 'undo'
+  said?: string
+  from?: string
+  rule?: string
+  undo_s?: number
+}
+
 const KEEP = 200
 const LEVEL_SEND_MS = 100
 const REMOTE_LEVEL_STALE_MS = 500
@@ -20,7 +29,7 @@ export interface LiveSession {
   /** Jam siaran terbaru dari server beserta waktu terimanya (performance.now()). */
   showClock: { clock: ShowClock; at: number } | null
   /** Pindah topik terakhir yang terjadi saat klien ini tersambung (untuk band "Pindah topik"). */
-  lastTopicChange: { topic: OnAirTopic | { id: null; judul: string }; at: number } | null
+  lastTopicChange: { topic: (OnAirTopic | { id: null; judul: string }) & TopicChangeInfo; at: number } | null
   /** Kode halus pindah topik terakhir dari AI (mode A, PRD v2.7 FR-4). */
   lastNudge: { turn: number; topic_id: string; to: string; text: string; overrun_s: number } | null
   speaking: string | null
@@ -354,8 +363,9 @@ export function useLiveSession(role: Role): LiveSession {
             if (!ownerRef.current) setSpeaking(data.persona ?? null)
             break
           case 'topic_change':
-            setSnapshot((s) => ({ ...s, topic: data, segment: data.id ? 'topic' : 'closing' }))
-            setLastTopicChange({ topic: data, at: performance.now() })
+            setSnapshot((s) => ({ ...s, topic: data, segment: data.id ? 'topic' : data.judul === 'Opening' ? 'opening' : 'closing' }))
+            // Batal pindah: band/peringatan "pindah topik" selesai, bukan pindah baru.
+            setLastTopicChange(data.reason === 'undo' ? null : { topic: data, at: performance.now() })
             break
           case 'nudge':
             setLastNudge(data)

@@ -88,6 +88,15 @@ async def show_state(request: Request):
     return engine.snapshot() if engine else {"state": ShowState.IDLE.value}
 
 
+@router.post("/api/show/undo-topic")
+async def undo_topic(request: Request):
+    """Batalkan pindah topik dari ucapan penyiar (mode A, PRD v2.7 §6.4); 409 bila sudah lewat atau tidak ada."""
+    engine = require_engine(request)
+    if not isinstance(engine, HumanLedEngine) or not await engine.undo_topic():
+        raise HTTPException(409, "Tidak ada pindah topik dari ucapan yang bisa dibatalkan")
+    return engine.snapshot()
+
+
 @router.post("/api/show/{action}")
 async def control(action: str, request: Request):
     engine = require_engine(request)

@@ -178,3 +178,13 @@ def test_prompter_mic_state_reaches_console(client):
             if st["clients"]["prompter"] == 0:
                 break
         assert st["mic"] is None  # prompter pergi: status mic ikut hilang
+
+
+def test_undo_topic_endpoint(client):
+    blocker = locked_blocker(client)
+    client.post("/api/show/start", json={"blocker_id": blocker["id"], "mode": "B"})
+    assert client.post("/api/show/undo-topic").status_code == 409  # mode B tidak punya pindah lewat ucapan
+    client.post("/api/show/stop")
+    client.post("/api/show/start", json={"blocker_id": blocker["id"], "mode": "A", "ai_persona": "salsa", "human_name": "Favian"})
+    assert client.post("/api/show/undo-topic").status_code == 409  # belum ada pindah lewat ucapan
+    client.post("/api/show/stop")

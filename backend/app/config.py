@@ -10,7 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -94,6 +94,9 @@ class Settings(BaseSettings):
     # Mode A (PRD v2.7): tidak ada pindah otomatis; AI memberi kode halus satu kali per topik saat
     # topik lewat waktu sekian detik. 0 = kode halus mati.
     MODE_A_NUDGE_AFTER_S: int = 120
+    # Mode A: pindah topik dari ucapan penyiar (deteksi aturan, app/show/intent.py) dan jendela batal (detik).
+    VOICE_TOPIC_SWITCH: bool = True
+    VOICE_SWITCH_UNDO_S: int = Field(default=10, ge=0)
     POINT_MIN_TURNS: int = 3  # Showrunner baru boleh menutup poin lebih awal setelah sekian giliran (mode B)
     TTS_WORDS_PER_SEC: float = 2.0  # konversi sisa waktu → anggaran kata (Edge 2,3; gTTS 1,9; ElevenLabs belum terukur)
     SESSION_TARGET_MIN: int = 0  # petunjuk lunak durasi total untuk Showrunner; 0 = tanpa

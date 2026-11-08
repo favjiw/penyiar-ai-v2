@@ -53,6 +53,8 @@ export const api = {
     post<ShowSnapshot>('/api/show/start', { blocker_id, mode, ...opts }),
   pttTurn: (text: string, stt_ms: number, speech_ms = 0) =>
     post<{ filler?: string | null; responder?: string }>('/api/ptt/turn', { text, stt_ms, speech_ms }),
+  /** Batalkan pindah topik dari ucapan penyiar (mode A); 409 bila jendela batal sudah lewat. */
+  undoTopic: () => post<ShowSnapshot>('/api/show/undo-topic'),
   control: (action: 'pause' | 'resume' | 'next' | 'stop') => post<ShowSnapshot>(`/api/show/${action}`),
   voiceSample: (persona: string, voice_id = '') =>
     post<{ audio_url: string; voice: string; provider: string; fallback: boolean }>('/api/voices/sample', { persona, voice_id }),

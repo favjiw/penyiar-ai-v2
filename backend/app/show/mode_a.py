@@ -23,7 +23,8 @@ from dataclasses import replace
 from app.agents.persona import HistoryEntry, PersonaResult, TurnContext, detect_interrogative
 from app.agents.supervisor import Supervisor
 from app.schemas import Emotion, LatencyMs, PersonaCard, PersonaOutput, ShowState, TurnRecord
-from app.show.engine import ShowEngine
+from app.show.engine import Plan, ShowEngine
+from app.show.intent import detect_topic_switch
 from app.show.participants import HUMAN_ID
 from app.show.pointclock import trim_to_budget
 from app.tts.filler import FillerBank
@@ -79,6 +80,7 @@ class HumanLedEngine(ShowEngine):
         self.point_clock.limit_s = 0
         self._nudged: set[str] = set()  # topik yang sudah diberi kode halus
         self._queued: Optional[tuple[float, int]] = None  # ucapan penyiar yang masuk saat AI masih menjawab
+        self._undo: Optional[dict[str, Any]] = None  # keadaan sebelum pindah topik lewat ucapan (untuk Batal)
 
     @property
     def ai(self) -> PersonaCard:
@@ -156,6 +158,7 @@ class HumanLedEngine(ShowEngine):
         if self.state not in (ShowState.LIVE, ShowState.PAUSED) or self.plan.finished:
             return
         before = (self.plan.segment, self.plan.topic_idx)
+        self._undo = None  # pindah manual: pindah lewat ucapan sebelumnya tidak bisa dibatalkan lagi
         self._log_topic_exit("skip")
         self._advance_segment("skip")
         self._exchanges_in_topic = 0
@@ -166,7 +169,9 @@ class HumanLedEngine(ShowEngine):
         await self._announce()
         await self._broadcast_state()
 
-    async def _announce(self) -> None:
+    async def _announce(self, extra: Optional[dict[str, Any]] = None) -> None:
+        """Siarkan segmen baru. `extra` ikut di event topic_change saja (mis. reason=voice|undo, said, from)."""
+        extra = extra or {}
         p = self.plan
         if p.announce_topic is not None:
             t = p.announce_topic
@@ -174,13 +179,13 @@ class HumanLedEngine(ShowEngine):
             topic = {"id": t.id, "judul": t.judul, "pertanyaan_penonton": t.pertanyaan_penonton}
             self.on_air.update(segment="topic", topic=topic)
             self.progress[t.id].started_at = time.monotonic()
-            self.log.event("topic_change", topic_id=t.id, judul=t.judul, turn=self.turn_no)
-            await self._emit("topic_change", topic)
+            self.log.event("topic_change", topic_id=t.id, judul=t.judul, turn=self.turn_no, **extra)
+            await self._emit("topic_change", {**topic, **extra})
         elif p.announce_closing:
             p.announce_closing = False
             self.on_air.update(segment="closing", topic=None)
-            self.log.event("topic_change", topic_id=None, judul="Closing", turn=self.turn_no)
-            await self._emit("topic_change", {"id": None, "judul": "Closing", "pertanyaan_penonton": self.blocker.closing.ajakan})
+            self.log.event("topic_change", topic_id=None, judul="Closing", turn=self.turn_no, **extra)
+            await self._emit("topic_change", {"id": None, "judul": "Closing", "pertanyaan_penonton": self.blocker.closing.ajakan, **extra})
         self._set_point_onair()
         await self._emit_clock(False)
 
@@ -245,6 +250,7 @@ class HumanLedEngine(ShowEngine):
             self._add_played(self._point_key(), spoken)
             await self._emit_clock(False)
 
+        await self._maybe_voice_switch(text)
         responder = self.ai.id
         # Dicek tepat sebelum bercabang (tanpa await di antaranya): jawaban bisa selesai selama emit di atas,
         # dan dua ucapan yang tiba bersamaan tidak boleh memulai dua jawaban.
@@ -261,6 +267,76 @@ class HumanLedEngine(ShowEngine):
             await self._emit("filler", {"persona": responder, "audio_url": filler.url, "duration_s": filler.duration_s, "text": filler.text})
         self._reply = asyncio.create_task(self._exchange(received, filler.text if filler else None, stt_ms))
         return {"filler": filler.text if filler else None, "responder": responder}
+
+    def _segment_label(self) -> str:
+        p = self.plan
+        return f"Topik {p.topic_idx + 1}" if p.segment == "topic" else ("Closing" if p.segment == "closing" else "Opening")
+
+    async def _maybe_voice_switch(self, text: str) -> None:
+        """Pindah topik bila ucapan penyiar jelas berniat pindah (PRD v2.7 FR-2). Dijalankan SEBELUM AI menjawab,
+        supaya jawaban AI sudah di topik baru. Bisa dibatalkan lewat `undo_topic` selama VOICE_SWITCH_UNDO_S."""
+        p = self.plan
+        if not self.settings.VOICE_TOPIC_SWITCH or p.segment not in ("opening", "topic") or p.finished:
+            return
+        if self._undo is not None and time.monotonic() <= self._undo["until"]:
+            return  # satu pindah lewat ucapan per jendela batal: ucapan ulang/PTT ganda tidak melompati dua topik
+        topics = self.blocker.topics
+        cur = topics[p.topic_idx] if p.segment == "topic" else None
+        nxt_idx = 0 if p.segment == "opening" else p.topic_idx + 1
+        next_is_closing = p.segment == "topic" and nxt_idx >= len(topics)
+        rule = detect_topic_switch(
+            text, segment=p.segment, next_title=None if next_is_closing else topics[nxt_idx].judul,
+            transition=cur.transisi if cur else "", next_is_closing=next_is_closing,
+        )
+        if not rule:
+            return
+        from_label = self._segment_label()
+        self._undo = {
+            "plan": Plan(**vars(p)),
+            "on_air": {k: self.on_air.get(k) for k in ("segment", "topic", "point")},
+            "segment_started_active": self._segment_started_active,
+            "exchanges_in_topic": self._exchanges_in_topic,
+            "steer_hint": self.steer_hint,
+            "progress_started": {t.id: self.progress[t.id].started_at for t in topics},
+            "until": time.monotonic() + self.settings.VOICE_SWITCH_UNDO_S,
+            "from": from_label,
+        }
+        self._log_topic_exit("voice")
+        self._advance_segment("voice")
+        self._exchanges_in_topic = 0
+        self.log.event("voice_switch", action="switch", rule=rule, text=text[:300], from_segment=from_label, to_segment=self._segment_label(), turn=self.turn_no)
+        await self._announce({"reason": "voice", "said": text[:200], "from": from_label, "rule": rule, "undo_s": self.settings.VOICE_SWITCH_UNDO_S})
+        await self._broadcast_state()
+
+    async def undo_topic(self) -> bool:
+        """Batalkan pindah topik lewat ucapan terakhir (salah dengar). False bila sudah tidak bisa dibatalkan."""
+        u = self._undo
+        if u is None or time.monotonic() > u["until"] or self.state not in (ShowState.LIVE, ShowState.PAUSED):
+            self._undo = None
+            return False
+        self._undo = None
+        dropped = self._segment_label()
+        old: Plan = u["plan"]
+        for k, v in vars(old).items():
+            setattr(self.plan, k, v)
+        self.plan.announce_topic, self.plan.announce_closing = None, False
+        for tid, started in u["progress_started"].items():
+            self.progress[tid].started_at = started
+        self._exchanges_in_topic = u["exchanges_in_topic"]
+        self.steer_hint = u["steer_hint"]
+        self.on_air.update(u["on_air"])
+        seg = self.on_air.get("segment")
+        topic = self.on_air.get("topic")
+        payload = {**(topic or {"id": None, "judul": "Opening" if seg == "opening" else "Closing"}), "reason": "undo"}
+        # Baris topic_time (reason=voice) saat pindah tadi ikut dibatalkan oleh event ini.
+        self.log.event("voice_switch", action="undo", from_segment=dropped, to_segment=u["from"], turn=self.turn_no, reverts_topic_time=True)
+        self.log.event("topic_change", topic_id=(topic or {}).get("id"), judul=payload.get("judul"), turn=self.turn_no, reason="undo")
+        await self._emit("topic_change", payload)
+        # topic_change mereset jam segmen; kembalikan ke waktu semula supaya cincin tidak penuh lagi.
+        self._segment_started_active = u["segment_started_active"]
+        await self._emit("show_clock", self.show_clock())
+        await self._broadcast_state()
+        return True
 
     def _topic_overrun_s(self) -> float:
         """Detik lewat dari perkiraan menit topik aktif (negatif = masih ada sisa)."""
@@ -305,8 +381,10 @@ class HumanLedEngine(ShowEngine):
         self._answering = True
         try:
             await self._resume.wait()
+            started_on = (self.plan.segment, self.plan.topic_idx)
             turn, audio_s = await self._ai_turn(self.ai, received, filler, stt_ms)
-            await self._after_exchange(turn, audio_s)
+            if (self.plan.segment, self.plan.topic_idx) == started_on:  # topik pindah di tengah jawaban: jangan dihitung ke topik baru
+                await self._after_exchange(turn, audio_s)
         except asyncio.CancelledError:
             raise
         except Exception as e:

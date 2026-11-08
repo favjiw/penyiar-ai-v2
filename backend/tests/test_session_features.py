@@ -267,3 +267,74 @@ async def test_nudge_once_per_topic_after_overrun_and_not_on_questions(tmp_path)
     await engine.skip()
     exits = [l for l in read_log(engine.log.path) if l["type"] == "topic_time"]
     assert exits and exits[-1]["topic_id"] == "t1" and exits[-1]["nudged"] is True and exits[-1]["overrun_s"] > 60
+
+
+# ── Pindah topik lewat ucapan (PRD v2.7 FR-2) ────────────────────────────────
+
+
+async def test_voice_switch_moves_topic_before_ai_answers_and_can_be_undone(tmp_path):
+    engine, events = make_a(tmp_path)
+    engine.start()
+    await settle(engine)
+    await engine.skip()  # topik 1
+    engine._segment_started_active -= 200  # topik 1 sudah berjalan 200 dtk
+    await talk(engine, "oke kita lanjut ke topik berikutnya ya")
+    assert engine.snapshot()["topic"]["id"] == "t2"
+    change = [d for t, d in events if t == "topic_change"][-1]
+    assert change["reason"] == "voice" and change["from"] == "Topik 1" and change["rule"] == "frasa"
+    ai_turn = [d for t, d in events if t == "turn"][-1]
+    assert ai_turn["topic_id"] == "t2"  # AI menjawab di topik baru
+
+    assert await engine.undo_topic() is True
+    snap = engine.snapshot()
+    assert snap["topic"]["id"] == "t1" and snap["show_clock"]["segment_elapsed_s"] >= 200  # cincin tidak penuh lagi
+    assert [d for t, d in events if t == "topic_change"][-1]["reason"] == "undo"
+    assert await engine.undo_topic() is False  # hanya sekali
+    log = [l for l in read_log(engine.log.path) if l["type"] == "voice_switch"]
+    assert [l["action"] for l in log] == ["switch", "undo"]
+
+
+async def test_ordinary_talk_does_not_switch_and_undo_expires(tmp_path):
+    engine, _ = make_a(tmp_path, VOICE_SWITCH_UNDO_S=0)
+    engine.start()
+    await settle(engine)
+    await engine.skip()
+    await talk(engine, "lanjut cerita dong Raka")
+    assert engine.snapshot()["topic"]["id"] == "t1"
+    await talk(engine, "yuk pindah ke topik selanjutnya")
+    assert engine.snapshot()["topic"]["id"] == "t2"
+    await asyncio.sleep(0.01)
+    assert await engine.undo_topic() is False  # jendela batal sudah lewat
+
+
+async def test_voice_switch_to_closing_undo_to_opening_and_no_double_jump(tmp_path):
+    engine, events = make_a(tmp_path)
+    engine.start()
+    await settle(engine)
+    await talk(engine, "yuk kita mulai topik pertama")  # Opening → topik 1
+    assert engine.snapshot()["topic"]["id"] == "t1"
+    await talk(engine, "oke kita lanjut ke topik berikutnya ya")  # masih dalam jendela batal: diabaikan
+    assert engine.snapshot()["topic"]["id"] == "t1"
+    assert await engine.undo_topic() is True
+    assert engine.snapshot()["segment"] == "opening"
+    await engine.skip()  # topik 1
+    await engine.skip()  # topik 2 = topik terakhir (make_blocker 2 topik)
+    await talk(engine, "oke saatnya kita rangkum obrolan hari ini")
+    assert engine.snapshot()["segment"] == "closing"
+
+
+async def test_voice_switch_while_ai_busy_is_applied_and_answer_queued(tmp_path):
+    engine, events = make_a(tmp_path)
+    engine._time_scale = 50.0
+    engine.start()
+    await settle(engine)
+    await engine.skip()
+    await engine.human_turn("Raka, cerita dong")
+    while not any(t == "turn" for t, _ in events):
+        await asyncio.sleep(0.01)
+    info = await engine.human_turn("oke kita lanjut ke topik berikutnya ya")
+    assert info["queued"] is True and engine.snapshot()["topic"]["id"] == "t2"
+    engine._time_scale = 0.0
+    engine._playback_done.set()
+    await settle(engine)
+    assert [d for t, d in events if t == "turn"][-1]["topic_id"] == "t2"  # jawaban antrean di topik baru
