@@ -90,6 +90,8 @@ class TurnContext:
     max_words: int = 0  # anggaran kata giliran ini dari sisa waktu poin
     close_point: bool = False  # giliran ini menutup poin secara natural
     next_point: str = ""  # poin berikutnya dalam topik yang sama (kosong bila poin terakhir)
+    # Mode A (PRD v2.7): kode halus satu kali per topik saat topik lewat waktu; isinya topik berikutnya atau "penutup".
+    nudge_to: str = ""
 
 
 @dataclass
@@ -274,6 +276,12 @@ class PersonaAgent:
             )
         elif ctx.closing_final:
             instructions.append("Ini giliran terakhir siaran: tutup dengan rapi, pamit ke penonton, jangan buka topik baru.")
+        if ctx.nudge_to:
+            instructions.append(
+                f"Waktu topik ini sudah lewat. Jawab dulu ucapan {ctx.human_name or ctx.partner_name} sepenuhnya, lalu di AKHIR giliran "
+                f"beri kode halus satu kalimat bahwa mungkin seru lanjut ke \"{ctx.nudge_to}\" (tawarkan, jangan memutuskan; "
+                f"{ctx.human_name or ctx.partner_name} yang memindah topik). Jangan mulai membahas topik itu."
+            )
         if ctx.steer_hint and ctx.segment == "topic" and ctx.transition_to is None:
             instructions.append(f"Arahan produser: {ctx.steer_hint}")
         if act:

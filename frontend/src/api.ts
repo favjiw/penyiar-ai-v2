@@ -41,7 +41,29 @@ export interface VoiceCatalog {
   current: Record<string, string>
 }
 
+export interface ReadinessService {
+  kind: 'llm' | 'tts' | 'stt'
+  label: string
+  percent_left: number | null
+  minutes_left: number | null
+  unlimited: boolean
+  /** Otak AI hanya memakai model berbayar per panggilan (tanpa kuota harian). */
+  paid?: boolean
+}
+
+export interface Readiness {
+  services: ReadinessService[]
+  minutes_safe: number | null
+  /** Layanan berkuota yang sisanya belum bisa dibaca (mis. Suara AI tanpa izin baca kredit). */
+  unknown?: string[] // server lama belum mengirim
+  target_minutes: number
+  fallbacks: string[]
+  rates_source: 'log' | 'bawaan'
+  estimated: boolean
+}
+
 export const api = {
+  readiness: (mode: 'A' | 'B', target_minutes: number) => request<Readiness>(`/api/readiness?mode=${mode}&target_minutes=${target_minutes}`),
   voices: () => request<VoiceCatalog>('/api/voices'),
   generate: (req: GenerateRequest) => post<GenerateResponse>('/api/blocker/generate', req),
   regenerate: (id: string, hindari: string[]) => post<RegenerateResponse>(`/api/blocker/${id}/regenerate`, { hindari }),
@@ -53,11 +75,15 @@ export const api = {
     post<ShowSnapshot>('/api/show/start', { blocker_id, mode, ...opts }),
   pttTurn: (text: string, stt_ms: number, speech_ms = 0) =>
     post<{ filler?: string | null; responder?: string }>('/api/ptt/turn', { text, stt_ms, speech_ms }),
+  /** Batalkan pindah topik dari ucapan penyiar (mode A); 409 bila jendela batal sudah lewat. */
+  undoTopic: () => post<ShowSnapshot>('/api/show/undo-topic'),
   control: (action: 'pause' | 'resume' | 'next' | 'stop') => post<ShowSnapshot>(`/api/show/${action}`),
-  precheck: (voices: Record<string, string> = {}) =>
-    post<{ models_ok: boolean; tts_ok: boolean; tts_error?: string; tts_warmup_ms?: Record<string, number>; models: Record<string, string> }>(
+  voiceSample: (persona: string, voice_id = '') =>
+    post<{ audio_url: string; voice: string; provider: string; fallback: boolean }>('/api/voices/sample', { persona, voice_id }),
+  precheck: (voices: Record<string, string> = {}, mode: 'A' | 'B' = 'B', target_minutes = 60) =>
+    post<{ models_ok: boolean; tts_ok: boolean; tts_error?: string; tts_warmup_ms?: Record<string, number>; models: Record<string, string>; readiness?: Readiness }>(
       '/api/precheck',
-      { voices },
+      { voices, mode, target_minutes },
     ),
   health: () => request<{ llm_mode: string; tts_mode: string; models: Record<string, string>; tts?: TtsStatus }>('/api/health'),
 }

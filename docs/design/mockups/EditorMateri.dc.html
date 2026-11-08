@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Konsol · Lihat dan ubah materi</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F8F7F4}
+a{color:#106C7D}a:hover{color:#00515F}
+input,textarea{font:inherit;color:#111312}
+input:focus,textarea:focus{outline:2px solid #69C1D5;outline-offset:1px}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: radial-gradient(#E6E4E2 1.3px, transparent 1.6px) 0 0 / 24px 24px, #F8F7F4; font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif; color: #111312; font-size: 16px; line-height: 1.5">
+
+  <header style="background: #FFFFFF; border-bottom: 1px solid #E6E4E2">
+    <div style="max-width: 1600px; margin: 0 auto; padding: 12px 40px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
+      <a href="Main.dc.html" style="display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px 0 6px; border-radius: 10px; font-size: 14px; font-weight: 600; color: #111312; text-decoration: none">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Pilihan materi
+      </a>
+      <span style="width: 1px; height: 28px; background: #E6E4E2"></span>
+      <label style="display: flex; flex-direction: column; flex: 1 1 360px; min-width: 0">
+        <span style="font-size: 12px; font-weight: 600; color: #646361">Judul materi · tema Zodiak</span>
+        <input value="{{ title }}" onChange="{{ setTitle }}" aria-label="Judul materi" style="font-size: 19px; font-weight: 800; border: 0; padding: 2px 0; background: transparent; min-width: 0">
+      </label>
+      <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #646361">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#077836" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>Tersimpan otomatis
+      </span>
+      <span style="{{ planStyle }}">{{ planText }}</span>
+      <sc-if value="{{ hasIssues }}" hint-placeholder-val="{{ true }}">
+        <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; background: #FFF8D4; border-radius: 999px; padding: 6px 12px">{{ issueText }}</span>
+      </sc-if>
+      <button type="button" style="font: inherit; font-size: 15px; font-weight: 800; height: 44px; padding: 0 20px; border: 0; border-radius: 10px; background: #69C1D5; color: #111312; cursor: pointer">Pakai materi ini</button>
+    </div>
+  </header>
+
+  <main style="max-width: 1600px; margin: 0 auto; padding: 32px 40px; display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+
+    <nav aria-label="Susunan materi" style="flex: 0 1 300px; min-width: 260px; background: #FFFFFF; border-radius: 16px; box-shadow: 0 1px 2px rgba(17,19,18,.04), 0 4px 16px rgba(17,19,18,.06); padding: 16px; display: flex; flex-direction: column; gap: 6px">
+      <span style="font-size: 13px; font-weight: 700; color: #646361; padding: 4px 8px 6px">Susunan materi</span>
+      <sc-for list="{{ nav }}" as="it" hint-placeholder-count="5">
+        <button type="button" onClick="{{ it.pick }}" aria-current="{{ it.current }}" style="{{ it.style }}">
+          <span style="{{ it.badgeStyle }}">{{ it.badge }}</span>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; text-align: left">
+            <span style="font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{ it.label }}</span>
+            <span style="{{ it.statusStyle }}">{{ it.status }}</span>
+          </span>
+        </button>
+      </sc-for>
+      <sc-if value="{{ canAddTopic }}" hint-placeholder-val="{{ false }}">
+        <button type="button" onClick="{{ addTopic }}" style="font: inherit; font-size: 14px; font-weight: 700; height: 44px; margin-top: 6px; border: 1.5px dashed #D5D4D1; border-radius: 10px; background: #FFFFFF; color: #111312; cursor: pointer">+ Tambah topik</button>
+      </sc-if>
+      <sc-if value="{{ topicFull }}" hint-placeholder-val="{{ true }}">
+        <span style="font-size: 13px; color: #646361; padding: 8px 8px 2px">Maksimal 8 topik. Hapus satu topik dulu kalau mau menambah.</span>
+      </sc-if>
+    </nav>
+
+    <section aria-label="Ubah bagian" style="flex: 999 1 560px; min-width: 0; background: #FFFFFF; border-radius: 16px; box-shadow: 0 1px 2px rgba(17,19,18,.04), 0 4px 16px rgba(17,19,18,.06); padding: 28px; display: flex; flex-direction: column; gap: 22px">
+
+      <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+        <h2 style="margin: 0; font-size: 23px; font-weight: 800; flex: 1">{{ heading }}</h2>
+        <sc-if value="{{ isTopic }}" hint-placeholder-val="{{ true }}">
+          <div style="display: flex; gap: 6px; flex-wrap: wrap">
+            <button type="button" onClick="{{ moveUp }}" aria-label="Geser topik ke atas" style="width: 44px; height: 44px; border: 1.5px solid #E6E4E2; border-radius: 10px; background: #FFFFFF; color: #111312; cursor: pointer; display: inline-flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button>
+            <button type="button" onClick="{{ moveDown }}" aria-label="Geser topik ke bawah" style="width: 44px; height: 44px; border: 1.5px solid #E6E4E2; border-radius: 10px; background: #FFFFFF; color: #111312; cursor: pointer; display: inline-flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg></button>
+            <button type="button" style="font: inherit; font-size: 14px; font-weight: 600; height: 44px; padding: 0 14px; border: 1.5px solid #E6E4E2; border-radius: 10px; background: #FFFFFF; color: #111312; cursor: pointer; display: inline-flex; align-items: center; gap: 8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg>Buat ulang topik ini</button>
+            <button type="button" onClick="{{ removeTopic }}" style="font: inherit; font-size: 14px; font-weight: 600; height: 44px; padding: 0 14px; border: 0; border-radius: 10px; background: transparent; color: #A83630; cursor: pointer">Hapus topik</button>
+          </div>
+        </sc-if>
+      </div>
+
+      <sc-if value="{{ isTopic }}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; flex-direction: column; gap: 22px">
+          <label style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600">Judul topik
+            <input value="{{ cur.judul }}" onChange="{{ on.judul }}" placeholder="Misal: First date gagal gara-gara beda elemen" style="font-size: 22px; font-weight: 800; height: 56px; box-sizing: border-box; padding: 0 16px; border: 1.5px solid #E6E4E2; border-radius: 10px; background: #FFFFFF">
+          </label>
+
+          <div style="background: #E9FBFF; border-radius: 16px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px">
+            <label for="em-q" style="font-size: 14px; font-weight: 800; color: #106C7D">Pertanyaan ke penonton</label>
+            <textarea id="em-q" rows="2" onChange="{{ on.tanya }}" value="{{ cur.tanya }}" placeholder="Satu pertanyaan pemantik, misal: Elemen zodiak kalian apa?" style="font-size: 20px; font-weight: 700; line-height: 1.4; padding: 12px 14px; border: 1.5px solid #9FD9E7; border-radius: 10px; background: #FFFFFF; resize: vertical"></textarea>
+            <span style="font-size: 13px; color: #106C7D">Paling menonjol di prompter. Otomatis ditulis kapital dengan tanda jeda / dan //.</span>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px">
+            <div style="display: flex; align-items: baseline; gap: 8px">
+              <span style="font-size: 14px; font-weight: 600; flex: 1">Bahan obrolan</span>
+              <span style="{{ countStyle }}">{{ countText }}</span>
+            </div>
+            <sc-for list="{{ points }}" as="p" hint-placeholder-count="3">
+              <div style="display: flex; align-items: center; gap: 8px">
+                <span style="width: 28px; flex: none; text-align: center; font-size: 14px; font-weight: 700; color: #646361">{{ p.n }}</span>
+                <input value="{{ p.text }}" onChange="{{ p.onText }}" aria-label="{{ p.aria }}" placeholder="Tulis satu bahan obrolan" style="flex: 1; min-width: 0; font-size: 16px; height: 48px; box-sizing: border-box; padding: 0 14px; border: 1.5px solid #E6E4E2; border-radius: 10px; background: #FFFFFF">
+                <button type="button" onClick="{{ p.toggleCek }}" aria-pressed="{{ p.cek }}" title="Tandai kalau perlu dicek faktanya sebelum live" style="{{ p.cekStyle }}">Cek fakta</button>
+                <button type="button" onClick="{{ p.remove }}" aria-label="{{ p.removeAria }}" style="width: 44px; height: 44px; flex: none; border: 0; border-radius: 10px; background: transparent; color: #646361; cursor: pointer; display: inline-flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+              </div>
+            </sc-for>
+            <sc-if value="{{ canAddPoint }}" hint-placeholder-val="{{ true }}">
+              <button type="button" onClick="{{ addPoint }}" style="align-self: flex-start; margin-left: 36px; font: inherit; font-size: 14px; font-weight: 700; height: 44px; padding: 0 16px; border: 1.5px dashed #D5D4D1; border-radius: 10px; background: #FFFFFF; color: #111312; cursor: pointer">+ Tambah bahan</button>
+            </sc-if>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 16px">
+            <label style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600">Perkiraan durasi <span style="font-weight: 400; color: #646361; font-size: 13px">Panduan waktu di prompter, bukan paksaan</span>
+              <span style="display: flex; align-items: center; gap: 10px; font-weight: 600"><input type="number" min="3" max="20" value="{{ cur.menit }}" onChange="{{ on.menit }}" style="width: 96px; font-size: 16px; font-weight: 700; height: 48px; box-sizing: border-box; padding: 0 12px; border: 1.5px solid #E6E4E2; border-radius: 10px; background: #FFFFFF">menit</span>
+            </label>
+            <label style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600">Sudut pandang <span style="font-weight: 400; color: #646361; font-size: 13px">Arah obrolan untuk AI, tidak dibacakan</span>
+              <input value="{{ cur.sudut }}" onChange="{{ on.sudut }}" style="font-size: 15px; height: 48px; box-sizing: border-box; padding: 0 14px; border: 1.5px solid #E6E4E2; border-radius: 10px; background: #FFFFFF">
+            </label>
+            <label style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600">Kalimat pindah ke topik berikutnya <span style="font-weight: 400; color: #646361; font-size: 13px">Ditonjolkan di prompter saat waktu hampir habis</span>
+              <input value="{{ cur.transisi }}" onChange="{{ on.transisi }}" style="font-size: 15px; height: 48px; box-sizing: border-box; padding: 0 14px; border: 1.5px solid #E6E4E2; border-radius: 10px; background: #FFFFFF">
+            </label>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isOpening }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 22px">
+          <div style="background: #E9FBFF; border-radius: 16px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px">
+            <label for="em-hook" style="font-size: 14px; font-weight: 800; color: #106C7D">Kalimat pembuka</label>
+            <textarea id="em-hook" rows="2" onChange="{{ on.hook }}" value="{{ cur.hook }}" style="font-size: 20px; font-weight: 700; line-height: 1.4; padding: 12px 14px; border: 1.5px solid #9FD9E7; border-radius: 10px; background: #FFFFFF; resize: vertical"></textarea>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px">
+            <div style="display: flex; align-items: baseline; gap: 8px">
+              <span style="font-size: 14px; font-weight: 600; flex: 1">Yang dilakukan saat pembukaan</span>
+              <span style="{{ countStyle }}">{{ countText }}</span>
+            </div>
+            <sc-for list="{{ points }}" as="p" hint-placeholder-count="3">
+              <div style="display: flex; align-items: center; gap: 8px">
+                <span style="width: 28px; flex: none; text-align: center; font-size: 14px; font-weight: 700; color: #646361">{{ p.n }}</span>
+                <input value="{{ p.text }}" onChange="{{ p.onText }}" aria-label="{{ p.aria }}" style="flex: 1; min-width: 0; font-size: 16px; height: 48px; box-sizing: border-box; padding: 0 14px; border: 1.5px solid #E6E4E2; border-radius: 10px; background: #FFFFFF">
+                <button type="button" onClick="{{ p.remove }}" aria-label="{{ p.removeAria }}" style="width: 44px; height: 44px; flex: none; border: 0; border-radius: 10px; background: transparent; color: #646361; cursor: pointer; display: inline-flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+              </div>
+            </sc-for>
+            <sc-if value="{{ canAddPoint }}" hint-placeholder-val="{{ false }}">
+              <button type="button" onClick="{{ addPoint }}" style="align-self: flex-start; margin-left: 36px; font: inherit; font-size: 14px; font-weight: 700; height: 44px; padding: 0 16px; border: 1.5px dashed #D5D4D1; border-radius: 10px; background: #FFFFFF; color: #111312; cursor: pointer">+ Tambah</button>
+            </sc-if>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isClosing }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 22px">
+          <label style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600">Rangkuman obrolan
+            <textarea rows="2" onChange="{{ on.rangkuman }}" value="{{ cur.rangkuman }}" style="font-size: 17px; line-height: 1.45; padding: 12px 14px; border: 1.5px solid #E6E4E2; border-radius: 10px; background: #FFFFFF; resize: vertical"></textarea>
+          </label>
+          <div style="background: #E9FBFF; border-radius: 16px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px">
+            <label for="em-ajak" style="font-size: 14px; font-weight: 800; color: #106C7D">Ajakan ke penonton</label>
+            <textarea id="em-ajak" rows="2" onChange="{{ on.ajakan }}" value="{{ cur.ajakan }}" style="font-size: 20px; font-weight: 700; line-height: 1.4; padding: 12px 14px; border: 1.5px solid #9FD9E7; border-radius: 10px; background: #FFFFFF; resize: vertical"></textarea>
+            <span style="font-size: 13px; color: #106C7D">Misalnya ajak follow, ikut konten minggu depan, atau sebut acara berikutnya.</span>
+          </div>
+        </div>
+      </sc-if>
+    </section>
+
+    <aside aria-label="Pratinjau prompter" style="flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 10px">
+      <span style="font-size: 13px; font-weight: 700; color: #646361">Tampilan di prompter penyiar</span>
+      <div style="background: #FFFFFF; border: 1.5px solid #E6E4E2; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+        <span style="align-self: flex-start; font-size: 12px; font-weight: 700; background: #111312; color: #FFFFFF; border-radius: 999px; padding: 3px 10px">{{ pv.chip }}</span>
+        <span style="font-size: 22px; font-weight: 800; line-height: 1.2">{{ pv.title }}</span>
+        <sc-if value="{{ pv.hasBox }}" hint-placeholder-val="{{ true }}">
+          <div style="background: #E9FBFF; border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 11px; font-weight: 800; letter-spacing: .04em; color: #106C7D">{{ pv.boxLabel }}</span>
+            <span style="font-size: 16px; font-weight: 800; line-height: 1.3">{{ pv.box }}</span>
+          </div>
+        </sc-if>
+        <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 14px">
+          <sc-for list="{{ pv.items }}" as="li" hint-placeholder-count="3">
+            <li style="display: flex; gap: 8px; align-items: flex-start"><span aria-hidden="true" style="width: 14px; height: 14px; flex: none; margin-top: 3px; border-radius: 999px; border: 2px solid #D5D4D1; box-sizing: border-box"></span>{{ li.text }}</li>
+          </sc-for>
+        </ul>
+      </div>
+      <p style="margin: 4px 0 0; font-size: 13px; color: #646361">Perubahan langsung terlihat di sini. Materi baru dikunci saat siaran dimulai, jadi aman diubah kapan saja sebelum live.</p>
+    </aside>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1920,"height":1120}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      active: 2,
+      title: 'Kencan dan kecocokan zodiak',
+      opening: {
+        hook: 'Sobat Hits, pernah batal deketin orang gara-gara zodiaknya nggak cocok?',
+        poin: [
+          { text: 'Sapa penonton live TikTok' },
+          { text: 'Bahas ramalan cinta yang sering sliweran' },
+          { text: 'Tanya zodiak penonton di kolom komentar' }
+        ]
+      },
+      topics: [
+        { judul: 'First date gagal gara-gara beda elemen', sudut: 'Hubungan asmara dilihat dari cocok tidaknya elemen zodiak', tanya: 'Elemen zodiak kalian apa, gampang akrab sama siapa?', transisi: 'Kalau urusan hati udah, sekarang kita intip urusan dompet mereka.',
+          poin: [{ text: 'Api ketemu air, padam atau mendidih?', cek: false }, { text: 'Tanda zodiak yang paling susah ditebak', cek: false }, { text: 'Pengalaman nge-date sama zodiak tertentu', cek: false }] },
+        { judul: 'Dompet tipis anak zodiak boros', sudut: 'Kebiasaan belanja mahasiswa dikaitkan dengan zodiak', tanya: 'Barang apa yang terakhir kalian checkout?', transisi: 'Dari dompet, kita lihat gimana mereka pas lagi capek.',
+          poin: [{ text: 'Zodiak paling gampang checkout', cek: false }, { text: 'Akhir bulan, mode mi instan', cek: false }] },
+        { judul: 'Reaksi zodiak pas lagi burnout', sudut: 'Cara tiap zodiak menghadapi tugas numpuk', tanya: 'Kalian kalau burnout larinya ke mana?', transisi: 'Ngomongin capek, siapa sih teman yang paling bisa diandalkan?',
+          poin: [{ text: 'Zodiak yang tidur seharian', cek: false }, { text: 'Zodiak yang malah makin rajin', cek: false }, { text: 'Zodiak yang curhat ke semua orang', cek: false }] },
+        { judul: 'Teman tongkrongan paling setia', sudut: 'Zodiak dan cara orang menjaga pertemanan', tanya: 'Siapa teman yang paling bisa diandalkan di tongkrongan kalian?', transisi: 'Ngomongin teman, gimana kalau urusan nugas bareng?',
+          poin: [{ text: 'Teman yang selalu datang pas dibutuhin', cek: false }, { text: 'Zodiak yang paling jago jaga rahasia', cek: false }, { text: 'Teman yang hilang pas ditagih utang', cek: false }] },
+        { judul: 'Tipe nugas: dicicil atau H-1', sudut: 'Kebiasaan belajar mahasiswa dikaitkan dengan zodiak', tanya: 'Kalian tim nyicil atau tim H-1?', transisi: 'Terakhir, sebenarnya kita percaya ramalan zodiak nggak sih?',
+          poin: [{ text: 'Zodiak yang bikin jadwal rapi', cek: false }, { text: 'Sistem kebut semalam', cek: false }, { text: 'Kerja kelompok yang cuma satu orang kerja', cek: false }] },
+        { judul: 'Ramalan zodiak: percaya atau hiburan?', sudut: 'Sikap anak muda terhadap ramalan', tanya: 'Kalian percaya ramalan zodiak nggak?', transisi: 'Oke Sobat Hits, saatnya kita rangkum obrolan hari ini.',
+          poin: [{ text: 'Cek ramalan tiap pagi', cek: false }, { text: 'Zodiak jadi alasan buat mager', cek: false }, { text: 'Ramalan yang kebetulan pas banget', cek: false }] }
+      ],
+      closing: {
+        rangkuman: 'Zodiak seru buat bahan obrolan, tapi cocok atau nggak tetap soal kenal orangnya.',
+        ajakan: 'Tetap di live HITS Unikom Radio dan follow biar nggak ketinggalan obrolan berikutnya.'
+      }
+    };
+    this.state.topics.forEach((t) => { t.menit = t.menit || 9; });
+  }
+
+  upd(fn) { this.setState((s) => { const n = JSON.parse(JSON.stringify(s)); fn(n); return n; }); }
+
+  topicIssue(t) {
+    const filled = t.poin.filter((p) => p.text.trim()).length;
+    if (!t.judul.trim()) return 'Judul masih kosong';
+    if (!t.tanya.trim()) return 'Pertanyaan masih kosong';
+    if (filled < 3) return 'Kurang ' + (3 - filled) + ' bahan obrolan';
+    if (!t.transisi.trim()) return 'Kalimat pindah kosong';
+    return '';
+  }
+
+  renderVals() {
+    const s = this.state;
+    const nT = s.topics.length;
+    const total = nT + 2;
+    const a = Math.min(s.active, total - 1);
+    const isOpening = a === 0, isClosing = a === total - 1, isTopic = !isOpening && !isClosing;
+    const ti = a - 1;
+
+    const openingIssue = !s.opening.hook.trim() ? 'Kalimat pembuka kosong' : '';
+    const closingIssue = !s.closing.rangkuman.trim() || !s.closing.ajakan.trim() ? 'Masih ada yang kosong' : '';
+    const sections = [{ label: 'Opening', badge: 'O', issue: openingIssue, min: 3 }]
+      .concat(s.topics.map((t, i) => ({ label: t.judul || 'Topik tanpa judul', badge: String(i + 1), issue: this.topicIssue(t), min: t.menit })))
+      .concat([{ label: 'Closing', badge: 'C', issue: closingIssue, min: 3 }]);
+    const issues = sections.filter((x) => x.issue).length;
+    const planMin = 6 + s.topics.reduce((acc, t) => acc + (Number(t.menit) || 0), 0);
+    const planOk = Math.abs(planMin - 60) <= 3;
+
+    const nav = sections.map((x, i) => {
+      const on = i === a;
+      return {
+        label: x.label, badge: x.badge, current: on ? 'step' : 'false',
+        status: '±' + x.min + ' mnt · ' + (x.issue || 'Lengkap'),
+        pick: () => this.setState({ active: i }),
+        style: 'font:inherit;display:flex;align-items:center;gap:12px;width:100%;min-height:60px;padding:8px 10px;border-radius:10px;cursor:pointer;color:#111312;' +
+          (on ? 'background:#E9FBFF;border:2px solid #69C1D5' : 'background:#FFFFFF;border:2px solid transparent'),
+        badgeStyle: 'width:32px;height:32px;flex:none;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;' +
+          (on ? 'background:#111312;color:#FFFFFF' : 'background:#F1F0ED;color:#111312'),
+        statusStyle: 'font-size:13px;font-weight:600;' + (x.issue ? 'color:#7D590A' : 'color:#077836')
+      };
+    });
+
+    let cur = {}, rawPoints = [], min = 0, max = 0, heading = '', on = {};
+    if (isTopic) {
+      cur = s.topics[ti]; rawPoints = cur.poin; min = 3; max = 5; heading = 'Topik ' + (ti + 1);
+      ['judul', 'tanya', 'sudut', 'transisi', 'menit'].forEach((f) => { on[f] = (e) => { const v = e.target.value; this.upd((n) => { n.topics[ti][f] = f === 'menit' ? Number(v) : v; }); }; });
+    } else if (isOpening) {
+      cur = s.opening; rawPoints = cur.poin; min = 2; max = 3; heading = 'Opening';
+      on.hook = (e) => { const v = e.target.value; this.upd((n) => { n.opening.hook = v; }); };
+    } else {
+      cur = s.closing; heading = 'Closing';
+      ['rangkuman', 'ajakan'].forEach((f) => { on[f] = (e) => { const v = e.target.value; this.upd((n) => { n.closing[f] = v; }); }; });
+    }
+    const target = (n) => (isTopic ? n.topics[ti].poin : n.opening.poin);
+    const points = rawPoints.map((p, i) => ({
+      n: i + 1, text: p.text, cek: p.cek ? 'true' : 'false',
+      aria: 'Bahan ' + (i + 1), removeAria: 'Hapus bahan ' + (i + 1),
+      onText: (e) => { const v = e.target.value; this.upd((n) => { target(n)[i].text = v; }); },
+      remove: () => this.upd((n) => { target(n).splice(i, 1); }),
+      toggleCek: () => this.upd((n) => { target(n)[i].cek = !target(n)[i].cek; }),
+      cekStyle: 'font:inherit;font-size:13px;font-weight:700;height:36px;padding:0 12px;flex:none;border-radius:999px;cursor:pointer;' +
+        (p.cek ? 'background:#FFF8D4;border:1.5px solid #111312;color:#111312' : 'background:#FFFFFF;border:1.5px solid #E6E4E2;color:#646361')
+    }));
+    const filled = rawPoints.filter((p) => p.text.trim()).length;
+    const countOk = filled >= min;
+    const countText = isClosing ? '' : (countOk ? rawPoints.length + ' dari maks. ' + max : 'Tambah ' + (min - filled) + ' lagi, minimal ' + min);
+    const countStyle = 'font-size:13px;font-weight:700;' + (countOk ? 'color:#646361' : 'color:#7D590A;background:#FFF8D4;border-radius:999px;padding:2px 10px');
+
+    const shout = (t) => (t.trim() ? t.trim().toUpperCase().replace(/,\s*/g, '/ ').replace(/[.?!]?$/, (m) => (m === '?' ? '?//' : '//')) : '');
+    let pv;
+    if (isTopic) pv = { chip: 'Topik ' + (ti + 1) + ' dari ' + nT, title: cur.judul || 'Judul topik', hasBox: true, boxLabel: 'TANYA PENONTON', box: shout(cur.tanya) || 'Pertanyaan belum diisi', items: rawPoints.filter((p) => p.text.trim()) };
+    else if (isOpening) pv = { chip: 'Opening', title: 'Opening', hasBox: true, boxLabel: 'KALIMAT PEMBUKA', box: shout(cur.hook), items: rawPoints.filter((p) => p.text.trim()) };
+    else pv = { chip: 'Closing', title: 'Closing', hasBox: true, boxLabel: 'AJAKAN', box: shout(cur.ajakan), items: [{ text: cur.rangkuman }] };
+
+    return {
+      title: s.title,
+      setTitle: (e) => this.setState({ title: e.target.value }),
+      hasIssues: issues > 0,
+      issueText: issues + ' bagian belum lengkap',
+      planText: 'Rencana ' + planMin + ' dari 60 menit',
+      planStyle: 'display:inline-flex;align-items:center;font-size:13px;font-weight:700;border-radius:999px;padding:6px 12px;' + (planOk ? 'background:#E8FBEB;color:#077836' : 'background:#FFF8D4;color:#111312'),
+      nav, heading, isTopic, isOpening, isClosing, cur, on, points, countText, countStyle, pv,
+      canAddPoint: !isClosing && rawPoints.length < max,
+      addPoint: () => this.upd((n) => { target(n).push({ text: '', cek: false }); }),
+      canAddTopic: nT < 8,
+      topicFull: nT >= 8,
+      addTopic: () => this.upd((n) => { n.topics.push({ judul: '', sudut: '', tanya: '', transisi: '', menit: 9, poin: [{ text: '', cek: false }, { text: '', cek: false }, { text: '', cek: false }] }); n.active = n.topics.length; }),
+      removeTopic: () => this.upd((n) => { if (n.topics.length > 1) { n.topics.splice(ti, 1); n.active = Math.max(1, Math.min(n.active, n.topics.length)); } }),
+      moveUp: () => this.upd((n) => { if (ti > 0) { const t = n.topics.splice(ti, 1)[0]; n.topics.splice(ti - 1, 0, t); n.active = ti; } }),
+      moveDown: () => this.upd((n) => { if (ti < n.topics.length - 1) { const t = n.topics.splice(ti, 1)[0]; n.topics.splice(ti + 1, 0, t); n.active = ti + 2; } })
+    };
+  }
+}
+</script>
+</body>
+</html>

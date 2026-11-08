@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Konsol · Panduan pengguna baru</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#106C7D}a:hover{color:#00515F}
+@keyframes pop{from{transform:translateY(8px);opacity:0}to{transform:translateY(0);opacity:1}}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+</helmet>
+<div style="position: relative; width: 1920px; height: 1240px; overflow: hidden; font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif; color: #111312">
+  <dc-import name="Main" cek-open="{{ cekOpen }}" hint-size="1920px,1240px"></dc-import>
+
+  <sc-if value="{{ showWelcome }}" hint-placeholder-val="{{ true }}">
+    <div style="position: absolute; inset: 0; background: rgba(17,19,18,.55); display: flex; align-items: center; justify-content: center">
+      <section role="dialog" aria-modal="true" aria-labelledby="tw-title" style="width: 560px; box-sizing: border-box; background: #FFFFFF; border-radius: 24px; box-shadow: 0 24px 64px rgba(17,19,18,.25); padding: 36px; display: flex; flex-direction: column; gap: 18px; animation: pop .32s ease-out both">
+        <img src="/_blob/a41e09b7cd0f65ec8fada66c984e7e4c" alt="HITS Unikom Radio 103.9 FM" style="height: 56px; width: auto; align-self: flex-start">
+        <h2 id="tw-title" style="margin: 0; font-size: 33px; font-weight: 800; line-height: 1.15; letter-spacing: -.01em">Halo! Siap siaran bareng AI?</h2>
+        <p style="margin: 0; font-size: 17px; line-height: 1.55; color: #494745">Panduan singkat ini menunjukkan 5 langkah dari tema sampai mulai live. Kamu bisa membukanya lagi kapan saja lewat tombol <strong style="color: #111312">Panduan</strong> di kanan atas.</p>
+        <div style="display: flex; gap: 10px; margin-top: 6px">
+          <button type="button" onClick="{{ start }}" style="font: inherit; font-size: 16px; font-weight: 700; height: 48px; padding: 0 22px; border: 0; border-radius: 10px; background: #69C1D5; color: #111312; cursor: pointer">Mulai panduan</button>
+          <button type="button" onClick="{{ skip }}" style="font: inherit; font-size: 16px; font-weight: 600; height: 48px; padding: 0 20px; border: 1.5px solid #E6E4E2; border-radius: 10px; background: #FFFFFF; color: #111312; cursor: pointer">Nanti saja</button>
+        </div>
+      </section>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showStep }}" hint-placeholder-val="{{ false }}">
+    <div aria-hidden="true" style="{{ spotStyle }}"></div>
+    <section role="dialog" aria-labelledby="ts-title" style="{{ cardStyle }}">
+      <span aria-hidden="true" style="{{ arrowStyle }}"></span>
+      <div style="display: flex; align-items: center; gap: 8px">
+        <span style="font-size: 13px; font-weight: 700; color: #106C7D; flex: 1">Langkah {{ n }} dari 5</span>
+        <button type="button" onClick="{{ skip }}" style="font: inherit; font-size: 14px; font-weight: 600; color: #646361; background: none; border: 0; padding: 0 4px; height: 32px; cursor: pointer">Lewati panduan</button>
+      </div>
+      <h2 id="ts-title" style="margin: 0; font-size: 23px; font-weight: 800; line-height: 1.25">{{ title }}</h2>
+      <p style="margin: 0; font-size: 16px; line-height: 1.55; color: #494745">{{ body }}</p>
+      <div style="display: flex; align-items: center; gap: 10px; margin-top: 4px">
+        <div style="display: flex; gap: 6px; flex: 1" aria-hidden="true">
+          <sc-for list="{{ dots }}" as="d" hint-placeholder-count="5">
+            <span style="{{ d.style }}"></span>
+          </sc-for>
+        </div>
+        <sc-if value="{{ canBack }}" hint-placeholder-val="{{ true }}">
+          <button type="button" onClick="{{ back }}" style="font: inherit; font-size: 15px; font-weight: 600; height: 44px; padding: 0 16px; border: 1.5px solid #E6E4E2; border-radius: 10px; background: #FFFFFF; color: #111312; cursor: pointer">Kembali</button>
+        </sc-if>
+        <button type="button" onClick="{{ next }}" style="font: inherit; font-size: 15px; font-weight: 700; height: 44px; padding: 0 20px; border: 0; border-radius: 10px; background: #69C1D5; color: #111312; cursor: pointer">{{ nextLabel }}</button>
+      </div>
+    </section>
+  </sc-if>
+
+  <sc-if value="{{ done }}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="position: absolute; left: 50%; bottom: 32px; transform: translateX(-50%); background: #111312; color: #FFFFFF; font-size: 15px; font-weight: 600; border-radius: 999px; padding: 12px 18px 12px 22px; display: flex; align-items: center; gap: 14px; animation: pop .32s ease-out both">
+      Panduan bisa dibuka lagi lewat tombol Panduan.
+      <button type="button" onClick="{{ restart }}" style="font: inherit; font-size: 14px; font-weight: 700; height: 36px; padding: 0 14px; border: 0; border-radius: 999px; background: #FEE980; color: #111312; cursor: pointer">Ulangi</button>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1920,"height":1240}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { i: 0, done: false };
+    this.steps = [
+      null,
+      { x: 152, y: 93, w: 1124, h: 229, cx: 160, cy: 350, arrow: 'up', ax: 48,
+        title: 'Mulai dari tema',
+        body: 'Ketik tema obrolan dan target pendengarnya, lalu klik Buat materi. AI menyiapkan beberapa pilihan materi obrolan dalam beberapa detik.' },
+      { x: 152, y: 330, w: 1124, h: 410, cx: 160, cy: 764, arrow: 'up', ax: 48,
+        title: 'Pilih satu materi',
+        body: 'Bandingkan pilihannya, lalu klik Pakai ini. Mau mengubah poin atau urutan? Klik Lihat & ubah. Materi yang dipakai langsung muncul di panel kanan.' },
+      { x: 1284, y: 93, w: 484, h: 766, cx: 820, cy: 200, arrow: 'right', ay: 40,
+        title: 'Atur format siaran',
+        body: 'Pilih Penyiar + AI atau AI + AI, lalu durasi siaran (biasanya 60 menit). Isi nama penyiar sekali saja, lalu pilih teman ngobrol AI. Klik tombol putar untuk mendengar suaranya dulu.' },
+      { x: 1463, y: 4, w: 305, h: 60, cx: 1328, cy: 88, arrow: 'up', ax: 279,
+        title: 'Cek kesiapan',
+        body: 'Klik untuk memastikan semuanya siap dan melihat apakah kuota cukup untuk durasi yang dipilih.' },
+      { x: 1308, y: 1076, w: 436, h: 72, cx: 844, cy: 992, arrow: 'right', ay: 112,
+        title: 'Mulai live',
+        body: 'Kalau semua tanda sudah hijau, klik Mulai live. Prompter penyiar dan layar untuk OBS ikut berjalan otomatis.' }
+    ];
+  }
+  renderVals() {
+    const { i, done } = this.state;
+    const s = this.steps[i];
+    const total = 5;
+    const dots = [1, 2, 3, 4, 5].map((k) => ({
+      style: 'display:block;height:8px;border-radius:999px;transition:all .2s ease;' +
+        (k === i ? 'width:24px;background:#111312' : 'width:8px;background:' + (k < i ? '#69C1D5' : '#E6E4E2'))
+    }));
+    let spotStyle = '', cardStyle = '', arrowStyle = '';
+    if (s) {
+      spotStyle = 'position:absolute;left:' + s.x + 'px;top:' + s.y + 'px;width:' + s.w + 'px;height:' + s.h +
+        'px;border-radius:20px;box-shadow:0 0 0 3px #FEE980,0 0 0 4000px rgba(17,19,18,.55);transition:left .32s ease,top .32s ease,width .32s ease,height .32s ease;pointer-events:none';
+      cardStyle = 'position:absolute;left:' + s.cx + 'px;top:' + s.cy +
+        'px;width:440px;box-sizing:border-box;background:#FFFFFF;border-radius:16px;box-shadow:0 16px 48px rgba(17,19,18,.25);padding:22px 24px;display:flex;flex-direction:column;gap:12px;animation:pop .32s ease-out both';
+      arrowStyle = 'position:absolute;width:16px;height:16px;background:#FFFFFF;transform:rotate(45deg);' +
+        (s.arrow === 'up' ? 'top:-8px;left:' + s.ax + 'px' : 'right:-8px;top:' + s.ay + 'px');
+    }
+    return {
+      cekOpen: false,
+      showWelcome: !done && i === 0,
+      showStep: !done && i > 0,
+      done,
+      n: i,
+      title: s ? s.title : '',
+      body: s ? s.body : '',
+      spotStyle, cardStyle, arrowStyle, dots,
+      canBack: i > 1,
+      nextLabel: i === total ? 'Selesai' : 'Lanjut',
+      start: () => this.setState({ i: 1 }),
+      next: () => (i === total ? this.setState({ done: true }) : this.setState({ i: i + 1 })),
+      back: () => this.setState({ i: Math.max(1, i - 1) }),
+      skip: () => this.setState({ done: true }),
+      restart: () => this.setState({ i: 0, done: false })
+    };
+  }
+}
+</script>
+</body>
+</html>

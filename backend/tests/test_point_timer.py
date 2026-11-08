@@ -8,7 +8,7 @@ from app.show.pointclock import PointClock, trim_to_budget
 from tests.test_engine import make_engine, wait_end
 from tests.test_mode_a import make, settle
 
-TIMER = dict(POINT_TIME_LIMIT_S=20, POINT_WRAP_S=6, SHOWRUNNER_POLICY="fixed_turns")  # fixed_turns = Showrunner tidak dipanggil per poin
+TIMER = dict(POINT_TIME_LIMIT_S=20, POINT_WRAP_S=6, SHOWRUNNER_POLICY="fixed_turns", POINT_LIMIT_FROM_TOPIC=False)  # R4 asli (batas tetap); fixed_turns = Showrunner tidak dipanggil per poin
 
 
 # ── Jam dan anggaran kata ────────────────────────────────────────────────────
@@ -117,27 +117,6 @@ async def test_advancing_the_segment_ends_the_open_point_with_reason_skip(tmp_pa
 # ── Mode A ───────────────────────────────────────────────────────────────────
 
 
-async def test_mode_a_counts_human_speech_and_closing_answer_moves_to_next_point(tmp_path):
-    engine, events = make(tmp_path, POINT_TIME_LIMIT_S=20, POINT_WRAP_S=6)
-    engine.start()
-    await settle(engine)
-    await engine.skip()  # masuk topik 1, poin 1
-    assert engine.snapshot()["topic_points"][0]["current"] is True
-    await engine.human_turn("Menurut lo gimana soal ini?", speech_ms=9000)  # 9 s ucapan penyiar ikut dihitung
-    await settle(engine)
-    assert engine.point_played[("t1", "t1p1")] > 9.0 and engine.plan.point_idx == 0
-    await engine.human_turn("Terus terus?", speech_ms=3000)  # ±15 s terpakai + jawaban AI → sisa menipis
-    await settle(engine)
-    await engine.human_turn("Oke lanjut", speech_ms=3000)
-    await settle(engine)
-    ends = [l for l in read_log(engine.log.path) if l["type"] == "point_end"]
-    assert ends and ends[0]["point_id"] == "t1p1" and ends[0]["reason"] == "timer"
-    assert engine.plan.point_idx >= 1
-    points = engine.snapshot()["topic_points"]
-    assert points[0]["covered"] is True and any(p["current"] for p in points)
-    assert engine.snapshot()["point_clock"]["active"] is True
-
-
 async def test_mode_a_next_topic_button_still_works_and_resets_the_point(tmp_path):
     engine, _ = make(tmp_path, POINT_TIME_LIMIT_S=20)
     engine.start()
@@ -216,13 +195,43 @@ async def test_persona_failure_wrap_while_timed_still_plays_closing(tmp_path):
     assert not engine.plan.finished  # Closing tetap dimainkan, bukan langsung selesai
 
 
-async def test_mode_a_next_topic_during_closing_answer_does_not_skip_the_new_topics_first_point(tmp_path):
+async def test_mode_a_never_advances_by_itself_even_far_past_time(tmp_path):
+    """PRD v2.7: mode A tanpa pindah poin/topik otomatis; batas per poin R4 hanya untuk mode B."""
     engine, _ = make(tmp_path, POINT_TIME_LIMIT_S=20, POINT_WRAP_S=6)
     engine.start()
     await settle(engine)
-    await engine.skip()  # topik 1, poin 1
-    key = engine._point_key()
-    engine._closed_point = key  # jawaban penutup baru selesai diputar...
-    await engine.skip()  # ...tetapi penyiar menekan Next topik sebelum poin dipindah
-    await engine._close_point_if_due()
-    assert engine.plan.topic_idx == 1 and engine.plan.point_idx == 0 and engine._closed_point is None
+    await engine.skip()  # topik 1
+    for _ in range(8):  # jauh melewati 20 dtk per poin
+        await engine.human_turn("cerita dong, panjang ya " * 10, speech_ms=15000)
+        await settle(engine)
+    snap = engine.snapshot()
+    assert snap["segment"] == "topic" and snap["topic"]["id"] == "t1"
+    assert snap["point_clock"] == {"active": False}
+    log = list(read_log(engine.log.path))
+    assert not [l for l in log if l["type"] in ("point_start", "point_end")]
+    start = next(l for l in log if l["type"] == "session_start")
+    assert start["effective"]["auto_advance"] is False
+
+
+async def test_mode_b_point_limit_follows_topic_minutes(tmp_path):
+    engine, _ = make_engine(tmp_path, POINT_TIME_LIMIT_S=20, POINT_WRAP_S=6, SHOWRUNNER_POLICY="fixed_turns")
+    engine._advance_segment()  # Opening → topik 1
+    t = engine.blocker.topics[0]
+    assert engine.point_clock.limit_s == max(20, t.menit * 60 / len(t.poin))
+
+
+async def test_mode_b_opening_and_closing_follow_minutes_for_duration_materials(tmp_path):
+    """Materi berdurasi (PRD v2.7): Opening/Closing mode B diisi ±3 menit audio (maks. 24 giliran), bukan 2 giliran."""
+    engine, _ = make_engine(tmp_path, **TIMER)
+    engine.blocker.durasi_menit = 60
+    engine.start()
+    await wait_end(engine, timeout=30)
+    turns = [l for l in read_log(engine.log.path) if l["type"] == "turn"]
+    opening = [t for t in turns if t["segment"] == "opening"]
+    closing = [t for t in turns if t["segment"] == "closing"]
+    assert len(opening) > 2 and len(closing) > 2
+    assert len(opening) <= 24 and len(closing) <= 24
+    old, _ = make_engine(tmp_path / "lama", **TIMER)  # materi lama tanpa durasi: tetap 2 giliran
+    old.start()
+    await wait_end(old, timeout=30)
+    assert sum(1 for l in read_log(old.log.path) if l["type"] == "turn" and l["segment"] == "opening") == 2

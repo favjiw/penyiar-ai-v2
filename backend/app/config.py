@@ -10,7 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -37,7 +37,19 @@ class Settings(BaseSettings):
     GEMINI_RPM_SUPERVISOR: int = 0
     GEMINI_RPM_SHOWRUNNER: int = 0
     GEMINI_RPM_TTS: int = 0
-    GEMINI_RPM_DEFAULT: int = 5
+    GEMINI_RPM_DEFAULT: int = 15
+    # Kuota harian per model (RPD) untuk cek kesiapan (PRD v2.7 §8). Free tier terukur 500/hari/model (Tahap 2).
+    GEMINI_RPD_DEFAULT: int = 500
+    GEMINI_RPD_BLOCKER: int = 0  # 0 = pakai GEMINI_RPD_DEFAULT
+    GEMINI_RPD_PERSONA: int = 0
+    GEMINI_RPD_SUPERVISOR: int = 0
+    GEMINI_RPD_SHOWRUNNER: int = 0
+    QUOTA_FILE: str = ""  # kosong = <DATA_DIR>/quota.json
+    # Laju bawaan untuk perkiraan menit aman bila log sesi belum cukup (diganti otomatis dari log).
+    AI_TURNS_PER_MIN_A: float = 4.0
+    AI_TURNS_PER_MIN_B: float = 7.0
+    TTS_CREDITS_PER_MIN: float = 200.0  # ElevenLabs flash: ±4 rb kredit per 20 menit mode B (Tahap 0)
+    TTS_QUOTA_ALERT_MIN: int = 5  # peringatan kuning saat perkiraan sisa suara ≤ sekian menit
 
     # Endpoint kompatibel OpenAI (opsional): dipakai lewat model `compat:<nama>` di GEMINI_MODEL_*
     OPENAI_COMPAT_BASE_URL: str = ""
@@ -83,11 +95,20 @@ class Settings(BaseSettings):
     SHOWRUNNER_TIMEOUT_MS: int = 6000  # lewat batas → keputusan fixed_turns
     PERSONA_FAILURES_BEFORE_WRAP: int = 3  # persona gagal beruntun sebanyak ini...
     PERSONA_FAILURE_WRAP_SEC: int = 90  # ...dan selama ini (detik) → ke Closing; gangguan jaringan sesaat tidak menutup siaran
-    PIPELINE_DEPTH: int = 1
+    PIPELINE_DEPTH: int = 2
     OPENING_TURNS: int = 2  # batas lunak Opening (mode B)
     CLOSING_TURNS: int = 2
     POINT_TIME_LIMIT_S: int = 60  # batas satu obrolan (satu poin) untuk kedua penyiar; 0 = mati (mode lama: Showrunner per topik). Rencana uji: 90
     POINT_WRAP_S: int = 15  # sisa waktu ≤ ini → giliran berikutnya menutup poin secara natural
+    # Mode B (PRD v2.7, keputusan Favian 8 Nov 2026): batas per poin = menit topik ÷ jumlah poin
+    # (POINT_TIME_LIMIT_S tetap batas bawah dan sakelar timer; 0 = timer mati untuk baseline eksperimen).
+    POINT_LIMIT_FROM_TOPIC: bool = True
+    # Mode A (PRD v2.7): tidak ada pindah otomatis; AI memberi kode halus satu kali per topik saat
+    # topik lewat waktu sekian detik. 0 = kode halus mati.
+    MODE_A_NUDGE_AFTER_S: int = 120
+    # Mode A: pindah topik dari ucapan penyiar (deteksi aturan, app/show/intent.py) dan jendela batal (detik).
+    VOICE_TOPIC_SWITCH: bool = True
+    VOICE_SWITCH_UNDO_S: int = Field(default=10, ge=0)
     POINT_MIN_TURNS: int = 3  # Showrunner baru boleh menutup poin lebih awal setelah sekian giliran (mode B)
     TTS_WORDS_PER_SEC: float = 2.0  # konversi sisa waktu → anggaran kata (Edge 2,3; gTTS 1,9; ElevenLabs belum terukur)
     SESSION_TARGET_MIN: int = 0  # petunjuk lunak durasi total untuk Showrunner; 0 = tanpa
@@ -124,6 +145,16 @@ class Settings(BaseSettings):
         if unknown:
             raise ValueError(f"TTS_FALLBACK memuat provider tidak dikenal: {', '.join(unknown)}")
         return [n for n in names if n != "none"]
+
+    def rpd_for_model(self, model: str) -> int:
+        """Kuota harian sebuah model: yang paling ketat di antara peran yang memakainya (kuota Google per model)."""
+        limits = [getattr(self, f"GEMINI_RPD_{r.upper()}", 0) or self.GEMINI_RPD_DEFAULT
+                  for r in ("blocker", "persona", "supervisor", "showrunner") if self.model_for(r) == model]
+        return min(limits) if limits else self.GEMINI_RPD_DEFAULT
+
+    @property
+    def quota_path(self) -> Path:
+        return Path(self.QUOTA_FILE) if self.QUOTA_FILE else Path(self.DATA_DIR) / "quota.json"
 
     def rpm_for(self, role: str) -> int:
         """RPM untuk satu peran (blocker, persona, ...); 0 berarti pakai default."""

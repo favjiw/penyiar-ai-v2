@@ -1,10 +1,10 @@
-# PRD Penyiar AI Co-Host Live TikTok HITS (v2.6)
+# PRD Penyiar AI Co-Host Live TikTok HITS (v2.7)
 
 | | |
 |---|---|
 | Pemilik | Muhammad Favian Jiwani (Favian) |
-| Tanggal | 2 November 2026 |
-| Status | Draf v2.6: fokus kualitas percakapan; revisi responsi HITS 30 Okt (dua mode, batas waktu obrolan per poin, pilihan suara); avatar, komentar, dan live TikTok ditunda |
+| Tanggal | 8 November 2026 |
+| Status | Draf v2.7: keputusan desain UI 8 Nov (penyiar tanpa klik, materi berdurasi 60 menit, stage ringan, konsol satu halaman); revisi responsi HITS 30 Okt (dua mode, pilihan suara); avatar video final, komentar, dan live TikTok ditunda |
 | Menggantikan | Semua PRD dan dokumen desain di repo `conversational-ai`: `PRD-KP-HITS-AI-Live*.md`, `PRD HITS AI Live v1.1`, `docs/avatar/PRD Avatar 3D…`, `docs/KEPUTUSAN-DESAIN.md`, `docs/RUNDOWN-LIVE-1-JAM-DRAF.md` |
 | Repo | `favjiw/penyiar-ai-v2` (public) [F] |
 
@@ -51,7 +51,7 @@ Riset difokuskan ke **kualitas percakapan** (target obrolan 40+ menit). Yang dit
 
 Yang ditambah:
 - ~~**Mode C**: 1 penyiar manusia (pemegang sesi) + 2 AI (Raka dan Salsa).~~ Dicabut di v2.6 atas arahan pembimbing (§1.3.2); kodenya hanya ada di riwayat git sebelum commit `396f06a`.
-- **Indikator giliran bicara (orb)** di konsol sebagai pengganti avatar (FR-15).
+- ~~**Indikator giliran bicara (orb)** di konsol sebagai pengganti avatar (FR-15).~~ Dihapus di v2.7: diganti kartu "siapa bicara" dengan bar level suara nyata (FR-11, `docs/design/DESIGN.md` §1).
 - **Lapisan TTS yang bisa diganti** (FR-6): Edge TTS gratis sebagai default selama pengembangan dan uji panjang; ElevenLabs dipakai untuk demo ke pembimbing dengan mengganti satu variabel `.env`.
 - Log riset per sesi: `sessions/<id>/turns.jsonl` dan `blocker.json` (FR-12).
 
@@ -67,9 +67,19 @@ Supervisor dan Showrunner **dipertahankan**. Hook Supervisor default nonaktif (p
 
 Di luar cakupan revisi ini: deteksi giliran otomatis (VAD) untuk mode A, perbaikan kualitas jawaban AI (mengelak pertanyaan penyiar), avatar, musik, komentar TikTok.
 
+### 1.3.3 Keputusan desain UI (8 Nov 2026) [F]
+Hasil diskusi desain bersama Claude Design. Acuan visual dan perilaku: `docs/design/DESIGN.md`; peta mockup → kode dan urutan kerja: `docs/design/HANDOFF.md`; mockup: `docs/design/mockups/`.
+1. **Penyiar tidak perlu klik apa pun** (pesan pembimbing). Mikrofon hands-free; giliran ketat (AI tidak bisa disela, mic dijeda saat AI bicara atau berpikir). Pindah topik lewat ucapan penyiar; tombol "Topik selanjutnya" (N) opsional (FR-2, FR-7).
+2. **Kendali alur mode A penuh di penyiar.** Waktu hanya panduan; tidak ada pindah poin/topik otomatis di mode A. AI memberi kode halus **satu kali** per topik saat lewat ±2 menit (FR-4). Ini menggantikan penegakan otomatis R4 (§1.3.2) **untuk mode A**; mode B tetap memakai batas waktu per poin.
+3. **Stage dihidupkan lagi versi ringan** (`/stage`): satu-satunya pemutar audio, tanpa teks. Mode B satu jendela 9:16 dua panel; mode A satu panel AI (kamera studio ditumpuk di OBS) (FR-10).
+4. **Siaran 1 jam:** ±6 topik × ±9 menit + Opening 3 + Closing 3. Jumlah topik mengikuti durasi; ini menggantikan batas "maksimal 3 topik" di §1.3 (FR-1).
+5. **Istilah HITS:** "materi" menggantikan "rundown/blocker" di UI; pertanyaan penonton menjadi elemen utama topik, bahan obrolan pendukung (§3).
+6. **Lanjutan 8 Nov 2026 [F]:** (a) mode B tetap memakai batas per poin (R4), tetapi batasnya = menit topik ÷ jumlah poin (`POINT_LIMIT_FROM_TOPIC`, minimal `POINT_TIME_LIMIT_S`), supaya durasi siaran mengikuti materi (±60 menit); (b) mikrofon penyiar tidak dipilih di aplikasi: Web Speech Chrome selalu memakai input bawaan, jadi prompter menampilkan nama mic bawaan + meter level, dan mic diganti lewat setelan Chrome/OS.
+7. Konsol satu halaman (tema → pilih materi → Siap live), editor materi, cek kesiapan berbasis kuota, progres siaran, peringatan tiga tingkat, panduan pengguna baru; prompter tanpa pengaturan dengan band status (FR-11). Light mode, Plus Jakarta Sans, warna merek HITS.
+
 ### 1.3 Keputusan lanjutan Favian (24 Okt 2026)
 - Fokus hanya ke **siaran live TikTok**; jalur suara AI ke on-air radio belum dipikirkan [F].
-- Rundown hanya berisi Opening → maksimal 3 topik → Closing. Tanpa jingle, PSA, spot, atau audio statis lain [F].
+- Rundown hanya berisi Opening → ~~maksimal 3 topik~~ topik sesuai durasi (§1.3.3, v2.7) → Closing. Tanpa jingle, PSA, spot, atau audio statis lain [F].
 - Mode A: 1 penyiar manusia + 1 AI. Penyiar memilih lawan bicara AI (Raka atau Salsa) sebelum live [F].
 - Mode B: AI + AI penuh otomatis; agen tahu kapan pindah topik [F].
 - Tahap awal: komentar dibaca dan dipandu penyiar manusia, AI hanya menanggapi penyiar [F].
@@ -102,15 +112,15 @@ Di luar cakupan revisi ini: deteksi giliran otomatis (VAD) untuk mode A, perbaik
 | FR-4 Showrunner | ✓ (mode B) | ✓ | **fokus** |
 | FR-5 Supervisor | versi dasar (keamanan) | **fokus** | – |
 | FR-6 TTS | ✓ | ✓ | – |
-| FR-7 Input penyiar (PTT + STT) | ✓ | ✓ | – |
+| FR-7 Input penyiar (hands-free + STT) | ✓ | ✓ | – |
 | ~~FR-8 Avatar T1 (bank klip)~~ ditunda | – | – | – |
 | ~~FR-9 Avatar T2 (lip-sync neural)~~ ditunda | – | – | – |
-| ~~FR-10 Stage / output OBS~~ ditunda | – | – | – |
+| FR-10 Stage / output OBS (versi ringan, v2.7) | ✓ | ✓ | – |
 | FR-11 Konsol operator dan prompter | ✓ | ✓ | – |
 | FR-12 Logging | ✓ | ✓ | ✓ |
 | ~~FR-13 Panel komentar + Supervisor~~ ditunda | – | – | – |
 | FR-14 Harness eksperimen | – | ✓ | ✓ |
-| FR-15 Indikator giliran bicara (orb) | ✓ | ✓ | – |
+| ~~FR-15 Indikator giliran bicara (orb)~~ dihapus v2.7 (diganti kartu siapa bicara, FR-11) | – | – | – |
 
 ### 2.3 Tidak dikerjakan
 - Pemutaran dan rekomendasi lagu.
@@ -130,11 +140,11 @@ Di luar cakupan revisi ini: deteksi giliran otomatis (VAD) untuk mode A, perbaik
 | Istilah | Definisi di sistem ini |
 |---|---|
 | **Tema** | Kata kunci atau frasa pendek yang diketik pengguna, misalnya "Ospek" atau "Zodiak". |
-| **Blocker** | Rundown hasil LLM yang sudah dipilih, diedit, dan dikunci: Opening, 1–3 Topik, Closing. Dibaca penyiar manusia (prompter) dan dipakai AI sebagai konteks. |
+| **Blocker** / **Materi** | Rundown hasil LLM yang sudah dipilih, diedit, dan dikunci: Opening, topik (jumlah mengikuti durasi, FR-1), Closing. Dibaca penyiar manusia (prompter) dan dipakai AI sebagai konteks. Di UI disebut **materi** (istilah HITS) [F, 8 Nov 2026]; nama `blocker` tetap dipakai di kode dan API. |
 | **Topik** | Satu bagian blocker berisi judul, sudut pandang, poin obrolan, pertanyaan ke penonton, dan kalimat transisi. |
 | **Giliran (turn)** | Satu ucapan utuh satu penyiar. |
 | **Obrolan** [F, 2 Nov 2026] | Pembahasan satu **poin** blocker oleh kedua penyiar; unit batas waktu `POINT_TIME_LIMIT_S` (FR-2). Opening dan Closing tidak punya batas waktu obrolan. |
-| **Mode A** | 1 penyiar manusia + 1 penyiar AI. Penyiar manusia memandu dan menekan "next topik". |
+| **Mode A** | 1 penyiar manusia + 1 penyiar AI. Penyiar manusia memandu dan memindah topik lewat ucapan; tombol "Topik selanjutnya" (N) opsional [F, 8 Nov 2026]. |
 | **Mode B** | 2 penyiar AI (Raka dan Salsa), berjalan otomatis. Showrunner memutuskan transisi. |
 | ~~**Mode C**~~ | Dicabut di v2.6 (§1.3.2). |
 | **Persona** | Kartu identitas penyiar AI: Raka (pria) dan Salsa (wanita). |
@@ -150,7 +160,7 @@ Di luar cakupan revisi ini: deteksi giliran otomatis (VAD) untuk mode A, perbaik
 | Peran | Kebutuhan |
 |---|---|
 | Produser / operator | Mengetik tema, memilih dan mengedit blocker, memilih mode, memulai dan menghentikan live, memantau transkrip dan status agen, mengambil alih bila perlu. |
-| Penyiar manusia (mode A) | Melihat blocker di prompter, berbicara dengan AI lewat push-to-talk, membaca komentar dari TikTok sendiri, menekan "next topik". |
+| Penyiar manusia (mode A) | Melihat materi di prompter, berbicara dengan AI lewat mic hands-free dengan giliran ketat, membaca komentar dari TikTok sendiri, memindah topik lewat ucapan. **Tidak wajib klik apa pun** selama siaran [F, 8 Nov 2026]. |
 | Penonton TikTok | Melihat layar 9:16: penyiar (kamera atau avatar) dan label AI; mendengar obrolan yang tidak terdengar seperti robot. |
 | Peneliti (Favian) | Menjalankan eksperimen offline dan membaca log. |
 
@@ -172,6 +182,8 @@ Di luar cakupan revisi ini: deteksi giliran otomatis (VAD) untuk mode A, perbaik
 ## 5. Alur end-to-end
 
 ### 5.1 Sebelum live
+**Sejak v2.7 [F, 8 Nov 2026]:** semua langkah di satu halaman konsol: tema + target pendengar → Buat materi → pilih materi ("Pakai ini" / "Lihat & ubah") → panel **Siap live** (format, **durasi**, persona + suara, cek kesiapan otomatis) → Mulai live. Materi dikunci otomatis saat mulai. Urutan lama di bawah tetap sebagai rujukan.
+
 1. Operator membuka konsol, mengetik tema, dan opsional menambah catatan (sasaran penonton, nuansa, hal yang dihindari).
 2. Generator Blocker membuat 2–3 varian (FR-1). Operator memilih satu varian, mengedit (tambah, hapus, atau urutkan poin; ganti judul), lalu **mengunci**. Blocker tersimpan dengan versi.
 3. Operator memilih mode:
@@ -251,7 +263,7 @@ IDLE → BLOCKER_LOCKED → READY → LIVE{ OPENING → TOPIC(1..n) → CLOSING 
 | TOPIC_i → TOPIC_i+1 | Penyiar menekan "next" | Showrunner `transition` |
 | TOPIC_n → CLOSING | Penyiar menekan "next" / "closing" | Showrunner `close` |
 | Batas keras | Tidak ada | `MAX_TURNS_PER_TOPIC` (default 60; 40 membatasi tiga topik ke ±34 menit pada uji 30 Okt) memaksa transisi; tercatat sebagai `forced`. Tidak berlaku bila batas waktu poin aktif |
-| Batas waktu poin (`POINT_TIME_LIMIT_S` > 0) | Waktu habis → jawaban AI menutup poin, lalu poin pindah otomatis; poin terakhir → topik berikutnya / Closing | Waktu habis atau Showrunner menilai poin jenuh → giliran penutup → poin berikutnya / topik berikutnya / Closing |
+| Batas waktu poin (`POINT_TIME_LIMIT_S` > 0) | Sejak v2.7 tidak berlaku: tidak ada pindah poin/topik otomatis; waktu topik dari `menit` materi hanya panduan, kode halus satu kali, pindah lewat ucapan penyiar atau tombol N | Waktu habis atau Showrunner menilai poin jenuh → giliran penutup → poin berikutnya / topik berikutnya / Closing |
 | Override operator | skip / pause / stop | skip / pause / stop |
 
 ### 6.3 Event WebSocket (minimal) [C]
@@ -262,19 +274,26 @@ IDLE → BLOCKER_LOCKED → READY → LIVE{ OPENING → TOPIC(1..n) → CLOSING 
 | `turn` | server → console, stage | persona, teks, emosi, `audio_url`, durasi, `playback_id` |
 | `filler` | server → stage | persona, `audio_url` |
 | `speaking` | stage → server | mulai / selesai putar (untuk sinkron dan latensi) |
-| `point_clock` | server → console, prompter | poin aktif, sisa waktu obrolan (`limit_s`, `played_s`, `running`); `{active: false}` bila tidak ada batas waktu |
+| `point_clock` | server → console, prompter | poin aktif, sisa waktu obrolan (`limit_s`, `played_s`, `running`); `{active: false}` bila tidak ada batas waktu (termasuk mode A sejak v2.7) |
+| `show_clock` | server → semua | (v2.7) jam siaran tanpa jeda: `elapsed_s`, `target_s` (durasi materi), `segment_elapsed_s`, `segment_target_s` (menit topik / ±3 menit Opening-Closing), `running`; juga di snapshot |
+| `nudge` | server → console, prompter | (v2.7, mode A) kode halus satu kali per topik saat lewat ≥120 dtk |
+| `alert` | server → semua (dipakai konsol) | (v2.7) `{level: red\|yellow\|blue, code, title, message, detail, stage, turn, at}`: `title`/`message` memakai istilah UI, `detail` pesan mentah untuk Detail teknis; kode antara lain `tts_silent`, `tts_fallback`, `tts_quota_low`, `llm_fallback`, `ai_failing`, `supervisor_rules`. Peringatan merah dari kondisi (mic penyiar tidak terdengar ≥8 dtk, dilaporkan prompter lewat `mic_state` → `output_status.mic`; layar OBS tertutup/belum bersuara; prompter tertutup) dibuat di konsol, bukan event server |
 | `showrunner` | server → console, prompter | keputusan, poin tercakup, alasan singkat |
 | `supervisor` | server → console | verdict, aksi, bukti |
-| `topic_change` | server → semua | id topik, judul |
+| `topic_change` | server → semua | id topik, judul; v2.7: `reason: 'voice'` (+ `said`, `from`, `rule`, `undo_s`) bila dipicu ucapan penyiar, `reason: 'undo'` saat dibatalkan |
 | `stt_partial` / `stt_final` | prompter/console → server | teks penyiar (mode A) |
 | `comment` / `comment_flag` | server → console, prompter | (FR-13) |
 | `output_status` | server → console | stage tersambung, audio terblokir, dll. |
 
+Sejak v2.7 role `stage` kembali dipakai (FR-10): hanya klien `stage` yang memutar audio.
+
 ### 6.4 API REST (minimal) [C]
-- `POST /api/blocker/generate {tema, catatan?, jumlah_topik≤3, jumlah_varian 2..3}` → daftar varian.
+- `POST /api/blocker/generate {tema, catatan?, durasi_menit?, jumlah_topik?, jumlah_varian 2..3}` → daftar varian (v2.7: `durasi_menit` default 60 menentukan jumlah topik, FR-1).
 - `PUT /api/blocker/{id}` simpan editan; `POST /api/blocker/{id}/lock`.
 - `POST /api/show/start {blocker_id, mode: A|B, ai_persona?, human_name?, voices?}` (mode A: `ai_persona`; `voices` = `{persona: id suara}` dari daftar terkurasi; draf blocker dikunci otomatis, 422 bila tidak lolos aturan kunci); `POST /api/show/next`; `POST /api/show/pause|resume|stop`.
-- `GET /api/voices` (daftar suara terkurasi + suara aktif); `POST /api/precheck {voices?}` (cek pra-live, memanaskan suara terpilih).
+- `GET /api/voices` (daftar suara terkurasi + suara aktif); `POST /api/precheck {voices?}` (cek pra-live, memanaskan suara terpilih). v2.7: mengembalikan per layanan `{kind: llm|tts|stt, percent_left, minutes_left}`, `minutes_safe` (minimum), `target_minutes`, `fallbacks`.
+- `POST /api/show/undo-topic` (v2.7, mode A): batalkan pindah topik terakhir yang dipicu ucapan.
+- `GET /api/readiness?mode=&target_minutes=` (v2.7): cek kesiapan tanpa memanaskan suara (tombol header konsol); `POST /api/precheck` juga menerima `mode`, `target_minutes` dan mengembalikan `readiness`.
 - `POST /api/ptt/turn {text, stt_ms?, speech_ms?}` (mode A; bila STT di browser) atau `POST /api/ptt/audio` (bila STT di server).
 - `GET /api/logs/{session_id}`; `GET /api/health` (status kuota, TTS, STT, avatar).
 
@@ -285,7 +304,8 @@ IDLE → BLOCKER_LOCKED → READY → LIVE{ OPENING → TOPIC(1..n) → CLOSING 
 Format setiap FR: deskripsi → aturan → kriteria terima (KT).
 
 ### FR-1 Generator Blocker
-- **Input:** tema (wajib, ≤60 karakter), catatan (opsional, ≤500 karakter), jumlah topik 1–3 (default 3) [F], jumlah varian 2–3 (default 3) [C].
+- **Input:** tema (wajib, ≤60 karakter), catatan / target pendengar (opsional, ≤500 karakter), ~~jumlah topik 1–3 (default 3)~~, jumlah varian 2–3 (default 3) [C].
+- **Durasi [F, 8 Nov 2026]:** input `durasi_menit` (30/45/60/90, default **60**). Jumlah topik ≈ (durasi − 6) / 9 (60 menit → 6 topik; Opening 3 + Closing 3 menit). Tiap topik punya `menit` (default 9). **Pertanyaan penonton menjadi elemen utama** topik; 3–5 poin obrolan menjadi bahan obrolan pendukung.
 - **Output:** varian sesuai skema §9.1. Isi tiap topik [F, dari usulan C]:
   - judul;
   - sudut pandang;
@@ -306,7 +326,8 @@ Format setiap FR: deskripsi → aturan → kriteria terima (KT).
   - editor inline (ubah teks, tambah/hapus poin, geser urutan, hapus topik);
   - tombol "buat ulang varian ini";
   - tombol kunci: syaratnya 3-5 poin per topik dan field wajib terisi (Opening hook, Closing rangkuman dan ajakan, sudut pandang, pertanyaan, transisi); blocker terkunci disalin ke `sessions/<session_id>/blocker.json` saat sesi dimulai.
-  - Setiap varian hasil generate tersimpan sebagai draf yang langsung bisa dipakai tanpa edit [P, R2]. Mulai live mengunci draf otomatis (tidak lolos aturan kunci → 422 dengan alasan; poin bertanda `perlu_cek` meminta konfirmasi operator). Edit tetap tersedia dan opsional; topik manual boleh ditambah (maks. 3 topik). Setelah terkunci, perubahan hanya lewat versi baru.
+  - Setiap varian hasil generate tersimpan sebagai draf yang langsung bisa dipakai tanpa edit [P, R2]. Mulai live mengunci draf otomatis (tidak lolos aturan kunci → 422 dengan alasan; poin bertanda `perlu_cek` meminta konfirmasi operator). Edit tetap tersedia dan opsional; topik manual boleh ditambah (~~maks. 3 topik~~ maks. 8 topik sejak v2.7). Setelah terkunci, perubahan hanya lewat versi baru.
+  - **Editor materi [F, 8 Nov 2026]:** tiga kolom (susunan materi dengan status per bagian + menit, editor bagian aktif, pratinjau prompter); simpan otomatis, tanpa tombol kunci (kunci saat mulai live); maks. 8 topik. Rincian di `docs/design/HANDOFF.md` §1.
 
   Blocker yang sudah dikunci tidak bisa diubah. Untuk perubahan, buat versi baru.
 - **KT:**
@@ -323,17 +344,19 @@ Format setiap FR: deskripsi → aturan → kriteria terima (KT).
   - riwayat N giliran terakhir (default 12) dan ringkasan sebelumnya;
   - arahan Showrunner terakhir (`steer`);
   - memori koreksi Supervisor (bila ada).
-- **Pipelining mode B:** buat giliran n+1 (teks, Supervisor, TTS, dan render T2 bila aktif) selagi giliran n diputar. Kedalaman buffer `PIPELINE_DEPTH` default 1; 2–3 bila memakai T2.
+- **Pipelining mode B:** buat giliran n+1 (teks, Supervisor, TTS, dan render T2 bila aktif) selagi giliran n diputar. Kedalaman buffer `PIPELINE_DEPTH` default 2 (sejak gerbang Tahap 2); 2–3 bila memakai T2.
 - **Pemilihan pembicara mode B:**
   - default bergantian menurut daftar peserta AI (bukan pasangan tetap; lebih dari dua AI cukup menambah daftar);
   - boleh Showrunner `steer` dengan `next_speaker`;
   - hindari satu persona bicara >2 kali berturut-turut.
 - **Peserta berupa daftar [F, 30 Okt 2026]:** mode hanya mengubah isi daftar dan aturan giliran (A: manusia + 1 AI; B: semua AI). Mode B memakai `ShowEngine`; mode A memakai `HumanLedEngine`, turunan yang berbagi state machine, Supervisor, TTS, pemutaran, ringkasan, dan log.
-- **Aturan giliran mode A:** ucapan manusia (PTT) → AI menjawab. Hanya manusia yang menekan "next topik". Ucapan manusia baru memotong jawaban AI yang sedang berjalan.
+- **Aturan giliran mode A:** ~~ucapan manusia (PTT) → AI menjawab. Hanya manusia yang menekan "next topik". Ucapan manusia baru memotong jawaban AI yang sedang berjalan.~~
+  **Sejak v2.7 [F, 8 Nov 2026]:** ucapan manusia (mic hands-free) → AI menjawab. **Giliran ketat:** AI tidak bisa disela; mic dijeda saat AI berpikir atau bicara. **Tidak ada pindah poin/topik otomatis** di mode A. Waktu per topik = `menit` dari materi (bukan `POINT_TIME_LIMIT_S` per poin) dan hanya panduan. Pindah topik dipicu niat dari ucapan penyiar (aturan tanpa LLM di `app/show/intent.py`: frasa pindah eksplisit, kalimat pindah topik di materi, judul topik berikutnya + kata kerja pindah; kata lepas seperti "lanjut"/"next" tidak dihitung → `topic_change {reason: 'voice'}`, dijalankan sebelum AI menjawab) atau tombol N opsional; bisa dibatalkan (`POST /api/show/undo-topic`).
 - **Batas waktu obrolan per poin [P, R4; F, 2 Nov 2026]:** `POINT_TIME_LIMIT_S` (default 60, rencana uji 90, 0 = mati) membatasi satu poin untuk kedua penyiar; berlaku di topik, bukan di Opening/Closing. Poin berjalan berurutan dalam topik.
   - **Waktu dari audio, bukan dari waktu generate.** Dua jam: `committed_s` (durasi audio giliran yang sudah dibuat, termasuk yang antre karena pipelining; dasar keputusan dan anggaran kata) dan `played_s` (audio yang sudah selesai diputar; untuk countdown di konsol dan prompter). Di mode A, durasi ucapan manusia (`speech_ms`, atau perkiraan dari jumlah kata) ikut dihitung.
   - **Penutupan natural, tanpa terpotong.** Sisa waktu ≤ `POINT_WRAP_S` (15 s) → giliran berikutnya diminta menutup poin dan mengantar ke poin berikutnya; pada poin terakhir topik, ke topik berikutnya atau Closing. Prompt memuat anggaran kata = sisa waktu × `TTS_WORDS_PER_SEC` (2,0; Edge 2,3, gTTS 1,9, ElevenLabs belum terukur). Audio tidak pernah dipotong; teks yang melewati 1,3× anggaran dirapikan dengan membuang kalimat utuh (kalimat jembatan pada giliran penutup dipertahankan).
-  - **Mode B:** waktu adalah batas atas; Showrunner (kebijakan `llm`) boleh menutup poin lebih awal setelah `POINT_MIN_TURNS` giliran bila obrolan jenuh. **Mode A:** setelah waktu menipis, jawaban AI menutup obrolan, lalu poin pindah otomatis; tombol "next topik" tetap manual.
+  - **Batas mode B sejak v2.7 [F, 8 Nov 2026]:** `limit = max(POINT_TIME_LIMIT_S, menit topik × 60 ÷ jumlah poin)` bila `POINT_LIMIT_FROM_TOPIC=true` (bawaan); `false` = batas tetap R4 untuk eksperimen.
+  - **Mode B:** waktu adalah batas atas; Showrunner (kebijakan `llm`) boleh menutup poin lebih awal setelah `POINT_MIN_TURNS` giliran bila obrolan jenuh. ~~**Mode A:** setelah waktu menipis, jawaban AI menutup obrolan, lalu poin pindah otomatis; tombol "next topik" tetap manual.~~ Sejak v2.7 batas waktu per poin hanya berlaku di mode B; mode A memakai waktu per topik tanpa pindah otomatis (aturan giliran mode A di atas).
   - **Pengontrol tunggal:** saat batas waktu poin aktif, `MIN/MAX_TURNS_PER_TOPIC` dan jatah `SESSION_TARGET_MIN` tidak dipakai, dan kebijakan baseline `fixed_turns`/`coverage_only` hanya bermakna dengan `POINT_TIME_LIMIT_S=0` (eksperimen FR-14, §14.2).
   - **KT:** tiap poin tidak melewati batas lebih dari satu giliran penutup; tidak ada audio atau kalimat yang terpotong; countdown sinkron dengan audio yang diputar.
 - **Ringkasan obrolan:** giliran yang keluar dari jendela 12 giliran dirangkum di latar belakang tiap `SUMMARY_EVERY_TURNS` (default 10) lewat LLM peran Showrunner; bila gagal, kutipan ekstraktif. Ringkasan masuk prompt persona.
@@ -381,6 +404,7 @@ Format setiap FR: deskripsi → aturan → kriteria terima (KT).
 - **Jatah waktu topik [F, 24 Okt 2026]:** blocker tetap 3–5 poin. Bila `SESSION_TARGET_MIN` diisi, tiap topik mendapat jatah = sisa target (dikurangi cadangan Closing) ÷ sisa topik. Di kebijakan `llm`, selama jatah masih ada, keputusan pindah diubah menjadi `steer` ke poin yang belum dibahas atau ke **sudut baru di luar poin** (`new_angle`, tidak diulang) yang masih nyambung ke topik; setelah jatah habis dan ≥60% poin tercakup, topik dipindah. Saat LLM Showrunner gagal atau timeout, jatah ini tetap yang menentukan. Kebijakan baseline (`fixed_turns`, `coverage_only`) tidak memakai jatah.
 - **Dengan batas waktu poin [F, 2 Nov 2026]:** Showrunner menilai satu poin aktif (bukan seluruh topik) dan hanya boleh menutupnya lebih awal; `steer` dibatasi pada poin itu. Kejenuhan tetap dinilai sebagai bahan publikasi, tetapi pindah poin pada akhirnya dijamin oleh batas waktu.
 - **Mode A:** hanya saran di prompter dan konsol (masih per topik, belum per poin), misalnya "Poin tercakup 3/5 · saran: bahas 'ospek online vs offline' · siap pindah". AI juga mendapat `steer_hint` sebagai konteks.
+  - **Kode halus [F, 8 Nov 2026]:** Showrunner tidak memindah topik di mode A, tetapi mengirim `nudge` **satu kali** per topik saat waktu topik terlewati ≥120 dtk; persona lalu menyisipkan kode halus ke penyiar. Durasi lewat waktu per topik dicatat di log.
 - **Baseline publikasi** (bisa dipilih lewat config):
   - `fixed_turns` (pindah setiap X giliran);
   - `coverage_only` (pindah bila semua poin tercakup, tanpa penilaian kejenuhan).
@@ -428,13 +452,14 @@ Kode Supervisor di repo lama masih **stub**: prompt satu baris, tanpa koreksi da
   - provider utama diulang **sekali** bila galat, timeout (`TTS_TIMEOUT_SEC`, default 12 s), atau audio kosong; lalu cadangan; setiap kejadian dicatat (`tts_fallback_used`, `tts_fallback_reason`) dan operator melihat peringatan. Bila semua gagal, giliran tanpa suara memunculkan peringatan, bukan diam;
   - `TTS_PROVIDER=elevenlabs` tanpa key: peringatan jelas di konsol dan jatuh ke Edge, bukan crash;
   - Edge: Raka `id-ID-ArdiNeural`, Salsa `id-ID-GadisNeural`, dengan rate dan pitch per persona (`EDGE_RATE_*`, `EDGE_PITCH_*`); gTTS (`id`) satu suara untuk semua persona;
-  - label provider aktif tampil di header konsol, dan audio apa pun diputar lewat jalur Web Audio yang sama (orb bereaksi ke amplitudo);
+  - label provider aktif tampil di header konsol, dan audio apa pun diputar lewat jalur Web Audio yang sama di `/stage` (bar level di konsol/prompter mengikuti amplitudo yang diteruskan stage; orb dihapus v2.7);
   - uji: `backend/scripts/test_tts.py` (audio tidak kosong, durasi > 0, suara Raka dan Salsa berbeda).
 - **ElevenLabs [F]:** ElevenLabs, model `eleven_flash_v2_5` (diatur lewat `ELEVENLABS_MODEL`, tidak di-hard-code), endpoint streaming.
   - Raka: suara **Pratama** (`q8qwd1jY2jS3AWOBeq25`); cadangan Ginanjar (`JjCMg2oeB7ExbMJUJHSK`).
   - Salsa: suara **Aita** (`ffTJE9l3Kt2ipEM32UOc`); cadangan Kira (`gmnazjXOFoOcWA59sd5m`).
   - Voice ID diatur lewat `ELEVENLABS_VOICE_*` / kartu persona.
   - **Pilihan suara sebelum live [P, R3]:** operator memilih suara tiap penyiar AI dari daftar terkurasi `backend/app/data/voices.json` (id, provider, nama, gender, catatan; kriteria: tidak formal, suara anak muda; isi awal = suara yang sudah dipakai, penambahan suara lain ditandai TODO). Pilihan menang atas `.env` dan kartu persona, berlaku per provider (cadangan tetap memakai suara bawaannya), divalidasi sebelum blocking dikunci, dan tidak berubah selama siaran. Filler disimpan per suara; pemanasan pra-live memakai suara terpilih; ada peringatan bila kedua AI di mode B memakai suara yang sama.
+  - **Sejak v2.7 [F, 8 Nov 2026]:** contoh suara bisa didengar sebelum memilih; suara dan nama penyiar terakhir diingat (localStorage). Pilihan "Gender AI" diganti pilihan persona (Salsa/Raka) + suara.
   - Alasan (Tahap 0, `tahap0/HASIL.md`): latensi p50 0,55 s dan byte pertama ±0,45 s; transkrip setia teks. Gemini TTS free tier hanya 3 RPM dengan latensi p50 12,7 s, jadi tidak layak untuk live.
   - Suara library kadang cold start 15–20 s pada request pertama: cek pra-live wajib memanaskan (warm-up) kedua suara.
   - Pemakaian kredit dipantau (header `character-cost`, ±0,2 kredit/karakter di flash) dan ditampilkan di konsol bersama status kuota.
@@ -451,8 +476,9 @@ Kode Supervisor di repo lama masih **stub**: prompt satu baris, tanpa koreksi da
   - 5 penilai (minimal Favian + 2 rekan + 2 penyiar HITS bila bisa) memberi skor ≥3,5/5 untuk "tidak terdengar seperti robot" pada sampel ElevenLabs (Pratama dan Aita);
   - failover teruji.
 
-### FR-7 Input penyiar mode A (PTT + STT)
-- **Push-to-talk:**
+### FR-7 Input penyiar mode A (hands-free + STT)
+- **Sejak v2.7 [F, 8 Nov 2026]:** hands-free (Web Speech), **tanpa menyela**: mic dijeda saat AI berpikir atau bicara; ucapan yang tetap masuk saat AI menjawab diantrekan dan dijawab sesudahnya (tidak pernah memotong AI). Pemilihan perangkat tidak dibuat (Web Speech tidak mendukung): prompter menampilkan nama mic bawaan + meter level. Sumber suara = mikrofon studio lewat mixer; pemilihan perangkat input dan meter level ada di cek kesiapan. Penyiar memakai headphone. Status mic tampil lewat band status di prompter. PTT di bawah tetap sebagai rujukan sejarah.
+- ~~**Push-to-talk:**~~
   - penyiar atau operator menahan tombol (spasi di laptop prompter, atau tombol layar besar);
   - saat dilepas, transkrip final dikirim;
   - mode alternatif "tekan sekali mulai, tekan lagi selesai".
@@ -502,6 +528,7 @@ Kode Supervisor di repo lama masih **stub**: prompt satu baris, tanpa koreksi da
 - Bila gerbang gagal, catat angka RTF sebagai temuan dan tetap pakai T1.
 
 ### FR-10 Stage / output OBS
+- **Versi ringan, dihidupkan lagi [F, 8 Nov 2026]:** `/stage` **tanpa teks atau komponen apa pun**, hanya karakter; satu-satunya pemutar audio (konsol bisu). Dibuka sebagai popup bernama tetap `hits-stage`: mode B 540×960 dua panel, mode A 540×480 satu panel AI (kamera studio ditumpuk di OBS). Avatar final = klip video realistis (gaya Google Flow, FR-8); sementara memakai ilustrasi. Satu pengecualian, hanya sebelum live: bila browser belum mengizinkan suara, stage menampilkan ajakan "Klik sekali untuk menyalakan suara AI" (tidak pernah saat on air; saat live, klik di mana pun pada jendela menyalakan suara dan konsol yang memberi peringatan). Rute tak dikenal → 404. Spesifikasi lama di bawah (HUD, zona aman) tetap sebagai rujukan untuk avatar final.
 - Kanvas 9:16 (1080×1920). Pakai ulang zona aman TikTok dari `stageLayout.ts`:
   - header 0–10%;
   - bar bawah 93–100%;
@@ -523,6 +550,10 @@ Kode Supervisor di repo lama masih **stub**: prompt satu baris, tanpa koreksi da
   - label AI terlihat setiap saat.
 
 ### FR-11 Konsol operator dan prompter
+- **Sejak v2.7 [F, 8 Nov 2026]:** mengikuti `docs/design/HANDOFF.md` §1 dan `DESIGN.md`:
+  - konsol satu halaman (tanpa tab) + editor materi + cek kesiapan (menit aman vs target, kuota per layanan) + progres siaran per segmen + peringatan tiga tingkat + panduan pengguna baru;
+  - prompter tanpa pengaturan: band status (Giliranmu / AI bicara / AI mikir / Pindah topik / Mic tidak terdengar), topik + TANYA PENONTON besar + bahan obrolan, cincin waktu tiga keadaan, "Siaran m:ss / target", layar "Menunggu produser…" sebelum live;
+  - KT tambahan: penyiar bisa menjalankan siaran 60 menit tanpa satu klik pun; layar OBS tanpa teks; kontras teks ≥4,5:1.
 - **Konsol `/`:**
   - generator dan editor blocker;
   - pilih mode dan persona;
@@ -546,6 +577,7 @@ Kode Supervisor di repo lama masih **stub**: prompt satu baris, tanpa koreksi da
 - **Log giliran riset [F, 30 Okt 2026]:** `sessions/<session_id>/turns.jsonl`, satu baris per giliran (manusia dan AI) dengan medan `session_id, mode, turn_idx, speaker, is_human, topic_idx, text, t_start, t_end, latency_asr_ms, latency_llm_ms, latency_tts_ms, model, tts_chars, filler_used` (plus nama, segmen, `raw_text`, verdict Supervisor, provider TTS, `tts_fallback_used`, `interrupted`). Blocker terkunci disalin ke `sessions/<session_id>/blocker.json`. `t_start`/`t_end` = detik epoch: audio mulai dan selesai diputar (AI), tombol bicara ditekan dan dilepas (manusia). `latency_asr_ms` pada giliran AI pertama sesudah manusia = ASR ucapan yang memicunya.
 - Satu JSONL per sesi (`logs/{session_id}.jsonl`) dengan event bertipe:
   - `session_start`, `turn`, `showrunner`, `supervisor`, `topic_change`, `point_start`, `point_end` (alasan: timer / early / skip / advance / wrap / stop; batas, audio dibuat, jumlah giliran), `point_trim`, `operator_action`, `stt`, `error`, `quota`, `session_end`.
+  - v2.7: `voice_switch` (mode A: pindah topik dari ucapan, aturan yang cocok dan teksnya; juga `action: undo`), `nudge` (mode A: kode halus, topik, tujuan, lewat berapa detik, teks) dan `topic_time` (mode A: lama topik vs perkiraan menit setiap topik ditinggalkan: N, ucapan, stop). Baris `turns.jsonl` memuat `nudge` (true pada giliran AI yang memuat kode halus) supaya analisis evasi bisa memisahkannya; `session_start.effective` mencatat nilai yang benar-benar berlaku di mode A.
   - `session_start` memuat `voices` (suara tiap AI); tiap baris `turns.jsonl` memuat `tts_voice` (suara yang benar-benar dipakai, termasuk saat jatuh ke cadangan).
 - `turn` memuat:
   - mode, topik, persona, `raw_text`, `final_text`, emosi;
@@ -583,10 +615,10 @@ Kode Supervisor di repo lama masih **stub**: prompt satu baris, tanpa koreksi da
 | Aspek | Kebutuhan |
 |---|---|
 | Biaya | Rp0 [F] untuk semua komponen kecuali TTS dan LLM cadangan: Gemini free tier, Edge TTS, model open source, perangkat yang ada. TTS utama ElevenLabs (berbayar/kredit) [F]; pemakaian kredit dicatat per sesi. LLM cadangan `compat:gemini-3.8-flash` (berbayar per panggilan, ±$0,003 per sesi 20 menit) hanya untuk cadangan persona dan eksperimen offline [F]; bukan model utama live karena latensinya ±3,7 s (`docs/kt/llm-compat-cosmoshub.md`). |
-| Kuota | Rate limiter per model (`GEMINI_RPM_*`). Model berbeda per peran untuk membagi beban: persona, Supervisor, Showrunner, blocker. Status kuota tampil di konsol. Bila kuota atau kredit habis: TTS ElevenLabs ke Edge, Supervisor ke `rules`, Showrunner ke `fixed_turns`; semua tercatat. |
+| Kuota | Rate limiter per model (`GEMINI_RPM_*`). Model berbeda per peran untuk membagi beban: persona, Supervisor, Showrunner, blocker. Status kuota tampil di konsol. Bila kuota atau kredit habis: TTS ElevenLabs ke Edge, Supervisor ke `rules`, Showrunner ke `fixed_turns`; semua tercatat. v2.7 [F]: penghitung kuota harian per model (Gemini tidak memberi sisa RPD; reset 00.00 waktu Pasifik, disimpan ke file `QUOTA_FILE`; satu ember per model, dibagi semua peran yang memakainya; ditandai habis saat Google menolak kuota harian); target siaran 60 menit harus tercapai dengan cadangan otomatis. Menit aman = sisa ÷ laju per menit (laju dari log sesi ≥3 menit, atau `AI_TURNS_PER_MIN_A/B`, `TTS_CREDITS_PER_MIN`); semua angka ditampilkan sebagai perkiraan. Sisa kredit ElevenLabs dibaca dari `/v1/user/subscription` (butuh izin `user_read` pada kunci; tanpa itu "belum diketahui", tidak dianggap 0 atau penuh). |
 | Latensi | Mode B: jeda antargiliran p95 ≤4 s (T1). Mode A: §FR-7. |
-| Keandalan | Live uji 20 menit tanpa crash (KP); 60 menit (target akhir). Reconnect WS otomatis. Status live tetap benar setelah reload. |
-| Kepatuhan TikTok | Label AI di layar, penyampaian di pembukaan bahwa penyiar adalah AI, dan pengaturan label konten AI TikTok diaktifkan. Uji coba di akun pribadi dulu. |
+| Keandalan | Live uji 20 menit tanpa crash (KP); 60 menit (target akhir). v2.7 [F]: mode A dan B **60 menit** tanpa crash; mode A tanpa klik penyiar. Reconnect WS otomatis. Status live tetap benar setelah reload. |
+| Kepatuhan TikTok | Label AI di layar, penyampaian di pembukaan bahwa penyiar adalah AI, dan pengaturan label konten AI TikTok diaktifkan. Uji coba di akun pribadi dulu. Sejak v2.7 `/stage` tanpa teks: label AI berasal dari setelan konten AI bawaan TikTok (DESIGN.md §4); bila perlu label di gambar, ditambahkan sebagai sumber teks di OBS. |
 | Privasi data | Data free tier Gemini boleh dipakai Google untuk pengembangan produk. Jangan memasukkan data pribadi penonton atau dokumen rahasia HITS ke prompt. |
 | Perangkat | Laptop streaming MX250: hanya T1 dan OBS. PC lab GTX 1080: T2 dan/atau faster-whisper. Chrome/OBS diatur ke GPU "High performance". |
 | Kode | Python 3.12 + FastAPI; React + Vite + TypeScript; tes unit untuk modul backend; `LLM_MODE=mock` dan `TTS_MODE=mock` untuk uji tanpa kuota. |
@@ -808,6 +840,10 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 ### Tahap 7: Eksperimen
 - FR-14: eksperimen skripsi dan publikasi (§14), lalu laporan.
 
+### Tahap 9: Desain UI (8 Nov 2026) [F]
+- Mengikuti urutan `docs/design/HANDOFF.md` §3: token + komponen dasar → `/stage` + pemilik audio + 404 → konsol Siapkan siaran → prompter baru → konsol saat live + peringatan → backend (durasi materi, waktu per topik, kode halus, deteksi pindah topik, cek kesiapan berbasis kuota) → editor materi → panduan pengguna → uji 60 menit.
+- **Gerbang:** mode A dan B 60 menit tanpa crash (mock dulu, lalu nyata); mode A tanpa satu klik pun dari penyiar; kriteria terima `HANDOFF.md` §4.
+
 ---
 
 ## 14. Rancangan eksperimen [C]
@@ -856,8 +892,8 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 
 ### 15.2 Keputusan terbuka
 1. STT, TTS utama, dan T2: diputuskan di gerbang Tahap 0.
-2. Nama tampilan penyiar manusia di prompt mode A. Default [C]: diisi operator di konsol saat Mulai.
-3. Apakah Opening dan Closing mode A juga diisi AI, atau AI baru masuk di topik 1. Default [C]: AI ikut menanggapi di semua segmen; penyiar memandu dan menekan next.
+2. ~~Nama tampilan penyiar manusia di prompt mode A.~~ Diputuskan [F, 8 Nov 2026]: diisi sekali di konsol dan diingat.
+3. ~~Apakah Opening dan Closing mode A juga diisi AI.~~ Diputuskan [F, 8 Nov 2026]: AI ikut di semua segmen.
 4. Nilai default `SHOWRUNNER_EVERY_K`, `MIN_TURNS_PER_TOPIC`, `MAX_TURNS_PER_TOPIC`, dikalibrasi dari live HITS 20 Okt.
 5. Persetujuan pembimbing HITS untuk kriteria "realistis" (T1 vs T2).
 6. ~~Nama repo baru.~~ Diputuskan: `penyiar-ai-v2` [F].
@@ -877,6 +913,7 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 | 6 Tambahan skripsi | Belum | | FR-13 (komentar) ditunda. |
 | 3b Strip + Orb + TTS + Mode C (mode C dicabut di v2.6) | Berjalan | 30 Okt 2026 | Fase 1 selesai (avatar, stage, T2, dan setelan komentar dihapus; audit di `docs/AUDIT-STRIP.md`; 92 tes lulus, show mock mode B berjalan di konsol). Fase 2 (orb, transkrip), 2b (lapisan TTS Edge/ElevenLabs/gTTS), dan 3 (retry parse 2×, aturan kunci 3-5 poin, `sessions/<id>/blocker.json`, rundown di prompter) selesai; 116 tes lulus. Fase 4 (mode A/B/C satu kerangka berdaftar peserta, mode C, `turns.jsonl`, ringkasan obrolan, hook Supervisor default off) selesai; mode B real time 34,2 menit tanpa crash (127 giliran, `docs/CATATAN-PROGRES.md`). Default berubah dari uji itu: `MAX_TURNS_PER_TOPIC` 60, `PERSONA_TIMEOUT_MS` 20000. |
 | 8 Revisi responsi HITS | Selesai dikerjakan, belum diuji nyata | 2 Nov 2026 | R1 mode C dihapus; R2 draf langsung dipakai dan dikunci saat Mulai; R3 pilihan suara terkurasi; R4 batas waktu obrolan per poin (§1.3.2, FR-2). 165 tes backend lulus, `tsc` dan build bersih; countdown dicek di browser dengan mock. Belum diuji dengan LLM, mikrofon, dan ElevenLabs nyata; kata per detik ElevenLabs belum terukur; 60 vs 90 detik belum dikalibrasi. |
+| 9 Desain UI | Selesai dikerjakan, belum diuji nyata | 8 Nov 2026 | Bahan desain di `docs/design/` (Claude Design). Selesai: langkah 1 (PRD v2.7), 2 (token, font, komponen dasar `frontend/src/ui/`, galeri dev `/_ui`), 3 (`/stage` satu-satunya pemutar audio, konsol bisu, level suara diteruskan ke konsol, rute tak dikenal → 404), 4 (konsol Siapkan siaran satu halaman + panel Siap live + durasi materi 30/45/60/90 di backend; contoh suara) 5 (prompter baru: band status, cincin waktu segmen, jam siaran tanpa jeda dari server `show_clock`, mic hands-free tanpa pengaturan, level mic nyata, deteksi mic putus), 6 (konsol saat live: progres per segmen + selisih jadwal, siapa bicara dengan level nyata, urutan materi, cincin waktu, saran pengarah acara, transkrip, status, peringatan tiga tingkat dari kondisi + event `alert {level, code, title, message, detail}`, status mic prompter diteruskan ke konsol; orb dihapus) 7 (backend: mode A tanpa pindah otomatis + giliran ketat + kode halus sekali per topik; batas poin mode B dari menit topik; pindah topik lewat ucapan + batal; penghitung kuota harian per model, cek kesiapan berbasis menit, peringatan kuota suara; nama mic bawaan + meter di layar tunggu prompter) 9 (panduan pengguna baru: sapaan + 5 langkah dengan sorotan elemen, tombol Panduan), 10 (uji 60 menit mock dipercepat mode A dan B + uji singkat LLM nyata, `docs/kt/tahap9-uji-60-menit.md`; Opening/Closing mode B materi berdurasi diisi ±3 menit audio, maks. 24 giliran) dan 8 (editor materi tiga kolom, dimajukan atas keputusan Favian; simpan otomatis). KT FR-1 dengan durasi, LLM nyata `gemini-3.5-flash-lite`: 60 mnt → 6 topik 12,4 s; 90 mnt → 8 topik 15,1 s (satu percobaan, 1 tema). Belum: siaran 60 menit penuh real time dengan LLM/TTS nyata (kuota mode B ±600 permintaan/jam > 500 RPD, perlu cadangan atau model per peran); uji mode A bersama penyiar sungguhan; sisa kredit ElevenLabs butuh izin `user_read` pada kunci (kunci sekarang belum punya, jadi "belum diketahui"); laju awal mode A/B (`AI_TURNS_PER_MIN_*`) masih tebakan sampai ada log sesi ≥3 menit; deteksi pindah lewat ucapan belum diuji dengan ucapan penyiar sungguhan; band "Giliranmu" dan deteksi mic putus belum diuji dengan mic/mixer sungguhan; cek mikrofon dan sisa kuota di cek kesiapan (langkah 7); "Buat ulang topik ini" di editor (backend belum punya buat ulang per topik); dua popup sekaligus (layar OBS + prompter) di mode A belum diuji di Chrome sungguhan. |
 | 7 Eksperimen | Belum | | |
 
 ## 17. Riwayat
@@ -907,6 +944,13 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
   - pilihan suara terkurasi sebelum live (FR-6, §6.4, FR-12);
   - batas waktu obrolan per poin, waktu dari durasi audio, penutupan natural, Showrunner boleh menutup dini di mode B [F] (§3, §6.2, §6.3, FR-2, FR-4, FR-12, Lampiran B);
   - catatan: baseline `fixed_turns` dan `coverage_only` (§14.2) kini hanya bermakna dengan `POINT_TIME_LIMIT_S=0`; stage/avatar/komentar di §4–§6.1, §9.2, §11 masih rujukan sejarah.
+- **v2.7 (8 Nov 2026):** keputusan desain UI bersama Claude Design [F] (§1.3.3; bahan di `docs/design/`):
+  - penyiar mode A tanpa klik: mic hands-free, giliran ketat (AI tidak disela), pindah topik lewat ucapan + undo, tombol N opsional (§3, §4, FR-2, FR-7);
+  - mode A tanpa pindah otomatis; waktu per topik dari `menit` materi; batas waktu per poin (R4) kini hanya untuk mode B; Showrunner mode A mengirim `nudge` satu kali per topik saat lewat ≥120 dtk (FR-2, FR-4);
+  - materi berdurasi: `durasi_menit` default 60, jumlah topik ≈ (durasi − 6) / 9, tiap topik punya `menit`; maks. 8 topik; batas "maksimal 3 topik" dicabut; istilah UI "materi"; pertanyaan penonton jadi elemen utama (§1.3, §3, FR-1, §6.4);
+  - FR-10 Stage dihidupkan lagi versi ringan (tanpa teks, satu-satunya pemutar audio, popup `hits-stage`); role `stage` kembali dipakai (§2.2, §6.3);
+  - konsol satu halaman, editor materi, cek kesiapan berbasis kuota (penghitung kuota harian per model), peringatan tiga tingkat, panduan pengguna; prompter tanpa pengaturan (FR-6, FR-11, §6.3, §6.4, §8);
+  - target uji mode A dan B 60 menit (§8, Tahap 9); §15.2 #2 dan #3 ditutup.
 
 ---
 
@@ -963,6 +1007,9 @@ STT_PROVIDER=webspeech|faster_whisper|gemini   FASTER_WHISPER_URL=
 SHOWRUNNER_POLICY=llm|fixed_turns|coverage_only
 SHOWRUNNER_EVERY_K=3   MIN_TURNS_PER_TOPIC=6   MAX_TURNS_PER_TOPIC=60   FIXED_TURNS_PER_TOPIC=
 SUPERVISOR_MODE=off|rules|full (default off)   SUPERVISOR_MAX_REGEN=1   SUPERVISOR_TIMEOUT_MS=5000
-PIPELINE_DEPTH=1
+PIPELINE_DEPTH=2
 POINT_TIME_LIMIT_S=60   POINT_WRAP_S=15   POINT_MIN_TURNS=3   TTS_WORDS_PER_SEC=2.0   # batas waktu obrolan per poin; 0 = mati
+GEMINI_RPD_DEFAULT=500   GEMINI_RPD_<PERAN>=   QUOTA_FILE=   AI_TURNS_PER_MIN_A=4   AI_TURNS_PER_MIN_B=7   TTS_CREDITS_PER_MIN=200   TTS_QUOTA_ALERT_MIN=5   # v2.7: cek kesiapan berbasis kuota
+POINT_LIMIT_FROM_TOPIC=true   MODE_A_NUDGE_AFTER_S=120   # v2.7: batas mode B dari menit topik; kode halus mode A
+VOICE_TOPIC_SWITCH=true   VOICE_SWITCH_UNDO_S=10   # v2.7: pindah topik dari ucapan penyiar (aturan, app/show/intent.py) + jendela batal
 ```

@@ -1,0 +1,45 @@
+/* Token desain Penyiar AI HITS (docs/design/DESIGN.md §2). Nilai jangan diubah. Light mode saja. */
+:root {
+  /* Merek (dari logo HITS) */
+  --brand-blue: #69C1D5;      /* isi tombol utama; teks di atasnya WAJIB --ink (9,05:1) */
+  --blue-700: #106C7D;        /* teks tautan/aksi kecil di atas putih (6,06:1) */
+  --blue-800: #00515F;        /* hover tautan (dari mockup) */
+  --blue-hover: #5AB4C9;      /* hover tombol utama (turunan --brand-blue) */
+  --orange-50: #FFEEDD;       /* latar pil oranye (turunan --orange-400) */
+  --blue-50: #E9FBFF;         /* latar "Tanya penonton", saran, info */
+  --blue-100: #DBF4FA;
+  --brand-yellow: #FEE980;    /* status "Giliranmu", sorotan */
+  --yellow-50: #FFF8D4;       /* peringatan kuning */
+  --yellow-ink: #7D590A;      /* teks status kuning di atas putih */
+  --orange-400: #FC9445;      /* badge LIVE */
+  --orange-500: #E27813;      /* cincin waktu "lewat waktu" */
+  --orange-ink: #934A00;
+  --gold-ring: #E5AE10;       /* cincin waktu "hampir habis" */
+  --ink: #111312;             /* teks utama, garis stiker */
+
+  /* Netral (sedikit hangat) */
+  --n-0: #FFFFFF;  --n-50: #F8F7F4;  --n-100: #F1F0ED;  --n-200: #E6E4E2;
+  --n-300: #D5D4D1; --n-400: #A6A4A2; --n-600: #646361;  /* teks sekunder minimal n-600 */
+  --n-700: #494745;
+
+  /* Status */
+  --success: #077836;  --success-bg: #E8FBEB;
+  --danger:  #A83630;  --danger-bg:  #FFF2F0;  --danger-band: #FFE3DF;
+
+  /* Bentuk */
+  --r-input: 10px;  --r-card: 16px;  --r-panel: 24px;  --r-pill: 999px;
+  --shadow-card: 0 1px 2px rgba(17,19,18,.04), 0 4px 16px rgba(17,19,18,.06);
+  --shadow-pop:  0 2px 4px rgba(17,19,18,.06), 0 16px 40px rgba(17,19,18,.14);
+  --shadow-sticker: 3px 3px 0 var(--ink);
+
+  /* Gerak */
+  --t-fast: 120ms; --t-base: 200ms; --t-state: 320ms; --ease: cubic-bezier(.2,.7,.2,1);
+
+  /* Tipografi */
+  --font: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
+
+  /* Latar konsol: grid titik halus */
+  --bg-console: radial-gradient(var(--n-200) 1.3px, transparent 1.6px) 0 0 / 24px 24px, var(--n-50);
+
+  color-scheme: light;
+}

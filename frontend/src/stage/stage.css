@@ -1,0 +1,51 @@
+/* Layar untuk OBS: hanya karakter (DESIGN.md §1, §4). Mengisi jendela popup apa pun ukurannya. */
+html, body { margin: 0; height: 100%; overflow: hidden; background: #FFFFFF; }
+#root { height: 100%; }
+
+.stage { width: 100vw; height: 100vh; display: flex; flex-direction: column; overflow: hidden; background: #FFFFFF; }
+.stage-panel { position: relative; flex: 1 1 0; min-height: 0; overflow: hidden; }
+.stage-panel__glow { position: absolute; inset: 0; background: radial-gradient(circle at 50% 60%, #FFFFFF 0 34%, rgba(255, 255, 255, 0) 68%); }
+.stage-panel__doodles { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* Ukuran karakter mengikuti tinggi panel (mockup: panel 480, lingkaran 330, karakter 360). */
+.stage-panel__disc {
+  position: absolute;
+  left: 50%;
+  bottom: 4%;
+  width: 69cqh;
+  height: 69cqh;
+  translate: -50% 0;
+  border-radius: 999px;
+  transition: transform 80ms linear;
+}
+.stage-avatar { position: absolute; left: 50%; bottom: 0; height: 75cqh; aspect-ratio: 1; translate: -50% 0; overflow: visible; }
+.stage-panel { container-type: size; }
+
+.stage-avatar__body { transform-box: view-box; transform-origin: 150px 300px; }
+.stage-avatar.is-idle .stage-avatar__body { animation: stage-breathe 3.6s ease-in-out infinite; }
+.stage-avatar.is-speaking .stage-avatar__body { animation: stage-bob 1.4s ease-in-out infinite; }
+.stage-avatar__eyes { transform-box: fill-box; transform-origin: center; animation: stage-blink 4.6s infinite; }
+.stage-avatar__mouth { transform-box: fill-box; transform-origin: center; transform: scaleY(.2); }
+
+@keyframes stage-breathe { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
+@keyframes stage-bob { 0%, 100% { transform: translateY(0) rotate(0deg); } 30% { transform: translateY(-5px) rotate(-1.5deg); } 65% { transform: translateY(-2px) rotate(1deg); } }
+@keyframes stage-blink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
+
+/* Hanya saat browser memblokir suara: tombol menutupi layar supaya satu klik di mana pun cukup. */
+.stage-unlock {
+  position: fixed;
+  inset: 0;
+  border: 0;
+  background: rgba(17, 19, 18, .55);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font: 700 20px/1.3 var(--font);
+  color: var(--ink);
+}
+.stage-unlock span { background: var(--brand-yellow); border: 2px solid var(--ink); border-radius: var(--r-input); padding: 12px 18px; box-shadow: var(--shadow-sticker); }
+.stage-unlock:focus-visible { outline: 3px solid var(--brand-blue); outline-offset: -6px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-avatar__body, .stage-avatar__eyes { animation: none !important; }
+}

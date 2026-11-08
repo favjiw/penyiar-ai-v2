@@ -1,361 +1,520 @@
-import { useEffect, useRef, useState } from 'react'
-import { api, ApiError, type VoiceCatalog } from '../api'
-import type { LiveSession } from '../live/useLiveSession'
+/**
+ * Konsol · Saat live (mockup KonsolLive + KonsolPeringatan, HANDOFF §1):
+ * header LIVE + kontrol, peringatan tiga tingkat, progres siaran per segmen, siapa bicara
+ * (bar level nyata), urutan materi + bahan obrolan + cincin waktu, saran pengarah acara,
+ * transkrip, dan status. Nama model/vendor dan log mentah hanya di "Detail teknis".
+ */
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { api, ApiError } from '../api'
 import { ttsLabel } from '../live/tts'
-import type { Blocker } from '../types'
-import { PointCountdown } from './PointCountdown'
-import { VoiceStage } from './VoiceStage'
+import type { AlertEvent, ShowrunnerDecision } from '../live/types'
+import type { LiveSession } from '../live/useLiveSession'
+import { useShowClock } from '../live/useShowClock'
+import { shout } from '../lib/materi'
+import { openStageWindow } from '../stage/openStageWindow'
+import { Alert, Button, fmtClock, IconCheck, IconInfo, IconMic, IconMicOff, IconMonitorOff, LevelBars, LiveBadge, Ring } from '../ui'
+import './live.css'
 
-const fmtElapsed = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
-const fmtClock = (ts?: number) => (ts ? new Date(ts * 1000).toLocaleTimeString('id-ID', { hour12: false }) : '')
+const ON_SCHEDULE_S = 60 // selisih ≤1 menit = "Sesuai jadwal"
+const OPENING_CLOSING_MIN = 3
 const isTyping = (el: Element | null) => !!el && ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)
+const fmtTime = (ts?: number) => (ts ? new Date(ts * 1000).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '')
 
-interface Props {
-  live: LiveSession
-  blockers: Blocker[]
-  onRefreshBlockers: () => void
+interface ShownAlert {
+  id: string
+  level: 'red' | 'yellow' | 'blue'
+  title: string
+  message: string
+  icon?: ReactNode
+  actions?: ReactNode
+  time?: string
 }
 
-/** Judul segmen untuk satu giliran: Opening, Closing, atau judul topik (id `t2` = topik kedua). */
-function segmentLabel(t: { segment: string; topic_id: string | null }, topics: string[]): string {
-  if (t.segment === 'opening') return 'Opening'
-  if (t.segment === 'closing') return 'Closing'
-  const i = t.topic_id ? Number(t.topic_id.replace(/\D/g, '')) - 1 : -1
-  return topics[i] ?? 'Topik'
+/** Level audio AI yang diputar di layar OBS (diteruskan server), dibaca per frame. */
+function useRelayedLevel(getLevel: () => number | null, active: boolean) {
+  const [level, setLevel] = useState(0)
+  useEffect(() => {
+    if (!active) {
+      setLevel(0)
+      return
+    }
+    let raf = 0
+    let last = -1
+    const tick = () => {
+      const lv = Math.round((getLevel() ?? 0) * 20) / 20
+      if (lv !== last) setLevel((last = lv))
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [getLevel, active])
+  return level
 }
 
-/** Kontrol dan pemantauan siaran (FR-11): orb giliran bicara, transkrip, dan panel agen. */
-export function LivePanel({ live, blockers, onRefreshBlockers }: Props) {
-  const { snapshot: snap, transcript, showrunner, supervisor, output, pointClock } = live
-  const [blockerId, setBlockerId] = useState('')
-  const [mode, setMode] = useState<'A' | 'B'>('B')
-  const [aiPersona, setAiPersona] = useState('salsa')
-  const [humanName, setHumanName] = useState('')
+/** Saran pengarah acara dalam kalimat operator (bukan istilah teknis). */
+function adviceText(d: ShowrunnerDecision | undefined, totalPoints: number): string {
+  if (!d) return ''
+  const covered = `${d.points_covered.length}/${totalPoints || '?'} bahan obrolan sudah dibahas`
+  if (d.advisory) {
+    const parts = [covered]
+    if (d.steer_hint) parts.push(`coba bahas: ${d.steer_hint}`)
+    if (d.decision === 'transition' || d.aksi === 'pindah_topik') parts.push('siap pindah topik')
+    if (d.decision === 'close' || d.aksi === 'tutup') parts.push('siap ke penutup')
+    return parts.join(' · ')
+  }
+  if (d.decision === 'transition') return `${covered}. AI akan pindah ke topik berikutnya.`
+  if (d.decision === 'close') return `${covered}. AI akan masuk ke penutup.`
+  if (d.decision === 'steer' && d.steer_hint) return `${covered}. AI diarahkan ke: ${d.steer_hint}`
+  return `${covered}. Obrolan lanjut.`
+}
+
+export function LivePanel({ live }: { live: LiveSession }) {
+  const { snapshot: snap, transcript, showrunner, supervisor, output, showClock, alerts, lastNudge, lastTopicChange } = live
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
-  const [precheck, setPrecheck] = useState<string>('')
-  const [catalog, setCatalog] = useState<VoiceCatalog | null>(null)
-  const [voiceChoice, setVoiceChoice] = useState<Record<string, string>>({})
-  const [elapsed, setElapsed] = useState(0)
+  const [confirmStop, setConfirmStop] = useState(false)
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set())
   const transcriptEnd = useRef<HTMLDivElement>(null)
-  const onAir = snap.state === 'live' || snap.state === 'paused'
+  const clock = useShowClock(showClock)
+  const paused = snap.state === 'paused'
+  const isModeA = snap.mode === 'A'
 
-  useEffect(() => {
-    if (!blockerId && blockers.length) setBlockerId(blockers[0].id)
-  }, [blockers, blockerId])
-
-  // Daftar suara terkurasi; pilihan awal = suara aktif sekarang (id sebelum tanda '|' untuk Edge)
-  useEffect(() => {
-    api
-      .voices()
-      .then((c) => {
-        setCatalog(c)
-        const pick: Record<string, string> = {}
-        for (const [persona, cur] of Object.entries(c.current)) {
-          const id = cur.split('|')[0]
-          if (c.voices.some((v) => v.id === id && v.provider === c.provider)) pick[persona] = id
-        }
-        setVoiceChoice(pick)
-      })
-      .catch(() => setCatalog(null))
-  }, [])
-
-  // Jam siaran: snapshot server + detak lokal
-  useEffect(() => {
-    setElapsed(snap.elapsed_s ?? 0)
-    if (snap.state !== 'live') return
-    const started = Date.now() - (snap.elapsed_s ?? 0) * 1000
-    const t = window.setInterval(() => setElapsed((Date.now() - started) / 1000), 500)
-    return () => window.clearInterval(t)
-  }, [snap.state, snap.elapsed_s])
+  const personas = snap.personas ?? []
+  const speakingAi = personas.find((p) => p.id === live.speaking)
+  const aiLevel = useRelayedLevel(live.level, !!speakingAi)
 
   useEffect(() => {
     // Tanpa return: scrollIntoView di Chromium baru mengembalikan Promise, dan React mengira itu cleanup.
     transcriptEnd.current?.scrollIntoView({ block: 'nearest' })
   }, [transcript.length])
 
-  const act = async (fn: () => Promise<unknown>, ok?: string) => {
+  const act = async (fn: () => Promise<unknown>) => {
     setBusy(true)
     setMessage('')
     try {
       await fn()
-      if (ok) setMessage(ok)
     } catch (e) {
       setMessage(e instanceof ApiError ? e.message : String(e))
     } finally {
       setBusy(false)
     }
   }
-
-  const runPrecheck = () =>
-    act(async () => {
-      setPrecheck('Memeriksa… (memanaskan suara TTS)')
-      const r = await api.precheck(chosenVoices)
-      const warm = r.tts_warmup_ms ? Object.values(r.tts_warmup_ms).map((ms) => `${(ms / 1000).toFixed(1)} s`).join(', ') : ''
-      setPrecheck(
-        [
-          r.models_ok ? 'Model LLM ✓' : 'Model LLM belum diisi di .env ✗',
-          r.tts_ok ? `TTS ✓ (pemanasan ${warm})` : `TTS ✗ ${r.tts_error ?? ''}`,
-        ].join(' · '),
-      )
-    })
-
-  const aiIds = mode === 'A' ? [aiPersona] : ['raka', 'salsa']
-  const chosenVoices = Object.fromEntries(aiIds.filter((id) => voiceChoice[id]).map((id) => [id, voiceChoice[id]]))
-  const effectiveVoice = (id: string) => voiceChoice[id] || catalog?.current[id]?.split('|')[0] || ''
-  const sameVoice = mode === 'B' && !!effectiveVoice('raka') && effectiveVoice('raka') === effectiveVoice('salsa')
-
   const control = (a: 'pause' | 'resume' | 'next' | 'stop') => act(() => api.control(a))
-  const stop = () => window.confirm('Hentikan siaran sekarang?') && control('stop')
+  const openStage = () => openStageWindow(isModeA ? 'A' : 'B', snap.ai_persona)
 
-  // Pintasan keyboard (FR-11): P pause/lanjut, N next topik, S stop
+  // Pintasan (FR-11): P jeda/lanjut, N topik selanjutnya, S akhiri (dengan konfirmasi di halaman), Esc batal.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!onAir || isTyping(document.activeElement) || e.ctrlKey || e.metaKey || e.altKey) return
+      if (isTyping(document.activeElement) || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return
       const k = e.key.toLowerCase()
-      if (k === 'p') void control(snap.state === 'paused' ? 'resume' : 'pause')
-      else if (k === 'n') void control('next')
-      else if (k === 's') void stop()
+      if (k === 'escape') return setConfirmStop(false)
+      if (confirmStop || busy) return // konfirmasi akhiri sedang terbuka: pintasan lain ditahan
+      if (k === 'p') void control(paused ? 'resume' : 'pause')
+      else if (k === 'n' && snap.segment !== 'closing') void control('next')
+      else if (k === 's') setConfirmStop(true)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  const latestSr = showrunner[showrunner.length - 1]
-  const topics = snap.blocker?.topics ?? []
+  // ── Materi dan segmen ───────────────────────────────────────────────────
+  const rundown = snap.rundown
+  const topics = rundown?.topics ?? []
+  const ti = snap.segment === 'topic' ? topics.findIndex((t) => t.id === snap.topic?.id) : -1
+  // Topik yang tidak ditemukan (data belum sinkron) dianggap belum masuk topik mana pun.
+  const segIdx = snap.segment === 'opening' || ti < 0 ? (snap.segment === 'closing' ? topics.length + 1 : 0) : ti + 1
+  const segPlan = [OPENING_CLOSING_MIN, ...topics.map((t) => t.menit ?? 9), OPENING_CLOSING_MIN]
+  const plannedStart = segPlan.slice(0, segIdx).reduce((a, b) => a + b, 0) * 60
+  // Selisih jadwal: segmen ini mulai lebih lambat/cepat dari rencana, ditambah lewat waktu segmen ini.
+  const drift = clock ? clock.elapsed - clock.segElapsed - plannedStart + Math.max(0, clock.segElapsed - clock.segTarget) : 0
+  const onSchedule = Math.abs(drift) <= ON_SCHEDULE_S
+  const schedule = onSchedule ? 'Sesuai jadwal' : drift > 0 ? `Lebih lambat ±${Math.round(drift / 60)} mnt` : `Lebih cepat ±${Math.round(-drift / 60)} mnt`
+  const segLabel = snap.segment === 'topic' && ti >= 0 ? `Topik ${ti + 1} dari ${topics.length}` : snap.segment === 'closing' ? 'Closing' : 'Opening'
+  const topic = ti >= 0 ? topics[ti] : null
+  const points = snap.topic_points ?? []
+  // Poin aktif dari server; hanya bila server tidak menandai, pakai poin pertama yang belum dibahas.
+  // Tepat setelah pindah topik, poin dari server belum tiba: tampilkan poin materi, mulai dari yang pertama.
+  const pointList = points.length ? points : (topic?.poin ?? []).map((p) => ({ ...p, covered: false, current: undefined as boolean | undefined }))
+  const flagged = pointList.findIndex((p) => p.current)
+  const currentIdx = topic ? (flagged >= 0 ? flagged : pointList.findIndex((p) => !p.covered)) : -1
+  const advice = topic ? adviceText([...showrunner].reverse().find((d) => d.topic_id === topic.id), topic.poin.length) : ''
+  const avgTopicMin = Math.round(segPlan.slice(1, -1).reduce((a, b) => a + b, 0) / Math.max(1, topics.length))
+
+  // ── Peringatan ──────────────────────────────────────────────────────────
+  // Sebelum status keluaran pertama tiba, jangan menuduh layar/prompter tertutup.
+  const known = output !== null
+  const stageOpen = !known || (output?.clients?.stage ?? 0) > 0
+  const prompterOpen = !known || (output?.clients?.prompter ?? 0) > 0
+  const micDown = isModeA && !!output?.mic?.down
+  const derived: ShownAlert[] = []
+  if (micDown)
+    derived.push({
+      id: 'mic',
+      level: 'red',
+      icon: <IconMicOff />,
+      title: 'Mikrofon studio tidak terdengar',
+      message:
+        output?.mic?.reason === 'denied' || output?.mic?.reason === 'not-allowed'
+          ? 'Browser prompter belum diberi izin mikrofon. Penyiar belum bisa ngobrol dengan AI.'
+          : 'Tidak ada suara dari mixer. Penyiar belum bisa ngobrol dengan AI.',
+      actions: !paused && (
+        <Button variant="ink" onClick={() => void control('pause')}>
+          Jeda siaran
+        </Button>
+      ),
+    })
+  if (!stageOpen)
+    derived.push({
+      id: 'stage',
+      level: 'red',
+      icon: <IconMonitorOff />,
+      title: 'Layar untuk OBS tertutup',
+      message: 'Penonton tidak mendengar suara AI. Buka lagi lalu pastikan OBS menangkap jendela yang sama.',
+      actions: (
+        <Button variant="ink" onClick={openStage}>
+          Buka lagi layar OBS
+        </Button>
+      ),
+    })
+  else if (known && !output?.audio_ready)
+    derived.push({
+      id: 'stage-audio',
+      level: 'red',
+      title: 'Suara AI tertahan di layar OBS',
+      message: 'Browser butuh satu klik di jendela layar OBS supaya suara AI bisa diputar.',
+      actions: (
+        <Button variant="ink" onClick={openStage}>
+          Tampilkan jendelanya
+        </Button>
+      ),
+    })
+  if (isModeA && !prompterOpen)
+    derived.push({
+      id: 'prompter',
+      level: 'red',
+      title: 'Prompter tertutup',
+      message: 'Penyiar tidak melihat materi, dan suara penyiar tidak didengar AI.',
+      actions: (
+        <Button variant="ink" onClick={() => window.open('/prompter', 'hits-prompter')}>
+          Buka prompter
+        </Button>
+      ),
+    })
+  const sw = lastTopicChange?.topic
+  if (sw?.reason === 'voice' && performance.now() - (lastTopicChange?.at ?? 0) < (sw.undo_s ?? 0) * 1000)
+    derived.push({
+      id: `voice-${lastTopicChange?.at}`,
+      level: 'blue',
+      title: `Pindah ke ${segLabel.replace(/ dari \d+$/, '')} dari ucapan penyiar`,
+      message: `“${sw.said ?? ''}”. Salah dengar? Batalkan dalam ${sw.undo_s} detik.`,
+      actions: (
+        <Button variant="ink" onClick={() => void act(() => api.undoTopic())}>
+          Batalkan, kembali ke {sw.from}
+        </Button>
+      ),
+    })
+  const fromServer: ShownAlert[] = alerts
+    .filter((a: AlertEvent) => !dismissed.has(a.id))
+    .reverse()
+    .map((a) => ({ id: a.id, level: a.level, title: a.title, message: a.message, time: fmtTime(a.at) }))
+  const order = { red: 0, yellow: 1, blue: 2 }
+  // Merah dulu (tetap sampai beres), lalu kuning, lalu biru; di dalam tingkat yang sama terbaru di atas.
+  const shown = [...derived, ...fromServer].sort((a, b) => order[a.level] - order[b.level])
+  const hasRed = shown.some((a) => a.level === 'red') || !!snap.error
+
+  useEffect(() => {
+    document.title = `${hasRed ? '(!) ' : ''}${paused ? 'JEDA' : 'LIVE'} · Penyiar AI HITS`
+  }, [hasRed, paused])
+
+  // Simpan hanya id yang masih ada di daftar peringatan (daftar dibatasi 20 item di useLiveSession).
+  const dismiss = (id: string) => setDismissed((s) => new Set([...s, id].filter((x) => alerts.some((a) => a.id === x))))
+
+  // ── Siapa bicara ────────────────────────────────────────────────────────
+  const thinkingId = snap.thinking ?? (snap.busy && !speakingAi ? snap.ai_persona : null)
+  const humanTalking = live.micActive && !!live.sttPartial
+  const people = (snap.participants ?? personas.map((p) => ({ ...p, kind: 'ai' as const }))).map((p) => {
+    if (p.kind === 'human') {
+      const status = micDown ? 'Mic tidak terdengar' : humanTalking ? 'Sedang bicara' : speakingAi || thinkingId ? 'Menunggu giliran' : 'Giliran bicara'
+      const pill = micDown ? 'Tidak terdengar' : live.micActive ? 'Mic aktif' : 'Mic dijeda'
+      return { ...p, status, pill, on: humanTalking }
+    }
+    const status = speakingAi?.id === p.id ? 'Sedang bicara' : thinkingId === p.id ? 'Menyiapkan jawaban' : 'Mendengarkan'
+    return { ...p, status, pill: '', on: speakingAi?.id === p.id }
+  })
+
+  // ── Status ──────────────────────────────────────────────────────────────
+  const tts = snap.tts
+  const backupVoice = !!tts?.last_provider && tts.last_provider !== tts.primary && tts.last_provider !== 'mock'
+  type Row = { label: string; value: string; tone: 'ok' | 'bad' | 'info' }
+  const statusRows: Row[] = []
+  if (isModeA) statusRows.push({ label: 'Mikrofon studio', value: micDown ? 'Tidak terdengar' : live.micActive ? 'Mendengarkan penyiar' : 'Dijeda saat AI bicara', tone: micDown ? 'bad' : 'ok' })
+  statusRows.push({ label: 'Layar untuk OBS', value: !stageOpen ? 'Tertutup' : output?.audio_ready ? 'Tersambung' : 'Belum bersuara', tone: stageOpen && output?.audio_ready ? 'ok' : 'bad' })
+  if (isModeA) statusRows.push({ label: 'Prompter', value: prompterOpen ? 'Tersambung' : 'Tertutup', tone: prompterOpen ? 'ok' : 'bad' })
+  statusRows.push({ label: 'Suara AI', value: backupVoice ? 'Cadangan aktif' : 'Normal', tone: backupVoice ? 'info' : 'ok' })
+  if (snap.tts_minutes_left != null)
+    statusRows.push({ label: 'Kuota suara', value: `±${snap.tts_minutes_left} menit lagi, lalu cadangan`, tone: snap.tts_quota_low ? 'bad' : 'ok' })
+
+  const hostName = snap.human?.name
+  const who = isModeA ? `${hostName ?? 'Penyiar'} + ${personas[0]?.name ?? 'AI'}` : personas.map((p) => p.name).join(' + ')
 
   return (
-    <div className="live">
-      <section className="panel live-bar">
-        <span className={`pill state-${snap.state}`}>{snap.state === 'live' ? '● LIVE' : snap.state === 'paused' ? 'PAUSE' : snap.state === 'ended' ? 'SELESAI' : 'SIAP'}</span>
-        {onAir ? (
-          <>
-            <strong>
-              {snap.blocker?.tema} · {snap.blocker?.variant_label}
-            </strong>
-            <span className="angle">
-              {fmtElapsed(elapsed)} · giliran {snap.turn}
-              {` · mode ${snap.mode}`}
-              {snap.mode !== 'B' && ` dengan ${snap.human?.name} · filler ${snap.fillers_ready ?? 0}`}
+    <div className="lv">
+      <header className="lv-top">
+        <div className="lv-top__inner">
+          <img src="/logo-hits.png" alt="HITS Unikom Radio 103.9 FM" className="lv-top__logo" />
+          <LiveBadge paused={paused} />
+          <span className="lv-top__title">
+            <span className="lv-top__name">{snap.blocker?.variant_label}</span>
+            <span className="lv-top__sub">
+              {who} · {segLabel}
             </span>
-            <PointCountdown pointClock={pointClock} />
-            <span className="spacer" />
-            <button onClick={() => control(snap.state === 'paused' ? 'resume' : 'pause')} disabled={busy}>
-              {snap.state === 'paused' ? 'Lanjut' : 'Pause'} <kbd>P</kbd>
-            </button>
-            <button onClick={() => control('next')} disabled={busy} title="Lompat ke topik berikutnya atau penutup">
-              Next topik <kbd>N</kbd>
-            </button>
-            <button className="danger" onClick={() => void stop()} disabled={busy}>
-              Stop <kbd>S</kbd>
-            </button>
-          </>
-        ) : (
-          <>
-            <select value={blockerId} onChange={(e) => setBlockerId(e.target.value)} onFocus={onRefreshBlockers} aria-label="Blocking">
-              {blockers.length === 0 && <option value="">Belum ada blocking; buat di tab Blocker</option>}
-              {blockers.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.tema} · {b.variant_label} · v{b.versi}
-                  {b.locked ? ' · terkunci' : ' · draf'}
-                </option>
-              ))}
-            </select>
-            <button onClick={() => void runPrecheck()} disabled={busy}>
-              Cek pra-live
-            </button>
-            <select value={mode} onChange={(e) => setMode(e.target.value as 'A' | 'B')} aria-label="Mode">
-              <option value="B">Mode B: Raka + Salsa (AI + AI)</option>
-              <option value="A">Mode A: penyiar + 1 AI</option>
-            </select>
-            {mode !== 'B' && (
-              <>
-                <select value={aiPersona} onChange={(e) => setAiPersona(e.target.value)} aria-label="Lawan bicara AI">
-                  <option value="salsa">AI: Salsa</option>
-                  <option value="raka">AI: Raka</option>
-                </select>
-                <input
-                  type="text"
-                  className="host-name"
-                  value={humanName}
-                  maxLength={40}
-                  placeholder="Nama penyiar"
-                  onChange={(e) => setHumanName(e.target.value)}
-                />
-              </>
-            )}
-            {catalog &&
-              aiIds.map((id) => (
-                <select
-                  key={id}
-                  value={voiceChoice[id] ?? ''}
-                  onChange={(e) => setVoiceChoice({ ...voiceChoice, [id]: e.target.value })}
-                  aria-label={`Suara ${id}`}
-                  title={catalog.voices.find((v) => v.id === voiceChoice[id])?.notes}
-                >
-                  <option value="">Suara {id === 'raka' ? 'Raka' : 'Salsa'}: bawaan</option>
-                  {catalog.voices
-                    .filter((v) => v.provider === catalog.provider)
-                    .map((v) => (
-                      <option key={v.id} value={v.id}>
-                        Suara {id === 'raka' ? 'Raka' : 'Salsa'}: {v.name} ({v.gender === 'male' ? 'pria' : 'wanita'})
-                      </option>
-                    ))}
-                </select>
-              ))}
-            {sameVoice && <span className="error" role="alert">Raka dan Salsa memakai suara yang sama</span>}
-            <button
-              className="primary"
-              onClick={() => {
-                const b = blockers.find((x) => x.id === blockerId)
-                const toCheck = b ? b.topics.flatMap((t) => t.poin).filter((p) => p.perlu_cek).length : 0
-                if (toCheck && !window.confirm(`Ada ${toCheck} poin bertanda "perlu cek". Blocking akan dikunci dan dipakai live. Lanjutkan?`)) return
-                void act(() =>
-                  mode === 'A'
-                    ? api.startShow(blockerId, 'A', { ai_persona: aiPersona, human_name: humanName, voices: chosenVoices })
-                    : api.startShow(blockerId, 'B', { voices: chosenVoices }),
-                )
-              }}
-              disabled={busy || !blockerId || (mode !== 'B' && !humanName.trim())}
-            >
-              Mulai
-            </button>
-          </>
-        )}
-        {(onAir ? snap.mode !== 'B' : mode !== 'B') && (
-          <a className="button-link" href="/prompter" target="hits-prompter" title="Prompter untuk penyiar (tablet atau monitor kedua)">
-            {output?.clients?.prompter ? 'Prompter ✓' : 'Buka Prompter'}
-          </a>
-        )}
-      </section>
-
-      {precheck && !onAir && <div className="status">{precheck}</div>}
-      {message && <div className="error">{message}</div>}
-      {snap.error && <div className="error">Siaran berhenti karena galat: {snap.error}</div>}
-      {live.alerts.length > 0 && (
-        <div className="error" role="status">
-          ⚠ {live.alerts[live.alerts.length - 1].message}
-          {live.alerts.length > 1 && <span className="angle"> (+{live.alerts.length - 1} peringatan sebelumnya)</span>}
-        </div>
-      )}
-      {live.audioBlocked && (
-        <div className="error" role="alert">
-          Browser memblokir audio otomatis.{' '}
-          <button className="small" onClick={live.unlockAudio}>
-            Aktifkan audio
-          </button>
-        </div>
-      )}
-      {!live.connected && <div className="error">Tersambung ulang ke server…</div>}
-
-      <VoiceStage live={live} previewMode={mode} previewAi={aiPersona} previewHuman={humanName} />
-
-      <div className="live-grid">
-        <section className="panel transcript">
-          <h2>Transkrip</h2>
-          {transcript.length === 0 && <p className="empty">Belum ada giliran.</p>}
-          {transcript.map((t) => (
-            <div key={t.turn} className={`line ${live.speaking === t.persona && t === transcript[transcript.length - 1] ? 'now' : ''}`}>
-              <span className="meta">
-                {fmtClock(t.ts)} · {segmentLabel(t, topics)}
+          </span>
+          <span className="lv-top__spacer" />
+          {!live.connected && <span className="lv-top__offline">Menyambung ulang ke server…</span>}
+          <div className="lv-top__actions">
+            <Button onClick={() => void control(paused ? 'resume' : 'pause')} disabled={busy} title="Pintasan: P">
+              {paused ? 'Lanjutkan' : 'Jeda'}
+            </Button>
+            <Button onClick={() => void control('next')} disabled={busy || snap.segment === 'closing'} title="Pintasan: N">
+              Topik selanjutnya
+            </Button>
+            <span className="lv-top__sep" aria-hidden="true" />
+            {confirmStop ? (
+              <span className="lv-stop" role="alertdialog" aria-label="Konfirmasi akhiri siaran">
+                <span>Akhiri siaran sekarang?</span>
+                <Button variant="danger" onClick={() => void control('stop').then(() => setConfirmStop(false))} disabled={busy} autoFocus>
+                  Ya, akhiri
+                </Button>
+                <Button onClick={() => setConfirmStop(false)}>Batal</Button>
               </span>
-              <span className={`who ${t.persona}`}>{t.name}</span> {t.text}
-              {t.supervisor !== 'forward' && <span className="badge">{t.supervisor}</span>}
-              {t.tts_provider && snap.tts && t.tts_provider !== snap.tts.primary && t.tts_provider !== 'mock' && <span className="badge">TTS {t.tts_provider}</span>}
-            </div>
-          ))}
-          {live.sttPartial && (
-            <div className="line partial">
-              <span className="who human">{snap.human?.name ?? 'Penyiar'}</span> {live.sttPartial}…
-            </div>
+            ) : (
+              <Button variant="danger" onClick={() => setConfirmStop(true)} title="Pintasan: S">
+                Akhiri siaran
+              </Button>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <main className="lv-main">
+        <div className="lv-col">
+          {(shown.length > 0 || message || snap.error) && (
+            <section className="ui-alert-stack" aria-label="Peringatan" aria-live="assertive">
+              {snap.error && <Alert level="red" title="Siaran berhenti karena gangguan" message="Lihat Detail teknis untuk penyebabnya." />}
+              {message && <Alert level="yellow" title="Perintah tidak berhasil" message={message} onDismiss={() => setMessage('')} />}
+              {shown.map((a) => (
+                <Alert
+                  key={a.id}
+                  level={a.level}
+                  title={a.title}
+                  message={a.message}
+                  icon={a.icon}
+                  actions={a.actions}
+                  time={a.time}
+                  onDismiss={a.level === 'red' ? undefined : () => dismiss(a.id)}
+                />
+              ))}
+            </section>
           )}
-          <div ref={transcriptEnd} />
-        </section>
 
-        <div className="side-stack">
-          <section className="panel">
-            <h2>On air</h2>
-            <div className="onair-seg">
-              {snap.segment === 'topic' ? snap.topic?.judul : snap.segment === 'closing' ? 'Closing' : snap.segment === 'opening' ? 'Opening' : '–'}
+          <section className="lv-card lv-progress" aria-label="Progres siaran">
+            <div className="lv-progress__head">
+              <span className="lv-progress__time">{fmtClock(clock?.elapsed ?? 0)}</span>
+              <span className="lv-progress__of">dari {fmtClock(clock?.target ?? 0)} menit siaran</span>
+              <span className={`lv-progress__pill${onSchedule || paused ? ' is-ok' : ''}`}>{paused ? 'Dijeda' : schedule}</span>
             </div>
-            {snap.topic?.pertanyaan_penonton && <div className="angle">❓ {snap.topic.pertanyaan_penonton}</div>}
-            <ul className="coverage">
-              {topics.map((judul, i) => {
-                const c = snap.coverage?.[`t${i + 1}`]
-                return (
-                  <li key={judul}>
-                    <span>{judul}</span>
-                    <meter min={0} max={c?.total ?? 1} value={c?.covered.length ?? 0} />
-                    <span className="angle">
-                      {c?.covered.length ?? 0}/{c?.total ?? '?'}
-                    </span>
-                  </li>
-                )
-              })}
-            </ul>
-          </section>
-
-          <section className="panel">
-            <h2>Showrunner</h2>
-            {latestSr ? (
-              <>
-                <div>
-                  <strong>{latestSr.aksi ?? latestSr.decision}</strong> ({latestSr.decision}) · jenuh {latestSr.saturation.toFixed(2)} · {latestSr.policy}
-                  {latestSr.forced && <span className="badge">forced</span>}
-                </div>
-                {latestSr.steer_hint && <div className="angle">→ {latestSr.steer_hint}</div>}
-                <div className="angle">{latestSr.reason}</div>
-                <ol className="log" reversed>
-                  {showrunner
-                    .slice(-6, -1)
-                    .reverse()
-                    .map((d) => (
-                      <li key={`${d.turn}-${d.topic_id}`}>
-                        g{d.turn} {d.topic_id}: {d.decision}
-                      </li>
-                    ))}
-                </ol>
-              </>
-            ) : (
-              <p className="empty">Belum ada keputusan.</p>
-            )}
-          </section>
-
-          <section className="panel">
-            <h2>Supervisor</h2>
-            {supervisor.length === 0 ? (
-              <p className="empty">Semua ucapan lolos.</p>
-            ) : (
-              <ol className="log" reversed>
-                {supervisor
-                  .slice(-8)
-                  .reverse()
-                  .map((v) => (
-                    <li key={v.turn}>
-                      g{v.turn} {v.persona}: <strong>{v.action}</strong>
-                      {v.rule_hits.length > 0 && <span className="angle"> [{v.rule_hits.join(', ')}]</span>}
-                      {v.evidence && <div className="angle">{v.evidence}</div>}
-                    </li>
-                  ))}
-              </ol>
-            )}
-          </section>
-
-          <section className="panel">
-            <h2>Output</h2>
-            <div className="angle">
-              Audio: {output?.audio_owner_role ?? 'belum ada pemutar'} · klien {Object.entries(output?.clients ?? {}).map(([r, n]) => `${r} ${n}`).join(', ')}
+            <div className="lv-bar" role="img" aria-label={`${segLabel} berjalan; ${segIdx} dari ${segPlan.length} bagian selesai`}>
+              {segPlan.map((m, i) => (
+                <span key={i} className={`lv-bar__seg${i < segIdx ? ' is-done' : i === segIdx ? ' is-now' : ''}`} style={{ flexGrow: m }}>
+                  {i === segIdx && clock && <span className="lv-bar__fill" style={{ width: `${Math.min(100, (clock.segElapsed / Math.max(1, clock.segTarget)) * 100)}%` }} />}
+                </span>
+              ))}
             </div>
-            {snap.tts && (
-              <div className="angle">
-                {ttsLabel(snap.tts)}
-                {snap.tts.fallback_uses ? ` · cadangan dipakai ${snap.tts.fallback_uses}×` : ''}
-                {snap.tts.credits_used > 0 ? ` · kredit ${snap.tts.credits_used}` : ''}
+            <span className="lv-progress__legend">
+              Opening {OPENING_CLOSING_MIN} mnt · {topics.length} topik × ±{avgTopicMin} mnt · Closing {OPENING_CLOSING_MIN} mnt
+            </span>
+          </section>
+
+          <section className="lv-people" aria-label="Siapa bicara">
+            {people.map((p) => (
+              <div key={p.id} className={`lv-person${p.on ? ' is-on' : ''}`}>
+                <span className={`lv-person__avatar lv-person__avatar--${p.kind === 'human' ? 'human' : p.id}`} aria-hidden="true">
+                  {p.kind === 'human' && (micDown ? <IconMicOff size={22} /> : <IconMic size={22} />)}
+                </span>
+                <span className="lv-person__text">
+                  <span className="lv-person__name">{p.name}</span>
+                  <span className="lv-person__status">{p.status}</span>
+                </span>
+                {p.kind === 'human' ? <span className={`lv-person__pill${micDown ? ' is-bad' : ''}`}>{p.pill}</span> : <LevelBars level={p.on ? aiLevel : 0} />}
+              </div>
+            ))}
+          </section>
+
+          <section className="lv-card">
+            <ol className="lv-order" aria-label="Urutan materi">
+              {['Opening', ...topics.map((_, i) => `Topik ${i + 1}`), 'Closing'].map((label, i) => (
+                <li key={label} className={i < segIdx ? 'is-done' : i === segIdx ? 'is-now' : ''} aria-current={i === segIdx ? 'step' : undefined}>
+                  {i < segIdx && <IconCheck size={16} />}
+                  {label}
+                </li>
+              ))}
+            </ol>
+            <div className="lv-topic">
+              <div className="lv-topic__main">
+                <h2>{topic?.judul ?? segLabel}</h2>
+                {topic ? (
+                  <>
+                    <p className="lv-topic__ask">
+                      <span>Tanya penonton</span>
+                      {shout(topic.pertanyaan_penonton)}
+                    </p>
+                    <ul className="lv-points">
+                      {pointList.map((p, i) => {
+                        const st = p.covered && i !== currentIdx ? 'done' : i === currentIdx ? 'now' : 'todo'
+                        return (
+                          <li key={i} className={`lv-point lv-point--${st}`}>
+                            {st === 'done' ? (
+                              <span className="lv-point__mark" role="img" aria-label="Sudah dibahas">
+                                <IconCheck size={20} />
+                              </span>
+                            ) : (
+                              <span className="lv-point__mark lv-point__dot" role="img" aria-label={st === 'now' ? 'Sedang dibahas' : 'Belum dibahas'} />
+                            )}
+                            <span>{p.text}</span>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </>
+                ) : (
+                  <p className="lv-topic__ask">
+                    <span>{snap.segment === 'closing' ? 'Ajakan' : 'Kalimat pembuka'}</span>
+                    {shout((snap.segment === 'closing' ? rundown?.closing.ajakan : rundown?.opening.hook) ?? '')}
+                  </p>
+                )}
+              </div>
+              {clock && clock.segTarget > 0 && (
+                <Ring remainingS={clock.remaining} limitS={clock.segTarget} size={160} label={paused ? 'dijeda' : clock.remaining > 30 ? 'tersisa' : undefined} />
+              )}
+            </div>
+            {topic && lastNudge?.topic_id === topic.id && (
+              <div className="lv-advice">
+                <IconInfo size={22} />
+                <span>
+                  <strong>Kode halus terkirim:</strong> topik lewat ±{Math.round(lastNudge.overrun_s / 60)} mnt, AI menawarkan pindah ke “{lastNudge.to}”. Penyiar yang memutuskan.
+                </span>
+              </div>
+            )}
+            {advice && (
+              <div className="lv-advice">
+                <IconInfo size={22} />
+                <span>
+                  <strong>Saran pengarah acara:</strong> {advice}
+                </span>
               </div>
             )}
           </section>
+
+          <section className="lv-card lv-transcript">
+            <h2>Transkrip</h2>
+            <div className="lv-transcript__list">
+              {transcript.length === 0 && <p className="lv-empty">Belum ada obrolan.</p>}
+              {transcript.map((t) => (
+                <p key={t.turn} className="lv-line">
+                  <span className={`lv-line__who lv-line__who--${t.persona === 'human' ? 'human' : t.persona}`}>{t.name}</span>
+                  <span>{t.text}</span>
+                </p>
+              ))}
+              {live.sttPartial && (
+                <p className="lv-line is-partial">
+                  <span className="lv-line__who lv-line__who--human">{hostName ?? 'Penyiar'}</span>
+                  <span>{live.sttPartial}…</span>
+                </p>
+              )}
+              <div ref={transcriptEnd} />
+            </div>
+          </section>
         </div>
-      </div>
+
+        <aside className="lv-side">
+          <h2>Status</h2>
+          <ul className="lv-status">
+            {statusRows.map((r) => (
+              <li key={r.label} className={`lv-status__row is-${r.tone}`}>
+                <span className="lv-status__dot" aria-hidden="true" />
+                <span className="lv-status__label">{r.label}</span>
+                <span className="lv-status__value">{r.value}</span>
+              </li>
+            ))}
+          </ul>
+          <details className="lv-tech">
+            <summary>Detail teknis</summary>
+            <div className="lv-tech__body">
+              <p>
+                Mode {snap.mode} · giliran {snap.turn}
+                {isModeA && ` · filler siap ${snap.fillers_ready ?? 0}`}
+              </p>
+              {tts && (
+                <p>
+                  {ttsLabel(tts)}
+                  {tts.fallback_uses ? ` · cadangan dipakai ${tts.fallback_uses}×` : ''}
+                  {tts.credits_used > 0 ? ` · kredit ${tts.credits_used}` : ''}
+                </p>
+              )}
+              <p>Klien: {Object.entries(output?.clients ?? {}).map(([r, n]) => `${r} ${n}`).join(', ')}</p>
+              {snap.error && <p className="lv-tech__err">Galat: {snap.error}</p>}
+              <h3>Showrunner</h3>
+              {showrunner.length === 0 ? (
+                <p>Belum ada keputusan.</p>
+              ) : (
+                <ol reversed>
+                  {showrunner
+                    .slice(-6)
+                    .reverse()
+                    .map((d) => (
+                      <li key={`${d.turn}-${d.topic_id}-${d.decision}`}>
+                        g{d.turn} {d.topic_id}: {d.decision} · jenuh {d.saturation.toFixed(2)} · {d.policy}
+                        {d.forced && ' · forced'} · {d.latency_ms} ms · {d.reason}
+                      </li>
+                    ))}
+                </ol>
+              )}
+              <h3>Supervisor</h3>
+              {supervisor.length === 0 ? (
+                <p>Semua ucapan lolos.</p>
+              ) : (
+                <ol reversed>
+                  {supervisor
+                    .slice(-8)
+                    .reverse()
+                    .map((v) => (
+                      <li key={v.turn}>
+                        g{v.turn} {v.persona}: {v.action}
+                        {v.rule_hits.length > 0 && ` [${v.rule_hits.join(', ')}]`}
+                        {v.evidence && ` · ${v.evidence}`}
+                      </li>
+                    ))}
+                </ol>
+              )}
+              <h3>Peringatan mentah</h3>
+              {alerts.length === 0 ? (
+                <p>Tidak ada.</p>
+              ) : (
+                <ol reversed>
+                  {alerts
+                    .slice()
+                    .reverse()
+                    .map((a) => (
+                      <li key={a.id}>
+                        {fmtTime(a.at)} [{a.stage}/{a.code}] {a.detail}
+                      </li>
+                    ))}
+                </ol>
+              )}
+            </div>
+          </details>
+        </aside>
+      </main>
     </div>
   )
 }

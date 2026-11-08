@@ -1,10 +1,20 @@
 {
   "_catatan": "Daftar suara terkurasi untuk pilihan operator sebelum live. Kriteria: tidak formal, suara anak muda. Tambah suara baru dengan menyalin satu entri; `id` = voice id provider (ElevenLabs: ID dari library; Edge: nama voice), `gender` male|female.",
-  "_todo": "TODO(Favian): tambah suara ElevenLabs/Edge lain yang memenuhi kriteria. Saat ini hanya suara yang sudah dipakai.",
   "voices": [
-    {"id": "q8qwd1jY2jS3AWOBeq25", "provider": "elevenlabs", "name": "Pratama", "gender": "male", "notes": "Default Raka (Tahap 0, disetujui Favian)."},
-    {"id": "ffTJE9l3Kt2ipEM32UOc", "provider": "elevenlabs", "name": "Aita", "gender": "female", "notes": "Default Salsa (Tahap 0, disetujui Favian)."},
-    {"id": "id-ID-ArdiNeural", "provider": "edge", "name": "Ardi", "gender": "male", "notes": "Edge TTS, gratis; default Raka saat pengembangan."},
-    {"id": "id-ID-GadisNeural", "provider": "edge", "name": "Gadis", "gender": "female", "notes": "Edge TTS, gratis; default Salsa saat pengembangan."}
+    {"id": "q8qwd1jY2jS3AWOBeq25", "provider": "elevenlabs", "name": "Pratama", "gender": "male", "notes": "Clear, confident, warm (Default Cowo/Raka)."},
+    {"id": "plgKUYgnlZ1DCNh54DwJ", "provider": "elevenlabs", "name": "Dakocan", "gender": "male", "notes": "Expressive, cheerful, clear."},
+    {"id": "TMvmhlKUioQA4U7LOoko", "provider": "elevenlabs", "name": "Andi", "gender": "male", "notes": "Clear, friendly, calm."},
+    {"id": "lFjzhZHq0NwTRiu2GQxy", "provider": "elevenlabs", "name": "Tri Nugraha", "gender": "male", "notes": "Friendly, inviting."},
+    {"id": "eESTQeTcGUli0jYysKtx", "provider": "elevenlabs", "name": "Senandika", "gender": "male", "notes": "Young, confident, clear."},
+    {"id": "JjCMg2oeB7ExbMJUJHSK", "provider": "elevenlabs", "name": "Ginanjar", "gender": "male", "notes": "Clear, natural, optimistic."},
+    {"id": "ffTJE9l3Kt2ipEM32UOc", "provider": "elevenlabs", "name": "Aita", "gender": "female", "notes": "Youthful, expressive, friendly (Default Cewe/Salsa)."},
+    {"id": "iWydkXKoiVtvdn4vLKp9", "provider": "elevenlabs", "name": "Cahaya", "gender": "female", "notes": "Trendy, narration and social media."},
+    {"id": "gmnazjXOFoOcWA59sd5m", "provider": "elevenlabs", "name": "Kira", "gender": "female", "notes": "Youthful, clear, friendly."},
+    {"id": "52LXmmR0nGnIcDs1TL3f", "provider": "elevenlabs", "name": "Anjani", "gender": "female", "notes": "Friendly, youthful, natural."},
+    {"id": "oEOMTAySmTfDmVF6zZ2i", "provider": "elevenlabs", "name": "Ami", "gender": "female", "notes": "Expressive, friendly, clear."},
+    {"id": "3AwU3nHsI4YWeBJbz6yn", "provider": "elevenlabs", "name": "Honeypie", "gender": "female", "notes": "Warm, youthful, friendly."},
+    {"id": "id-ID-ArdiNeural", "provider": "edge", "name": "Ardi", "gender": "male", "notes": "Edge TTS, gratis; default Cowo/Raka saat pengembangan."},
+    {"id": "id-ID-GadisNeural", "provider": "edge", "name": "Gadis", "gender": "female", "notes": "Edge TTS, gratis; default Cewe/Salsa saat pengembangan."}
   ]
 }
+

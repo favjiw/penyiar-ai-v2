@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -13,13 +14,15 @@ from fastapi.responses import FileResponse
 
 from app.blocker.store import BlockerInvalid
 from app.data.personas import load_personas
-from app.schemas import PrecheckRequest, PTTTurnRequest, ShowState, StartShowRequest
+from app.schemas import PrecheckRequest, PTTTurnRequest, ShowState, StartShowRequest, VoiceSampleRequest
 from app.session_log import read_log
 from app.show.engine import ShowEngine
 from app.show.mode_a import HumanLedEngine
 from app.show.participants import DEFAULT_AI_IDS
 from app.tts.base import TTSError
+from app.show.readiness import build_readiness, rates_from_logs
 from app.tts.catalog import load_voice_catalog
+from app.tts.credits import elevenlabs_credits_left
 from app.ws import ConnectionManager
 
 logger = logging.getLogger(__name__)
@@ -64,6 +67,7 @@ async def start_show(req: StartShowRequest, request: Request):
         except BlockerInvalid as e:
             raise HTTPException(422, str(e))
     app.state.tts.set_voices(req.voices, ai_ids)
+    budget = await _tts_budget(app, req.mode, fresh=True)
     ws: ConnectionManager = app.state.ws
     common = dict(seed=req.seed, has_audio_owner=lambda: ws.audio_owner() is not None)
     if req.mode == "A":
@@ -76,15 +80,61 @@ async def start_show(req: StartShowRequest, request: Request):
         engine = ShowEngine(
             app.state.settings, app.state.llm, app.state.tts, blocker, personas, ws.broadcast, audio_dir(request), mode="B", **common
         )
+    engine.tts_budget = budget  # peringatan "kuota suara tinggal ±N menit" saat live
     app.state.engine = engine
     engine.start()
     return engine.snapshot()
+
+
+START_CREDITS_TIMEOUT_S = 2.5  # Mulai tidak boleh tertahan lama oleh ElevenLabs (KT FR-2: tombol ≤1 s sebisanya)
+
+
+async def _tts_budget(app, mode: str, fresh: bool = False) -> dict:
+    """Sisa kredit suara saat mulai + laju per menit; sisa None bila tidak diketahui (tanpa peringatan)."""
+    s = app.state.settings
+    rates = rates_from_logs(s.LOG_DIR, mode, s.AI_TURNS_PER_MIN_A if mode == "A" else s.AI_TURNS_PER_MIN_B, s.TTS_CREDITS_PER_MIN)
+    left, note = (None, "")
+    used_at = app.state.tts.credits_used
+    if app.state.tts.primary.name == "elevenlabs":
+        if fresh:
+            left, note = await elevenlabs_credits_left(s.ELEVENLABS_API_KEY, timeout_sec=START_CREDITS_TIMEOUT_S, fresh=True)
+        else:
+            left, note = await elevenlabs_credits_left(s.ELEVENLABS_API_KEY)
+        used_at = app.state.tts.credits_used
+    return {"credits_left": left, "per_min": rates.tts_credits_per_min, "used_at_start": used_at, "note": note, "rates": rates}
+
+
+async def _readiness(app, mode: str, target_minutes: int) -> dict:
+    s = app.state.settings
+    budget = await _tts_budget(app, mode)
+    return build_readiness(
+        s, app.state.quota, mode=mode, target_minutes=target_minutes, rates=budget["rates"],
+        tts_primary=app.state.tts.primary.name, tts_fallbacks=[f.name for f in app.state.tts.fallbacks],
+        tts_credits_left=budget["credits_left"], tts_note=budget["note"],
+    )
+
+
+@router.get("/api/readiness")
+async def readiness(request: Request, mode: str = "B", target_minutes: int = 60):
+    """Cek kesiapan tanpa memanaskan suara (header konsol): menit aman per layanan, PERKIRAAN."""
+    if mode not in ("A", "B"):
+        raise HTTPException(422, "mode harus A atau B")
+    return await _readiness(request.app, mode, max(1, min(240, target_minutes)))
 
 
 @router.get("/api/show")
 async def show_state(request: Request):
     engine = current(request)
     return engine.snapshot() if engine else {"state": ShowState.IDLE.value}
+
+
+@router.post("/api/show/undo-topic")
+async def undo_topic(request: Request):
+    """Batalkan pindah topik dari ucapan penyiar (mode A, PRD v2.7 §6.4); 409 bila sudah lewat atau tidak ada."""
+    engine = require_engine(request)
+    if not isinstance(engine, HumanLedEngine) or not await engine.undo_topic():
+        raise HTTPException(409, "Tidak ada pindah topik dari ucapan yang bisa dibatalkan")
+    return engine.snapshot()
 
 
 @router.post("/api/show/{action}")
@@ -119,6 +169,32 @@ async def voices(request: Request):
     }
 
 
+SAMPLE_TEXT = "Halo Sobat Hits, gue {name}. Yuk ngobrol santai bareng gue hari ini!"
+
+
+@router.post("/api/voices/sample")
+async def voice_sample(req: VoiceSampleRequest, request: Request):
+    """Contoh suara untuk tombol "Dengar" sebelum live (PRD v2.7 FR-6). Tidak tersedia saat siaran berjalan."""
+    running = current(request)
+    if running is not None and running.state != ShowState.ENDED:
+        raise HTTPException(409, "Contoh suara hanya bisa diputar sebelum live")
+    personas = load_personas()
+    if req.persona not in personas:
+        raise HTTPException(422, f"Persona {req.persona!r} tidak dikenal")
+    tts = request.app.state.tts
+    try:
+        tts.set_voices({req.persona: req.voice_id} if req.voice_id else {}, list(DEFAULT_AI_IDS))
+        result = await tts.synthesize(SAMPLE_TEXT.format(name=personas[req.persona].name), req.persona)
+    except TTSError as e:
+        raise HTTPException(422, str(e)[:300])
+    name = f"sample_{req.persona}_{hashlib.sha1(result.voice.encode()).hexdigest()[:10]}.{result.ext}"
+    path = audio_dir(request) / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(result.audio)
+    # fallback=True: suara utama gagal, yang terdengar adalah suara cadangan (bukan suara yang dipilih).
+    return {"audio_url": f"/audio/{name}", "voice": result.voice.split("|")[0], "provider": result.provider, "fallback": result.fallback_used}
+
+
 @router.post("/api/precheck")
 async def precheck(request: Request, req: Optional[PrecheckRequest] = None):
     """Cek pra-live (§5.1): model terisi, TTS dipanaskan (cold start suara library)."""
@@ -143,6 +219,8 @@ async def precheck(request: Request, req: Optional[PrecheckRequest] = None):
     except Exception as e:
         result["tts_ok"], result["tts_error"] = False, str(e)[:300]
     result["tts"] = app.state.tts.status()
+    req = req or PrecheckRequest()
+    result["readiness"] = await _readiness(app, req.mode, req.target_minutes)
     return result
 
 
@@ -196,7 +274,22 @@ async def ws_session(ws: WebSocket, role: str = "console"):
             elif action == "audio_state":
                 blocked = bool(data.get("blocked"))
                 (manager.audio_blocked.add if blocked else manager.audio_blocked.discard)(ws)
+                if "ready" in data:
+                    (manager.audio_ready.add if data.get("ready") else manager.audio_ready.discard)(ws)
                 await manager.broadcast_output_status()
+            elif action == "mic_state" and manager.clients.get(ws) == "prompter":
+                # Prompter memantau mic studio (PRD v2.7 FR-7); konsol menampilkan peringatan merah bila putus.
+                state = {"down": bool(data.get("down")), "reason": str(data.get("reason", ""))[:20]}
+                if manager.mic.get(ws) != state:
+                    manager.mic[ws] = state
+                    await manager.broadcast_output_status()
+            elif action == "level" and ws is manager.audio_owner():
+                # Level audio dari stage (pemilik audio) diteruskan ke konsol/prompter (indikator bicara).
+                try:
+                    lv = max(0.0, min(1.0, float(data.get("level", 0))))
+                except (TypeError, ValueError):
+                    continue
+                await manager.broadcast("level", {"persona": data.get("persona"), "level": round(lv, 2)})
     except WebSocketDisconnect:
         pass
     finally:

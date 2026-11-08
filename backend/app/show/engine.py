@@ -60,6 +60,20 @@ logger = logging.getLogger(__name__)
 Emit = Callable[[str, dict[str, Any]], Awaitable[None]]
 PLAYBACK_GRACE_SEC = 5.0
 TRANSCRIPT_KEEP = 60
+# Peringatan untuk konsol (DESIGN.md §4): kode → (tingkat, judul, pesan dengan istilah UI).
+ALERT_TEXT: dict[str, tuple[str, str, str]] = {
+    "tts_silent": ("yellow", "Satu giliran AI tanpa suara", "Suara AI gagal dibuat untuk giliran ini. Siaran tetap jalan; cek Detail teknis bila berulang."),
+    "tts_fallback": ("blue", "Suara cadangan aktif", "Suara AI pindah ke cadangan dan terdengar sedikit berbeda. Siaran tetap jalan."),
+    "tts_warning": ("yellow", "Ada catatan soal suara AI", "Suara AI mungkin tidak sesuai pilihan. Lihat Detail teknis."),
+    "llm_fallback": ("blue", "Otak AI pindah ke cadangan", "Kuota otak AI habis; siaran memakai cadangan otomatis."),
+    "ai_failing": ("yellow", "AI gagal menjawab", "Kalau terus berulang, siaran dibawa ke penutup. Penyiar bisa ambil alih dulu."),
+    "tts_quota_low": ("yellow", "Kuota suara AI hampir habis", "Setelah habis, suara pindah ke cadangan dan terdengar sedikit berbeda. Bisa mulai disiapkan penutupnya."),
+    "supervisor_rules": ("blue", "Pemeriksaan ucapan AI disederhanakan", "Ucapan AI sementara diperiksa dengan aturan dasar saja. Siaran tetap jalan."),
+    "engine_error": ("yellow", "Ada gangguan di sistem", "Siaran tetap jalan. Lihat Detail teknis."),
+}
+ALERT_STAGE_CODE = {"tts": "tts_silent", "quota": "llm_fallback", "engine": "ai_failing"}
+OPENING_CLOSING_MAX_TURNS = 24  # batas atas giliran Opening/Closing berbasis waktu (cegah AI mengulang-ulang)
+OPENING_CLOSING_TARGET_S = 180  # Opening ±3 menit, Closing ±3 menit (PRD v2.7 FR-1, §1.3.3)
 
 
 @dataclass
@@ -174,6 +188,16 @@ class ShowEngine:
         self.last_showrunner: Optional[ShowrunnerDecision] = None
         self._on_air_pos: tuple[Segment, int] = ("opening", 0)  # posisi yang sedang terdengar
         self.started_at = 0.0
+        # Jam siaran aktif (tanpa waktu jeda) untuk prompter/konsol: "Siaran m:ss / target" + cincin waktu segmen.
+        self._paused_total = 0.0
+        self._paused_at: Optional[float] = None
+        self._ended_at: Optional[float] = None
+        self._segment_started_active = 0.0
+        self._seg_audio_s = 0.0  # audio Opening/Closing yang sudah dibuat (mode B, materi berdurasi)
+        # Diisi API saat mulai: {credits_left, per_min, used_at_start}; credits_left None = sisa tidak diketahui.
+        self.tts_budget: dict[str, Any] = {}
+        self._tts_low_alerted = False
+        self._bg_tasks: set[asyncio.Task] = set()  # tugas latar yang harus tetap dirujuk sampai selesai
         self._resume = asyncio.Event()
         self._resume.set()
         self._playback_id: Optional[str] = None
@@ -188,10 +212,60 @@ class ShowEngine:
     # ── Event dan status ─────────────────────────────────────────────────────
 
     async def _emit(self, type_: str, data: dict[str, Any]) -> None:
+        if type_ == "topic_change":
+            self._segment_started_active = self._active_s()
         try:
             await self._emit_raw(type_, data)
         except Exception as e:  # klien putus tidak boleh menghentikan siaran
             logger.warning("Emit %s gagal: %s", type_, e)
+        if type_ == "topic_change":
+            await self._emit("show_clock", self.show_clock())
+
+    def tts_minutes_left(self) -> Optional[float]:
+        """Perkiraan menit suara AI yang tersisa (kredit saat mulai − kredit terpakai sesi ini) ÷ laju; None bila tidak diketahui."""
+        b = self.tts_budget
+        if not b or b.get("credits_left") is None or not b.get("per_min"):
+            return None
+        used = self.tts.credits_used - b.get("used_at_start", 0)
+        return max(0.0, (b["credits_left"] - used) / b["per_min"])
+
+    def _check_tts_quota(self) -> None:
+        left = self.tts_minutes_left()
+        if left is None or self._tts_low_alerted or left > self.settings.TTS_QUOTA_ALERT_MIN:
+            return
+        self._tts_low_alerted = True
+        task = asyncio.get_running_loop().create_task(self._alert("tts", f"Perkiraan sisa kredit suara ±{left:.0f} menit", "tts_quota_low"))
+        self._bg_tasks.add(task)
+        task.add_done_callback(self._bg_tasks.discard)
+
+    def _active_s(self) -> float:
+        """Detik siaran berjalan sejak mulai, tanpa waktu jeda."""
+        if not self.started_at:
+            return 0.0
+        now = self._ended_at or time.monotonic()
+        paused = self._paused_total + ((now - self._paused_at) if self._paused_at is not None else 0.0)
+        return max(0.0, now - self.started_at - paused)
+
+    def _segment_target_s(self) -> int:
+        topic = self.on_air.get("topic")
+        if self.on_air.get("segment") == "topic" and topic:
+            t = next((x for x in self.blocker.topics if x.id == topic.get("id")), None)
+            if t is not None:
+                return t.menit * 60
+        return OPENING_CLOSING_TARGET_S
+
+    def show_clock(self) -> dict[str, Any]:
+        """Jam siaran (PRD v2.7): total aktif vs target durasi, dan waktu segmen (topik/Opening/Closing)
+        vs perkiraan menitnya. Klien menghitung maju sendiri selama `running`."""
+        active = self._active_s()
+        plan_min = OPENING_CLOSING_TARGET_S * 2 / 60 + sum(t.menit for t in self.blocker.topics)
+        return {
+            "elapsed_s": round(active, 1),
+            "target_s": int((self.blocker.durasi_menit or plan_min) * 60),
+            "segment_elapsed_s": round(max(0.0, active - self._segment_started_active), 1),
+            "segment_target_s": self._segment_target_s(),
+            "running": self.state == ShowState.LIVE,
+        }
 
     def snapshot(self) -> dict[str, Any]:
         """Status lengkap untuk klien yang baru tersambung atau reload (FR-8 keandalan)."""
@@ -212,10 +286,29 @@ class ShowEngine:
             "transcript": self.transcript[-TRANSCRIPT_KEEP:],
             "showrunner": self.last_showrunner.model_dump() if self.last_showrunner else None,
             "coverage": {tid: {"covered": sorted(p.covered), "total": len(p.topic.poin)} for tid, p in self.progress.items()},
+            "topic_points": self._topic_points(),
             "tts": self.tts.status(),
             "point_clock": self._clock_payload(self._clock_running),
+            "show_clock": self.show_clock(),
+            "tts_minutes_left": None if (m := self.tts_minutes_left()) is None else int(m),
+            "tts_quota_low": m is not None and m <= self.settings.TTS_QUOTA_ALERT_MIN,
             "error": self.error,
         }
+
+    def _topic_points(self) -> list[dict[str, Any]]:
+        """Poin topik aktif dengan centang dan penanda poin aktif (prompter, FR-11)."""
+        if self.on_air.get("segment") != "topic":
+            return []
+        on_topic = self.on_air.get("topic")
+        topic = next((t for t in self.blocker.topics if on_topic and t.id == on_topic.get("id")), None)
+        if topic is None:
+            topic = self.blocker.topics[self.plan.topic_idx]
+        covered = self.progress[topic.id].covered
+        if self.timed:
+            on_point = self.on_air.get("point")
+            cur = on_point["idx"] if on_point and on_point.get("topic_id") == topic.id else min(self.plan.point_idx, len(topic.poin) - 1)
+            return [{"id": p.id, "text": p.text, "covered": i < cur or p.id in covered, "current": i == cur} for i, p in enumerate(topic.poin)]
+        return [{"id": p.id, "text": p.text, "covered": p.id in covered} for p in topic.poin]
 
     def _rundown(self) -> dict[str, Any]:
         """Blocker terkunci apa adanya, untuk prompter penyiar manusia."""
@@ -224,7 +317,7 @@ class ShowEngine:
             "opening": {"hook": b.opening.hook, "poin": b.opening.poin},
             "topics": [
                 {
-                    "id": t.id, "judul": t.judul, "sudut_pandang": t.sudut_pandang,
+                    "id": t.id, "judul": t.judul, "sudut_pandang": t.sudut_pandang, "menit": t.menit,
                     "poin": [{"id": p.id, "text": p.text} for p in t.poin],
                     "pertanyaan_penonton": t.pertanyaan_penonton, "transisi": t.transisi,
                 }
@@ -259,6 +352,7 @@ class ShowEngine:
     async def pause(self) -> None:
         if self.state == ShowState.LIVE:
             self.state = ShowState.PAUSED
+            self._paused_at = time.monotonic()
             self._resume.clear()
             self.log.event("operator_action", action="pause")
             await self._broadcast_state()
@@ -266,6 +360,9 @@ class ShowEngine:
     async def resume(self) -> None:
         if self.state == ShowState.PAUSED:
             self.state = ShowState.LIVE
+            if self._paused_at is not None:
+                self._paused_total += time.monotonic() - self._paused_at
+                self._paused_at = None
             self._resume.set()
             self.log.event("operator_action", action="resume")
             await self._broadcast_state()
@@ -313,6 +410,7 @@ class ShowEngine:
 
     def _advance_segment(self, reason: str = "advance") -> None:
         p = self.plan
+        self._seg_audio_s = 0.0
         self._end_point(reason)
         p.point_idx, self._early_close, self._closed_point = 0, False, None
         self.point_clock.reset()
@@ -329,6 +427,7 @@ class ShowEngine:
             p.announce_closing = True
         else:
             p.finished = True
+        self._sync_point_limit()
 
     def _pick_speaker(self) -> PersonaCard:
         """Bergiliran menurut daftar peserta AI; Showrunner boleh menunjuk `next_speaker`."""
@@ -356,6 +455,30 @@ class ShowEngine:
 
     # ── Batas waktu per poin (R4) ────────────────────────────────────────────
 
+    def _segment_done(self, turns: int, min_turns: int) -> bool:
+        """Opening/Closing mode B selesai? Materi berdurasi (PRD v2.7): setelah ±3 menit audio (minimal `min_turns`,
+        maksimal OPENING_CLOSING_MAX_TURNS giliran). Materi lama tanpa durasi: tepat `min_turns` giliran seperti dulu."""
+        if not self.blocker.durasi_menit:
+            return turns >= min_turns
+        if turns >= OPENING_CLOSING_MAX_TURNS:
+            return True
+        # Perkiraan audio setelah giliran ini: rata-rata giliran segmen ini, supaya giliran penutup tidak jauh melewati target.
+        avg = self._seg_audio_s / max(1, turns - 1) if turns > 1 else 0.0
+        return turns >= min_turns and self._seg_audio_s + avg * 0.5 >= OPENING_CLOSING_TARGET_S
+
+    def _sync_point_limit(self) -> None:
+        """Mode B: batas poin = menit topik ÷ jumlah poin (keputusan Favian 8 Nov 2026), minimal POINT_TIME_LIMIT_S
+        dan cukup untuk giliran penutup; tanpa POINT_LIMIT_FROM_TOPIC tetap POINT_TIME_LIMIT_S (R4 asli)."""
+        if not self.timed:  # mode A atau timer mati: tidak ada batas per poin
+            self.point_clock.limit_s = 0
+            return
+        base = float(self.settings.POINT_TIME_LIMIT_S)
+        limit = base
+        if self.timed and self.settings.POINT_LIMIT_FROM_TOPIC and self.plan.segment == "topic":
+            t = self.blocker.topics[self.plan.topic_idx]
+            limit = max(base, t.menit * 60 / max(1, len(t.poin)))
+        self.point_clock.limit_s = limit
+
     def _point_key(self) -> Optional[tuple[str, str]]:
         if not self.timed or self.plan.segment != "topic":
             return None
@@ -371,9 +494,11 @@ class ShowEngine:
         self.on_air["point"] = self._point_info(self.blocker.topics[self.plan.topic_idx], self.plan.point_idx) if key else None
 
     def _clock_payload(self, running: bool) -> dict[str, Any]:
-        pos = self.on_air.get("point") if self.timed else None
-        if not pos:
+        if not self.timed or self.state == ShowState.ENDED:
             return {"active": False}
+        pos = self.on_air.get("point")
+        if not pos:
+            return {"active": False, "limit_s": self.point_clock.limit_s}
         played = self.point_played.get((pos["topic_id"], pos["point_id"]), 0.0)
         return {"active": True, **pos, "limit_s": self.point_clock.limit_s, "played_s": round(played, 1), "running": running, "ts": round(wall_clock(), 2)}
 
@@ -457,7 +582,7 @@ class ShowEngine:
             steer_hint=self.steer_hint,
             transition_to=b.topics[p.topic_idx + 1] if p.pending == "transition" else None,
             to_closing=p.pending == "to_closing",
-            closing_final=p.segment == "closing" and p.seg_turns >= self.settings.CLOSING_TURNS - 1,
+            closing_final=p.segment == "closing" and self._segment_done(p.seg_turns + 1, self.settings.CLOSING_TURNS),
             topics_done=done,
             mode=self.mode,
             others=others if len(others) > 1 else [],  # satu lawan bicara cukup lewat partner_name
@@ -476,15 +601,24 @@ class ShowEngine:
 
     # ── Membuat satu giliran ─────────────────────────────────────────────────
 
-    async def _alert(self, stage: str, message: str) -> None:
-        """Masalah yang perlu diketahui operator, tapi siaran tetap jalan."""
-        self.log.event("error", stage=stage, message=message[:300])
-        await self._emit("alert", {"stage": stage, "message": message[:300], "turn": self.turn_no})
+    async def _alert(self, stage: str, message: str, code: str = "") -> None:
+        """Masalah yang perlu diketahui operator, tapi siaran tetap jalan.
 
-    async def _alert_once(self, key: str, message: str) -> None:
+        Event `alert` (PRD v2.7 §6.3): `level` red|yellow|blue, `code`, `title` dan `message` dengan
+        istilah UI untuk operator; pesan mentah (nama vendor/model) hanya di `detail` (Detail teknis).
+        """
+        self.log.event("error", stage=stage, message=message[:300])
+        code = code or ALERT_STAGE_CODE.get(stage, "engine_error")
+        level, title, friendly = ALERT_TEXT.get(code, ALERT_TEXT["engine_error"])
+        await self._emit("alert", {
+            "level": level, "code": code, "title": title, "message": friendly,
+            "detail": message[:300], "stage": stage, "turn": self.turn_no, "at": wall_clock(),
+        })
+
+    async def _alert_once(self, key: str, message: str, code: str = "tts_fallback") -> None:
         if key not in self._alerted:
             self._alerted.add(key)
-            await self._alert("tts", message)
+            await self._alert("tts", message, code)
 
     async def _persona_turn(self, speaker: PersonaCard, ctx: TurnContext, correction=None) -> PersonaResult:
         try:
@@ -522,6 +656,7 @@ class ShowEngine:
             self._end_point("wrap")
             self.point_clock.reset()
             p.segment, p.seg_turns, p.pending, p.announce_closing, p.announce_topic = "closing", 0, None, True, None
+            self._sync_point_limit()
         # Kuota/jaringan: kalimat aman dari bank supaya siaran tetap jalan.
         text = self.supervisor.fallback(speaker, ctx.segment)
         return PersonaResult(PersonaOutput(text=text, emotion=Emotion.NEUTRAL), raw="", model="fallback", latency_ms=0, dialog_act=None, catchphrase=None)
@@ -546,7 +681,7 @@ class ShowEngine:
         reviewed = await self.supervisor.check(speaker, candidate, ctx, lambda corr: self._persona_turn(speaker, ctx, corr), turn)
         latency.supervisor = int((time.perf_counter() - sup_start) * 1000)
         if self.supervisor.mode != self._supervisor_mode:
-            await self._alert("quota", f"Supervisor turun ke mode {self.supervisor.mode}: {self.supervisor.last_llm_error[:120]}")
+            await self._alert("quota", f"Supervisor turun ke mode {self.supervisor.mode}: {self.supervisor.last_llm_error[:120]}", "supervisor_rules")
             self._supervisor_mode = self.supervisor.mode
 
         if ctx.max_words:  # backstop anggaran kata: buang kalimat utuh di ujung, tidak pernah memotong kalimat
@@ -615,9 +750,11 @@ class ShowEngine:
         supervisor_ms: int = 0, supervisor_action: str = "forward", tts_provider: str = "", tts_fallback_used: bool = False,
         dialog_act: Optional[str] = None, gap_ms: int = 0, interrupted: bool = False, tts_voice: str = "", condition: str = "A",
         user_query: str = "", draft_text: str = "", supervisor_intervened: bool = False, supervisor_verdict: Optional[dict[str, Any]] = None,
-        timing_breakdown: Optional[dict[str, Any]] = None,
+        timing_breakdown: Optional[dict[str, Any]] = None, nudge: bool = False,
     ) -> None:
         """Satu baris `sessions/<id>/turns.jsonl` (lihat turnlog.py untuk arti tiap medan)."""
+        if not is_human:
+            self._check_tts_quota()
         try:
             self.turn_log.write(
                 session_id=self.session_id, mode=self.mode, turn_idx=turn, speaker=speaker, speaker_name=speaker_name, is_human=is_human,
@@ -626,6 +763,7 @@ class ShowEngine:
                 latency_tts_ms=tts_ms, gap_before_play_ms=gap_ms, model=model, tts_chars=tts_chars, filler_used=filler,
                 supervisor_action=supervisor_action, tts_provider=tts_provider, tts_fallback_used=tts_fallback_used,
                 dialog_act=dialog_act, interrupted=interrupted, tts_voice=tts_voice,
+                nudge=nudge,  # mode A: giliran ini memuat kode halus pindah topik (dipisah di analisis evasi)
                 condition=condition, user_query=user_query, draft_text=draft_text,
                 supervisor_intervened=supervisor_intervened,
                 supervisor_verdict=supervisor_verdict or {},
@@ -653,9 +791,11 @@ class ShowEngine:
             self._advance_segment()
             return
         p.seg_turns += 1
-        if p.segment == "opening" and p.seg_turns >= self.settings.OPENING_TURNS:
+        if p.segment in ("opening", "closing"):
+            self._seg_audio_s += prepared.duration_s
+        if p.segment == "opening" and self._segment_done(p.seg_turns, self.settings.OPENING_TURNS):
             self._advance_segment()
-        elif p.segment == "closing" and p.seg_turns >= self.settings.CLOSING_TURNS:
+        elif p.segment == "closing" and self._segment_done(p.seg_turns, self.settings.CLOSING_TURNS):
             p.finished = True
         elif p.segment == "topic":
             prog = self.progress[ctx.topic.id]
@@ -701,6 +841,7 @@ class ShowEngine:
             if ctx.next_point:
                 p.point_idx += 1
                 self.point_clock.reset()
+                self._sync_point_limit()
                 self.steer_hint, self.next_speaker = "", None
             else:
                 self._advance_segment()  # topik berikutnya atau Closing
@@ -807,6 +948,8 @@ class ShowEngine:
             await self._emit_clock(False)
         finally:
             self.on_air["speaking"] = None
+            # Klien selain pemutar (konsol, prompter) perlu tahu giliran selesai; pemutar hanya melapor "started".
+            await self._emit("speaking", {"persona": None})
             self._last_play_end = time.monotonic()
             self.log_turn(
                 turn=t.turn, speaker=t.persona.id, speaker_name=t.persona.name, is_human=False, segment=t.segment,
@@ -845,7 +988,7 @@ class ShowEngine:
             prompts={a.prompt.name: a.prompt.version for a in (self.persona_agent, self.supervisor, self.showrunner)},
         )
         for warning in self.tts.warnings:  # mis. ELEVENLABS_API_KEY kosong → jatuh ke Edge
-            await self._alert("tts", warning)
+            await self._alert("tts", warning, "tts_warning")
         await self._broadcast_state()
         # Pipelining (FR-2): produsen menyiapkan sampai PIPELINE_DEPTH giliran di depan;
         # satu slot terbuka setiap kali sebuah giliran mulai diputar. Depth 1 = giliran n+1
@@ -895,6 +1038,7 @@ class ShowEngine:
         if self.state == ShowState.ENDED:
             return
         self.state = ShowState.ENDED
+        self._ended_at = time.monotonic()
         self._resume.set()
         self.summary.cancel()
         self._end_point("stop" if reason == "stopped" else "end")

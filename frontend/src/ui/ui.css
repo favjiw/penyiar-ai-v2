@@ -1,0 +1,161 @@
+/* Komponen dasar (DESIGN.md §4). Kelas berawalan `ui-` dan menyetel semua properti sendiri,
+   supaya aturan global lama (button, .card, .pill di styles.css) tidak ikut menimpa. */
+
+/* ── Tombol ───────────────────────────────────────────────────────────── */
+.ui-btn {
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 16px;
+  border-radius: var(--r-input);
+  border: 1.5px solid var(--n-200);
+  background: var(--n-0);
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: background-color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+.ui-btn:hover:not(:disabled) { border-color: var(--n-400); }
+.ui-btn:focus-visible { outline: 2px solid var(--brand-blue); outline-offset: 2px; }
+.ui-btn:disabled { opacity: .5; cursor: default; }
+.ui-btn svg { flex: none; }
+
+.ui-btn--lg { min-height: 48px; padding: 0 22px; font-size: 16px; font-weight: 700; }
+.ui-btn--xl { min-height: 56px; padding: 0 26px; font-size: 17px; font-weight: 700; }
+
+.ui-btn--primary { background: var(--brand-blue); border-color: var(--brand-blue); color: var(--ink); font-weight: 700; }
+.ui-btn--primary:hover:not(:disabled) { background: var(--blue-hover); border-color: var(--blue-hover); }
+.ui-btn--ink { background: var(--ink); border-color: var(--ink); color: var(--n-0); font-weight: 700; }
+.ui-btn--ink:hover:not(:disabled) { background: var(--n-700); border-color: var(--n-700); }
+.ui-btn--danger { background: var(--n-0); border-color: var(--danger); color: var(--danger); font-weight: 700; }
+.ui-btn--danger:hover:not(:disabled) { background: var(--danger-bg); border-color: var(--danger); }
+.ui-btn--link { background: none; border-color: transparent; color: var(--blue-700); padding: 0 8px; }
+.ui-btn--link:hover:not(:disabled) { color: var(--blue-800); border-color: transparent; text-decoration: underline; }
+
+/* ── Kartu ────────────────────────────────────────────────────────────── */
+.ui-card {
+  background: var(--n-0);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-card);
+  padding: 20px 24px;
+  min-width: 0;
+}
+.ui-card--flat { box-shadow: none; border: 1.5px solid var(--n-200); }
+.ui-card--panel { border-radius: var(--r-panel); padding: 28px 32px; }
+.ui-card__title { font-size: 19px; font-weight: 700; margin: 0 0 12px; line-height: 1.3; }
+
+/* ── Pil ──────────────────────────────────────────────────────────────── */
+.ui-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  background: var(--n-100);
+  color: var(--n-700);
+  white-space: nowrap;
+}
+.ui-pill--blue { background: var(--blue-50); color: var(--blue-700); }
+.ui-pill--yellow { background: var(--yellow-50); color: var(--yellow-ink); }
+.ui-pill--orange { background: var(--orange-50); color: var(--orange-ink); }
+.ui-pill--success { background: var(--success-bg); color: var(--success); }
+.ui-pill--danger { background: var(--danger-bg); color: var(--danger); }
+
+/* Badge LIVE: oranye, border 2px ink, bayangan stiker, titik berkedip */
+.ui-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  background: var(--orange-400);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  padding: 4px 10px;
+  box-shadow: var(--shadow-sticker);
+  white-space: nowrap;
+}
+.ui-live__dot { width: 8px; height: 8px; border-radius: 999px; background: var(--ink); animation: ui-blink 1.4s ease-in-out infinite; }
+.ui-live--paused { background: var(--n-100); }
+.ui-live--paused .ui-live__dot { animation: none; }
+@keyframes ui-blink { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+/* ── Cincin waktu ─────────────────────────────────────────────────────── */
+.ui-ring { position: relative; display: inline-grid; place-items: center; flex: none; }
+.ui-ring svg { display: block; }
+.ui-ring__arc { transition: stroke-dashoffset var(--t-state) linear, stroke var(--t-state) var(--ease); }
+.ui-ring__text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.05;
+  font-family: var(--font);
+  color: var(--ink);
+}
+.ui-ring__time { font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.ui-ring__label { font-weight: 600; margin-top: .25em; color: var(--n-700); }
+.ui-ring--warn .ui-ring__label { color: var(--yellow-ink); }
+.ui-ring--over .ui-ring__label { color: var(--orange-ink); }
+
+/* ── Bar level suara ──────────────────────────────────────────────────── */
+.ui-level { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.ui-level__bar {
+  width: 5px;
+  height: 100%;
+  border-radius: 3px;
+  background: currentColor;
+  transform-origin: center;
+  transition: transform 80ms linear;
+}
+
+/* ── Peringatan ───────────────────────────────────────────────────────── */
+.ui-alert {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  border-radius: var(--r-card);
+  padding: 18px 20px;
+  font-family: var(--font);
+  color: var(--ink);
+  animation: ui-slide var(--t-state) ease-out both;
+}
+.ui-alert--red { background: var(--danger-bg); border: 2px solid var(--danger); }
+.ui-alert--yellow { background: var(--yellow-50); border: 2px solid var(--ink); }
+.ui-alert--blue { background: var(--blue-50); border: 1.5px solid var(--brand-blue); padding: 14px 16px 14px 20px; align-items: center; }
+.ui-alert__icon { flex: none; margin-top: 2px; }
+.ui-alert--blue .ui-alert__icon { margin-top: 0; }
+.ui-alert__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.ui-alert__title { font-size: 17px; font-weight: 800; }
+.ui-alert--red .ui-alert__title { color: var(--danger); }
+.ui-alert--blue .ui-alert__title { font-size: 15px; font-weight: 700; }
+.ui-alert__msg { font-size: 15px; }
+.ui-alert__actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.ui-alert__time { font-size: 13px; color: var(--n-600); flex: none; }
+.ui-alert__close { margin: -8px -8px -8px 0; }
+@keyframes ui-slide { from { transform: translateY(-8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+.ui-alert-stack { display: flex; flex-direction: column; gap: 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-live__dot, .ui-alert { animation: none; }
+  .ui-level__bar, .ui-ring__arc { transition: none; }
+}

@@ -100,12 +100,13 @@ class GeminiLLMClient(LLMClient):
     MAX_RETRIES = 4
     BASE_BACKOFF_SEC = 2.0
 
-    def __init__(self, api_key: str, limiters: RateLimiterRegistry, fail_inject: bool = False):
+    def __init__(self, api_key: str, limiters: RateLimiterRegistry, fail_inject: bool = False, quota=None):
         from google import genai
 
         self._client = genai.Client(api_key=api_key)
         self.limiters = limiters
         self._fail_inject = fail_inject
+        self.quota = quota  # QuotaCounter: tiap permintaan terkirim dihitung (API tidak memberi sisa RPD)
 
     async def generate(self, prompt, *, model, system_instruction="", response_schema=None, temperature=1.0):
         from google.genai import types
@@ -125,6 +126,8 @@ class GeminiLLMClient(LLMClient):
         last_error: Exception | None = None
         for attempt in range(self.MAX_RETRIES):
             await self.limiters.get(model).acquire()
+            if self.quota is not None:
+                self.quota.record(model)
             try:
                 start = time.perf_counter()
                 # Klien sync di thread: klien async google-genai memakai aiohttp+aiodns bila
@@ -157,6 +160,8 @@ class GeminiLLMClient(LLMClient):
             except Exception as e:
                 last_error = e
                 if "PerDay" in str(e):
+                    if self.quota is not None:
+                        self.quota.mark_exhausted(model)
                     raise LLMQuotaExhausted(f"Kuota harian {model} habis: {str(e)[:200]}") from e
                 retryable = any(c in str(e) for c in ("429", "500", "503", "UNAVAILABLE", "RESOURCE_EXHAUSTED"))
                 if not retryable or attempt == self.MAX_RETRIES - 1:
@@ -273,7 +278,7 @@ class RouterLLMClient(LLMClient):
         return await self._gemini.generate(prompt, model=model, **kw)
 
 
-def create_llm_client(settings) -> LLMClient:
+def create_llm_client(settings, quota=None) -> LLMClient:
     if settings.LLM_MODE == "mock":
         return MockLLMClient()
     limiters = RateLimiterRegistry(default_rpm=settings.GEMINI_RPM_DEFAULT)
@@ -282,7 +287,7 @@ def create_llm_client(settings) -> LLMClient:
     compat = None
     if settings.OPENAI_COMPAT_BASE_URL and settings.OPENAI_COMPAT_API_KEY:
         compat = OpenAICompatLLMClient(settings.OPENAI_COMPAT_BASE_URL, settings.OPENAI_COMPAT_API_KEY, limiters, settings.OPENAI_COMPAT_REASONING_EFFORT)
-    gemini = GeminiLLMClient(settings.GEMINI_API_KEY, limiters, fail_inject="llm" in settings.FAIL_INJECT) if settings.GEMINI_API_KEY else None
+    gemini = GeminiLLMClient(settings.GEMINI_API_KEY, limiters, fail_inject="llm" in settings.FAIL_INJECT, quota=quota) if settings.GEMINI_API_KEY else None
     if gemini is None and compat is None:
         raise ValueError("LLM_MODE=live butuh GEMINI_API_KEY atau OPENAI_COMPAT_BASE_URL + OPENAI_COMPAT_API_KEY")
     return RouterLLMClient(gemini, compat, limiters)

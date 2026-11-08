@@ -48,7 +48,7 @@ async def test_generate_mock_returns_distinct_valid_variants(store):
     assert [t.id for t in b.topics] == ["t1", "t2"]
     assert b.topics[1].poin[0].id == "t2p1"
     assert not b.locked and b.versi == 1 and b.id.startswith("blk_") and "zodiak" in b.id
-    assert meta.prompt_version == "blocker-v3" and meta.attempts == 1
+    assert meta.prompt_version == "blocker-v4" and meta.attempts == 1
     assert store.get(b.id) == b
 
 
@@ -137,3 +137,39 @@ async def test_edit_rejects_empty_structure(store):
         store.update(b.id, empty)
     with pytest.raises(BlockerInvalid):
         store.new_version(b.id)  # draf belum dikunci
+
+
+async def test_half_filled_draft_autosaves_but_cannot_lock(store):
+    """Editor menyimpan otomatis: topik baru yang belum diisi tidak boleh menggagalkan simpan."""
+    from app.schemas import BlockerTopic
+
+    gen = BlockerGenerator(MockLLMClient(delay_sec=0), "mock", store)
+    (b, *_), _ = await gen.generate(GenerateBlockerRequest(tema="Mudik", jumlah_topik=1, jumlah_varian=2))
+    draft = b.model_copy(deep=True)
+    draft.topics.append(BlockerTopic(judul="", sudut_pandang="", poin=[BlockerPoint(text="  ")], pertanyaan_penonton="", transisi=""))
+    saved = store.update(b.id, draft)
+    assert len(saved.topics) == 2 and saved.topics[1].id == "t2" and saved.topics[1].poin == []
+    with pytest.raises(BlockerInvalid, match="Topik 2: judul kosong"):
+        store.lock(b.id)
+
+
+# ── Durasi siaran (PRD v2.7 FR-1) ────────────────────────────────────────────
+
+
+def test_topic_count_follows_duration():
+    from app.schemas import topics_for_duration
+
+    assert [topics_for_duration(d) for d in (30, 45, 60, 90)] == [3, 4, 6, 8]
+    assert GenerateBlockerRequest(tema="Zodiak", durasi_menit=60, jumlah_topik=1).jumlah_topik == 6
+    with pytest.raises(ValueError):
+        GenerateBlockerRequest(tema="Zodiak", durasi_menit=50)
+
+
+async def test_generate_with_duration_sets_minutes_per_topic(store):
+    gen = BlockerGenerator(MockLLMClient(delay_sec=0), "mock", store)
+    blockers, _ = await gen.generate(GenerateBlockerRequest(tema="Zodiak", durasi_menit=60, jumlah_varian=2))
+    b = blockers[0]
+    assert b.durasi_menit == 60 and len(b.topics) == 6 and all(t.menit == 9 for t in b.topics)
+    assert store.get(b.id).topics[5].id == "t6"
+    regen, _ = await gen.regenerate_variant(b.id, [])
+    assert len(regen.topics) == 6 and regen.durasi_menit == 60

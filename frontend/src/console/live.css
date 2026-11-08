@@ -1,0 +1,101 @@
+/* Konsol · Saat live (mockup KonsolLive, KonsolPeringatan). Kalem, padat informasi, hampir tanpa animasi. */
+
+.lv { min-height: 100vh; background: var(--bg-console); font-family: var(--font); color: var(--ink); }
+
+.lv-top { background: var(--n-0); border-bottom: 1px solid var(--n-200); position: sticky; top: 0; z-index: 10; }
+.lv-top__inner { max-width: 1600px; margin: 0 auto; padding: 12px 40px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.lv-top__logo { height: 40px; width: auto; }
+.lv-top__title { display: flex; flex-direction: column; line-height: 1.3; min-width: 0; }
+.lv-top__name { font-weight: 700; overflow-wrap: anywhere; }
+.lv-top__sub { font-size: 13px; color: var(--n-600); }
+.lv-top__spacer { flex: 1; }
+.lv-top__offline { font-size: 14px; font-weight: 700; color: var(--danger); }
+.lv-top__actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.lv-top__sep { width: 1px; align-self: stretch; background: var(--n-200); margin: 4px; }
+.lv-stop { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; background: var(--danger-bg); border-radius: var(--r-input); padding: 4px 4px 4px 12px; }
+
+.lv-main { max-width: 1600px; margin: 0 auto; padding: 32px 40px; display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+.lv-col { flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+.lv-card { background: var(--n-0); border-radius: var(--r-panel); box-shadow: var(--shadow-card); padding: 24px 28px; min-width: 0; }
+.lv-card h2 { margin: 0; font-size: 23px; font-weight: 800; line-height: 1.25; overflow-wrap: anywhere; }
+
+/* Progres */
+.lv-progress { display: flex; flex-direction: column; gap: 14px; }
+.lv-progress__head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.lv-progress__time { font-size: 33px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.lv-progress__of { font-size: 16px; color: var(--n-600); }
+.lv-progress__pill { margin-left: auto; font-size: 13px; font-weight: 700; border-radius: var(--r-pill); padding: 4px 12px; background: var(--yellow-50); color: var(--yellow-ink); align-self: center; }
+.lv-progress__pill.is-ok { background: var(--success-bg); color: var(--success); }
+.lv-bar { display: flex; gap: 4px; height: 14px; }
+.lv-bar__seg { position: relative; flex-basis: 0; border-radius: 999px; background: var(--n-100); overflow: hidden; }
+.lv-bar__seg.is-done { background: var(--ink); }
+.lv-bar__seg.is-now { background: var(--blue-100); }
+.lv-bar__fill { position: absolute; inset: 0 auto 0 0; background: var(--brand-blue); border-radius: 999px; transition: width 1s linear; }
+.lv-progress__legend { font-size: 13px; color: var(--n-600); }
+
+/* Siapa bicara */
+.lv-people { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.lv-person { background: var(--n-0); border-radius: var(--r-card); box-shadow: var(--shadow-card); padding: 14px 18px; display: flex; align-items: center; gap: 14px; border: 2px solid transparent; min-width: 0; }
+.lv-person.is-on { border-color: var(--brand-blue); background: var(--blue-50); }
+.lv-person__avatar { width: 44px; height: 44px; border-radius: 999px; border: 2px solid var(--ink); flex: none; display: inline-flex; align-items: center; justify-content: center; }
+.lv-person__avatar--raka { background: var(--brand-blue); }
+.lv-person__avatar--salsa { background: var(--brand-yellow); }
+.lv-person__avatar--human { background: var(--n-0); }
+.lv-person__text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.lv-person__name { font-weight: 700; }
+.lv-person__status { font-size: 14px; color: var(--n-700); }
+.lv-person__pill { font-size: 13px; font-weight: 700; border-radius: var(--r-pill); padding: 3px 10px; background: var(--n-100); color: var(--n-700); white-space: nowrap; }
+.lv-person__pill.is-bad { background: var(--danger-bg); color: var(--danger); }
+
+/* Urutan materi + topik */
+.lv-order { list-style: none; margin: 0 0 20px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.lv-order li { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 700; border-radius: var(--r-pill); padding: 5px 12px; background: var(--n-100); color: var(--n-700); }
+.lv-order li.is-done { background: var(--success-bg); color: var(--success); }
+.lv-order li.is-now { background: var(--ink); color: var(--n-0); }
+.lv-topic { display: flex; gap: 28px; align-items: flex-start; }
+.lv-topic__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.lv-topic__ask { margin: 0; background: var(--blue-50); border-radius: var(--r-input); padding: 12px 16px; font-size: 17px; font-weight: 800; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.lv-topic__ask span { font-size: 12px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--blue-700); }
+.lv-points { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.lv-point { display: flex; align-items: center; gap: 12px; font-size: 16px; min-width: 0; overflow-wrap: anywhere; }
+.lv-point__mark { width: 24px; height: 24px; flex: none; display: inline-flex; align-items: center; justify-content: center; }
+.lv-point__dot { border-radius: 999px; border: 3px solid var(--n-300); }
+.lv-point--done { color: var(--n-600); }
+.lv-point--done .lv-point__mark { color: var(--success); }
+.lv-point--now { font-weight: 800; }
+.lv-point--now .lv-point__dot { background: var(--brand-blue); border-color: var(--ink); }
+.lv-advice { margin-top: 18px; background: var(--blue-50); border-radius: var(--r-input); padding: 12px 16px; display: flex; gap: 10px; align-items: flex-start; font-size: 15px; color: var(--ink); }
+.lv-advice svg { flex: none; color: var(--blue-700); margin-top: 1px; }
+@media (max-width: 760px) { .lv-topic { flex-direction: column; align-items: center; } }
+
+/* Transkrip */
+.lv-transcript__list { margin-top: 12px; max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.lv-line { margin: 0; display: flex; gap: 10px; font-size: 15px; line-height: 1.5; min-width: 0; overflow-wrap: anywhere; }
+.lv-line__who { font-weight: 800; flex: none; min-width: 64px; }
+.lv-line__who--raka { color: var(--blue-700); }
+.lv-line__who--salsa { color: var(--orange-ink); }
+.lv-line__who--human { color: var(--success); }
+.lv-line.is-partial { color: var(--n-600); font-style: italic; }
+.lv-empty { margin: 0; color: var(--n-600); }
+
+/* Status */
+.lv-side { flex: 1 1 300px; max-width: 380px; background: var(--n-0); border-radius: var(--r-panel); box-shadow: var(--shadow-card); padding: 24px; position: sticky; top: 88px; display: flex; flex-direction: column; gap: 16px; }
+@media (max-width: 1100px) { .lv-side { max-width: none; position: static; } }
+.lv-side h2 { margin: 0; font-size: 19px; font-weight: 800; }
+.lv-status { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.lv-status__row { display: grid; grid-template-columns: 12px minmax(0, 1fr); column-gap: 10px; align-items: center; }
+.lv-status__dot { width: 10px; height: 10px; border-radius: 999px; background: var(--success); }
+.lv-status__row.is-bad .lv-status__dot { background: var(--danger); }
+.lv-status__row.is-info .lv-status__dot { background: var(--brand-blue); }
+.lv-status__label { font-weight: 700; font-size: 15px; }
+.lv-status__value { grid-column: 2; font-size: 14px; color: var(--n-700); }
+.lv-status__row.is-bad .lv-status__value { color: var(--danger); font-weight: 700; }
+
+.lv-tech { font-size: 13px; color: var(--n-700); border-top: 1px solid var(--n-200); padding-top: 12px; }
+.lv-tech summary { cursor: pointer; font-weight: 700; min-height: 44px; display: flex; align-items: center; }
+.lv-tech summary:focus-visible { outline: 2px solid var(--brand-blue); outline-offset: 2px; }
+.lv-tech__body { display: flex; flex-direction: column; gap: 6px; max-height: 420px; overflow-y: auto; overflow-wrap: anywhere; }
+.lv-tech__body p { margin: 0; }
+.lv-tech__body h3 { margin: 8px 0 0; font-size: 13px; font-weight: 800; color: var(--ink); }
+.lv-tech__body ol { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.lv-tech__err { color: var(--danger); }

@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Konsol · Saat live</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F8F7F4}
+a{color:#106C7D}a:hover{color:#00515F}
+@keyframes lvl{0%,100%{transform:scaleY(.3)}50%{transform:scaleY(1)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
+@media (prefers-reduced-motion: reduce){*{animation:none!important}}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: radial-gradient(#E6E4E2 1.3px, transparent 1.6px) 0 0 / 24px 24px, #F8F7F4; font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif; color: #111312; font-size: 16px; line-height: 1.5">
+
+  <header style="background: #FFFFFF; border-bottom: 1px solid #E6E4E2">
+    <div style="max-width: 1600px; margin: 0 auto; padding: 12px 40px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
+      <img src="/_blob/a41e09b7cd0f65ec8fada66c984e7e4c" alt="HITS Unikom Radio 103.9 FM" style="height: 40px; width: auto">
+      <span style="display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 800; letter-spacing: .04em; background: #FC9445; color: #111312; border: 2px solid #111312; border-radius: 8px; padding: 4px 10px; box-shadow: 3px 3px 0 #111312">
+        <span style="width: 8px; height: 8px; border-radius: 999px; background: #111312; animation: blink 1.4s ease-in-out infinite"></span>LIVE
+      </span>
+      <span style="display: flex; flex-direction: column; line-height: 1.3; min-width: 0">
+        <span style="font-weight: 700">Kencan dan kecocokan zodiak</span>
+        <span style="font-size: 13px; color: #646361">Favian + Salsa · Topik 1 dari 6</span>
+      </span>
+      <span style="flex: 1"></span>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap">
+        <button type="button" style="font: inherit; font-size: 14px; font-weight: 600; height: 44px; padding: 0 16px; border: 1.5px solid #E6E4E2; border-radius: 10px; background: #FFFFFF; color: #111312; cursor: pointer">Jeda</button>
+        <button type="button" style="font: inherit; font-size: 14px; font-weight: 600; height: 44px; padding: 0 16px; border: 1.5px solid #E6E4E2; border-radius: 10px; background: #FFFFFF; color: #111312; cursor: pointer">Topik Selanjutnya</button>
+        <span style="width: 1px; background: #E6E4E2; margin: 4px 4px"></span>
+        <button type="button" style="font: inherit; font-size: 14px; font-weight: 700; height: 44px; padding: 0 16px; border: 1.5px solid #A83630; border-radius: 10px; background: #FFFFFF; color: #A83630; cursor: pointer">Akhiri siaran</button>
+      </div>
+    </div>
+  </header>
+
+  <main style="max-width: 1600px; margin: 0 auto; padding: 32px 40px; display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+
+    <div style="flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+
+      <section aria-label="Progres siaran" style="background: #FFFFFF; border-radius: 16px; box-shadow: 0 1px 2px rgba(17,19,18,.04), 0 4px 16px rgba(17,19,18,.06); padding: 18px 24px; display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap">
+          <span style="font-size: 28px; font-weight: 800; letter-spacing: -.01em">9:50</span>
+          <span style="font-size: 15px; color: #646361; flex: 1">dari 60:00 menit siaran</span>
+          <span style="font-size: 13px; font-weight: 700; color: #077836; background: #E8FBEB; border-radius: 999px; padding: 4px 12px">Sesuai jadwal</span>
+        </div>
+        <div role="img" aria-label="Opening selesai, topik 1 berjalan, topik 2 sampai 6 dan closing belum" style="display: flex; gap: 4px; height: 12px">
+          <span style="flex: 3; border-radius: 4px; background: #077836"></span>
+          <span style="flex: 9; border-radius: 4px; background: #DBF4FA; overflow: hidden; display: flex"><span style="width: 76%; background: #69C1D5"></span></span>
+          <span style="flex: 9; border-radius: 4px; background: #F1F0ED"></span>
+          <span style="flex: 9; border-radius: 4px; background: #F1F0ED"></span>
+          <span style="flex: 9; border-radius: 4px; background: #F1F0ED"></span>
+          <span style="flex: 9; border-radius: 4px; background: #F1F0ED"></span>
+          <span style="flex: 9; border-radius: 4px; background: #F1F0ED"></span>
+          <span style="flex: 3; border-radius: 4px; background: #F1F0ED"></span>
+        </div>
+        <span style="font-size: 13px; color: #646361">Opening 3 mnt · 6 topik × ±9 mnt · Closing 3 mnt</span>
+      </section>
+
+      <section aria-label="Siapa bicara" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 16px">
+        <div style="background: #FFFFFF; border-radius: 16px; box-shadow: 0 1px 2px rgba(17,19,18,.04), 0 4px 16px rgba(17,19,18,.06); padding: 18px 20px; display: flex; align-items: center; gap: 14px">
+          <span style="width: 48px; height: 48px; border-radius: 999px; background: #F1F0ED; display: inline-flex; align-items: center; justify-content: center; flex: none">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111312" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg>
+          </span>
+          <span style="display: flex; flex-direction: column; flex: 1">
+            <span style="font-weight: 700">Favian</span>
+            <span style="font-size: 14px; color: #646361">Menunggu giliran</span>
+          </span>
+          <span style="font-size: 12px; font-weight: 600; color: #646361; background: #F1F0ED; border-radius: 999px; padding: 4px 10px">Mic dijeda</span>
+        </div>
+        <div style="background: #FFF8D4; border: 2px solid #111312; border-radius: 16px; padding: 16px 18px; display: flex; align-items: center; gap: 14px">
+          <span style="width: 48px; height: 48px; border-radius: 999px; background: #FEE980; border: 2px solid #111312; flex: none"></span>
+          <span style="display: flex; flex-direction: column; flex: 1">
+            <span style="font-weight: 700">Salsa</span>
+            <span style="font-size: 14px; color: #111312">Sedang bicara</span>
+          </span>
+          <span aria-hidden="true" style="display: inline-flex; align-items: center; gap: 4px; height: 28px">
+            <span style="width: 5px; height: 28px; border-radius: 3px; background: #111312; animation: lvl .7s ease-in-out infinite"></span>
+            <span style="width: 5px; height: 28px; border-radius: 3px; background: #111312; animation: lvl .7s ease-in-out .12s infinite"></span>
+            <span style="width: 5px; height: 28px; border-radius: 3px; background: #111312; animation: lvl .7s ease-in-out .24s infinite"></span>
+            <span style="width: 5px; height: 28px; border-radius: 3px; background: #111312; animation: lvl .7s ease-in-out .36s infinite"></span>
+            <span style="width: 5px; height: 28px; border-radius: 3px; background: #111312; animation: lvl .7s ease-in-out .48s infinite"></span>
+          </span>
+        </div>
+      </section>
+
+      <section style="background: #FFFFFF; border-radius: 16px; box-shadow: 0 1px 2px rgba(17,19,18,.04), 0 4px 16px rgba(17,19,18,.06); padding: 24px; display: flex; flex-direction: column; gap: 20px">
+        <ol aria-label="Urutan materi" style="margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 8px; font-size: 13px; font-weight: 600">
+          <li style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: #E8FBEB; color: #077836">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"></path></svg>Opening
+          </li>
+          <li style="display: inline-flex; align-items: center; padding: 6px 12px; border-radius: 999px; background: #111312; color: #FFFFFF">Topik 1</li>
+          <li style="display: inline-flex; align-items: center; padding: 6px 12px; border-radius: 999px; background: #F1F0ED; color: #646361">Topik 2</li>
+          <li style="display: inline-flex; align-items: center; padding: 6px 12px; border-radius: 999px; background: #F1F0ED; color: #646361">Topik 3</li>
+          <li style="display: inline-flex; align-items: center; padding: 6px 12px; border-radius: 999px; background: #F1F0ED; color: #646361">Topik 4</li>
+          <li style="display: inline-flex; align-items: center; padding: 6px 12px; border-radius: 999px; background: #F1F0ED; color: #646361">Topik 5</li>
+          <li style="display: inline-flex; align-items: center; padding: 6px 12px; border-radius: 999px; background: #F1F0ED; color: #646361">Topik 6</li>
+          <li style="display: inline-flex; align-items: center; padding: 6px 12px; border-radius: 999px; background: #F1F0ED; color: #646361">Closing</li>
+        </ol>
+
+        <div style="display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap">
+          <div style="flex: 1 1 360px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+            <h2 style="margin: 0; font-size: 28px; font-weight: 800; line-height: 1.2; letter-spacing: -.01em">First date gagal gara-gara beda elemen</h2>
+            <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 16px">
+              <li style="display: flex; gap: 12px; align-items: flex-start; color: #646361">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#077836" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-label="Sudah dibahas" role="img" style="flex: none; margin-top: 2px"><path d="M5 12l5 5L20 7"></path></svg>
+                <span style="text-decoration: line-through; text-decoration-color: #A6A4A2">Api ketemu air jadinya padam atau mendidih?</span>
+              </li>
+              <li style="display: flex; gap: 12px; align-items: flex-start; font-weight: 700">
+                <span aria-label="Sedang dibahas" role="img" style="width: 20px; height: 20px; flex: none; margin-top: 2px; border-radius: 999px; background: #69C1D5; border: 2px solid #111312; box-sizing: border-box"></span>
+                Tanda zodiak yang paling susah ditebak
+              </li>
+              <li style="display: flex; gap: 12px; align-items: flex-start">
+                <span aria-label="Belum dibahas" role="img" style="width: 20px; height: 20px; flex: none; margin-top: 2px; border-radius: 999px; border: 2px solid #D5D4D1; box-sizing: border-box"></span>
+                Pengalaman nge-date sama zodiak tertentu
+              </li>
+            </ul>
+          </div>
+
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; flex: none">
+            <div role="img" aria-label="Sisa waktu topik 2 menit 10 detik dari 9 menit" style="position: relative; width: 120px; height: 120px">
+              <svg width="120" height="120" viewBox="0 0 120 120" aria-hidden="true">
+                <circle cx="60" cy="60" r="50" fill="none" stroke="#F1F0ED" stroke-width="12"></circle>
+                <circle cx="60" cy="60" r="50" fill="none" stroke="#69C1D5" stroke-width="12" stroke-linecap="round" stroke-dasharray="314" stroke-dashoffset="239" transform="rotate(-90 60 60)"></circle>
+              </svg>
+              <span style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; line-height: 1.2">
+                <span style="font-size: 23px; font-weight: 800">2:10</span>
+                <span style="font-size: 12px; color: #646361">tersisa</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div style="background: #E9FBFF; border-radius: 10px; padding: 14px 16px; display: flex; gap: 12px; align-items: flex-start">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#106C7D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M4 5h16v11H9l-5 4z"></path></svg>
+          <span style="font-size: 15px"><strong>Saran pengarah acara:</strong> poin 3 belum dibahas. Setelah itu siap pindah ke topik 2.</span>
+        </div>
+      </section>
+
+      <section style="background: #FFFFFF; border-radius: 16px; box-shadow: 0 1px 2px rgba(17,19,18,.04), 0 4px 16px rgba(17,19,18,.06); padding: 24px; display: flex; flex-direction: column; gap: 14px">
+        <h2 style="margin: 0; font-size: 16px; font-weight: 700">Transkrip</h2>
+        <div style="display: flex; flex-direction: column; gap: 14px; font-size: 15px">
+          <p style="margin: 0; display: flex; gap: 12px; padding: 0 12px"><span style="font-weight: 700; width: 64px; flex: none">Favian</span><span>Kalau lo sendiri elemennya apa, Sal? Pernah nggak first date gagal gara-gara beda elemen?</span></p>
+          <p style="margin: 0; display: flex; gap: 12px; background: #FFF8D4; border-radius: 10px; padding: 10px 12px"><span style="font-weight: 700; width: 64px; flex: none">Salsa</span><span>Gue air, dan jujur pernah banget! Dia api, ngobrolnya semangat terus, gue malah capek duluan. Sobat Hits, zodiak kalian apa nih?</span></p>
+        </div>
+      </section>
+    </div>
+
+    <aside style="flex: 1 1 380px; min-width: 0; background: #FFFFFF; border-radius: 16px; box-shadow: 0 1px 2px rgba(17,19,18,.04), 0 4px 16px rgba(17,19,18,.06); padding: 24px; display: flex; flex-direction: column; gap: 16px">
+      <h2 style="margin: 0; font-size: 16px; font-weight: 700">Status</h2>
+      <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; font-size: 14px">
+        <li style="display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #F1F0ED">
+          <span style="width: 8px; height: 8px; border-radius: 999px; background: #077836"></span>
+          <span style="flex: 1">Mikrofon studio</span><span style="color: #646361">Dijeda saat AI bicara</span>
+        </li>
+        <li style="display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #F1F0ED">
+          <span style="width: 8px; height: 8px; border-radius: 999px; background: #077836"></span>
+          <span style="flex: 1">Layar untuk OBS</span><span style="color: #646361">Tersambung</span>
+        </li>
+        <li style="display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #F1F0ED">
+          <span style="width: 8px; height: 8px; border-radius: 999px; background: #077836"></span>
+          <span style="flex: 1">Prompter</span><span style="color: #646361">Tersambung</span>
+        </li>
+        <li style="display: flex; align-items: center; gap: 10px; padding: 10px 0">
+          <span style="width: 8px; height: 8px; border-radius: 999px; background: #077836"></span>
+          <span style="flex: 1">Kuota suara</span><span style="color: #646361">±30 menit lagi, lalu cadangan</span>
+        </li>
+      </ul>
+      <details style="font-size: 14px">
+        <summary style="cursor: pointer; font-weight: 600; color: #106C7D; padding: 8px 0">Detail teknis</summary>
+        <p style="margin: 8px 0 0; color: #646361">Nama model dan vendor, sisa kuota dalam angka mentah, waktu respons per giliran, dan hasil pemeriksa ucapan. Untuk peneliti.</p>
+      </details>
+    </aside>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

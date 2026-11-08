@@ -15,9 +15,13 @@ def test_catalog_ids_are_unique():
 
 
 def test_catalog_has_current_voices_and_valid_entries():
-    ids = {v.id: v for v in load_voice_catalog()}
+    catalog = load_voice_catalog()
+    ids = {v.id: v for v in catalog}
     assert ids["q8qwd1jY2jS3AWOBeq25"].name == "Pratama" and ids["ffTJE9l3Kt2ipEM32UOc"].name == "Aita"
     assert ids["id-ID-ArdiNeural"].provider == "edge" and find_voice("tidak-ada") is None
+    el_male = [v for v in catalog if v.provider == "elevenlabs" and v.gender == "male"]
+    el_female = [v for v in catalog if v.provider == "elevenlabs" and v.gender == "female"]
+    assert len(el_male) == 6 and len(el_female) == 6
 
 
 def test_operator_selection_wins_over_defaults_and_resets():
@@ -142,3 +146,11 @@ async def test_turns_jsonl_and_session_start_record_the_voice(tmp_path):
     assert human["tts_voice"] == "" and raka["tts_voice"] == "mock-raka"
     start = next(e for e in map(json.loads, open(engine.log.path, encoding="utf-8")) if e["type"] == "session_start")
     assert start["voices"] == {"raka": "mock-raka"}
+
+
+def test_voice_sample_before_live_only(client):
+    r = client.post("/api/voices/sample", json={"persona": "salsa"})
+    assert r.status_code == 200 and r.json()["audio_url"].startswith("/audio/sample_salsa_")
+    assert client.get(r.json()["audio_url"]).status_code == 200
+    assert client.post("/api/voices/sample", json={"persona": "budi"}).status_code == 422
+    assert client.post("/api/voices/sample", json={"persona": "raka", "voice_id": "tidak-ada"}).status_code == 422

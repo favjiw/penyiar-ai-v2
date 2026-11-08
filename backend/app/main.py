@@ -25,6 +25,7 @@ from app.blocker import (
 from app.blocker.store import now_iso
 from app.config import Settings, get_settings
 from app.llm import create_llm_client
+from app.llm.quota import QuotaCounter
 from app.schemas import Blocker, GenerateBlockerRequest
 from app.show.api import router as show_router
 from app.tts import create_tts
@@ -43,7 +44,8 @@ def build_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        llm = create_llm_client(settings)
+        app.state.quota = QuotaCounter(settings.quota_path, settings.rpd_for_model)
+        llm = create_llm_client(settings, quota=app.state.quota)
         store = BlockerStore(settings.DATA_DIR)
         app.state.settings = settings
         app.state.llm = llm

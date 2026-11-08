@@ -241,7 +241,7 @@ async def test_persona_down_for_good_wraps_up_to_closing(tmp_path):
     turns = [l for l in read_log(engine.log.path) if l["type"] == "turn"]
     assert len(turns) <= 8  # tidak berputar di kalimat aman sampai topik habis
     assert turns[-1]["segment"] == "closing"
-    assert any(t == "alert" and "Closing" in d["message"] for t, d in events)
+    assert any(t == "alert" and "Closing" in d["detail"] for t, d in events)
 
 
 async def test_supervisor_drops_to_rules_on_daily_quota(tmp_path):
@@ -252,7 +252,8 @@ async def test_supervisor_drops_to_rules_on_daily_quota(tmp_path):
     assert engine.supervisor.mode == "rules"
     turns = [l for l in read_log(engine.log.path) if l["type"] == "turn"]
     assert turns[-1]["supervisor"]["mode"] == "rules"
-    assert sum(1 for t, d in events if t == "alert" and "Supervisor" in d["message"]) == 1
+    assert sum(1 for t, d in events if t == "alert" and "Supervisor" in d["detail"]) == 1
+    assert next(d for t, d in events if t == "alert" and "Supervisor" in d["detail"])["code"] == "supervisor_rules"
 
 
 async def test_pipeline_depth_controls_turns_prepared_ahead(tmp_path):
@@ -316,4 +317,4 @@ async def test_short_network_blip_does_not_wrap_up(tmp_path):
     await wait_end(engine)
     turns = [l for l in read_log(engine.log.path) if l["type"] == "turn"]
     assert {t["topic_id"] for t in turns} >= {"t1", "t2"}  # siaran tidak dipotong ke Closing
-    assert not any(t == "alert" and "Closing" in d["message"] for t, d in events)
+    assert not any(t == "alert" and "Closing" in d["detail"] for t, d in events)
