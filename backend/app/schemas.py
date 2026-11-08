@@ -9,7 +9,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, computed_field, model_validator
 
 
 class Emotion(str, Enum):
@@ -76,6 +76,7 @@ class BlockerPoint(BaseModel):
 class BlockerTopic(BaseModel):
     id: str = ""
     judul: str
+    menit: int = Field(default=9, ge=1, le=30)  # perkiraan lama obrolan topik (PRD v2.7 FR-1)
     sudut_pandang: str
     poin: list[BlockerPoint]
     pertanyaan_penonton: str
@@ -100,6 +101,7 @@ class Blocker(BaseModel):
     locked: bool = False
     created_at: str
     variant_label: str
+    durasi_menit: Optional[int] = None  # target durasi siaran yang dipakai saat generate (FR-1 v2.7)
     opening: BlockerOpening
     topics: list[BlockerTopic]
     closing: BlockerClosing
@@ -135,11 +137,38 @@ class DraftVariants(BaseModel):
     variants: list[DraftVariant]
 
 
+DURASI_PILIHAN = (30, 45, 60, 90)  # menit (PRD v2.7 FR-1)
+MAX_TOPICS = 8  # batas editor materi
+OPENING_CLOSING_MENIT = 6  # Opening ±3 + Closing ±3
+MENIT_PER_TOPIK = 9
+
+
+def topics_for_duration(durasi_menit: int) -> int:
+    """Jumlah topik ≈ (durasi − 6) / 9, dibatasi 1..8 (60 menit → 6 topik)."""
+    return max(1, min(MAX_TOPICS, round((durasi_menit - OPENING_CLOSING_MENIT) / MENIT_PER_TOPIK)))
+
+
+def minutes_per_topic(durasi_menit: Optional[int], n_topics: int) -> int:
+    if not durasi_menit or n_topics <= 0:
+        return MENIT_PER_TOPIK
+    return max(1, round((durasi_menit - OPENING_CLOSING_MENIT) / n_topics))
+
+
 class GenerateBlockerRequest(BaseModel):
     tema: str = Field(min_length=1, max_length=60)
     catatan: str = Field(default="", max_length=500)
-    jumlah_topik: int = Field(default=3, ge=1, le=3)
+    # Bila durasi_menit diisi, jumlah_topik dihitung darinya (jumlah_topik yang dikirim diabaikan).
+    durasi_menit: Optional[int] = None
+    jumlah_topik: int = Field(default=3, ge=1, le=MAX_TOPICS)
     jumlah_varian: int = Field(default=3, ge=2, le=3)
+
+    @model_validator(mode="after")
+    def _durasi(self) -> "GenerateBlockerRequest":
+        if self.durasi_menit is not None:
+            if self.durasi_menit not in DURASI_PILIHAN:
+                raise ValueError(f"durasi_menit harus salah satu dari {DURASI_PILIHAN}")
+            self.jumlah_topik = topics_for_duration(self.durasi_menit)
+        return self
 
 
 # ── Show Engine (Tahap 2: FR-2, FR-4, FR-5, FR-12) ───────────────────────────
@@ -164,6 +193,11 @@ class StartShowRequest(BaseModel):
     human_name: str = ""  # mode A: nama tampilan penyiar manusia (§15.2 #2)
     voices: dict[str, str] = Field(default_factory=dict)  # persona -> id suara dari daftar terkurasi; kosong = bawaan
     seed: Optional[int] = None
+
+
+class VoiceSampleRequest(BaseModel):
+    persona: str
+    voice_id: str = ""  # kosong = suara bawaan persona
 
 
 class PrecheckRequest(BaseModel):

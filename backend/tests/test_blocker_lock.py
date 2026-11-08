@@ -24,7 +24,7 @@ def test_lock_rejects_points_out_of_range(draft, count):
     edited = b.model_copy(deep=True)
     edited.topics[1].poin = [BlockerPoint(text=f"poin {i}") for i in range(count)]
     store.update(b.id, edited)  # draf boleh belum rapi
-    with pytest.raises(BlockerInvalid, match=rf"Topik 2.*{count} poin"):
+    with pytest.raises(BlockerInvalid, match=rf"Topik 2.*{count} bahan obrolan"):
         store.lock(b.id)
     assert not store.get(b.id).locked
 
@@ -39,4 +39,4 @@ def test_lock_rejects_empty_fields_and_lists_every_problem(draft):
     with pytest.raises(BlockerInvalid) as err:
         store.lock(b.id)
     msg = str(err.value)
-    assert "hook kosong" in msg and "kalimat transisi kosong" in msg and "ajakan kosong" in msg
+    assert "kalimat pembuka kosong" in msg and "kalimat pindah topik kosong" in msg and "ajakan kosong" in msg

@@ -146,3 +146,11 @@ async def test_turns_jsonl_and_session_start_record_the_voice(tmp_path):
     assert human["tts_voice"] == "" and raka["tts_voice"] == "mock-raka"
     start = next(e for e in map(json.loads, open(engine.log.path, encoding="utf-8")) if e["type"] == "session_start")
     assert start["voices"] == {"raka": "mock-raka"}
+
+
+def test_voice_sample_before_live_only(client):
+    r = client.post("/api/voices/sample", json={"persona": "salsa"})
+    assert r.status_code == 200 and r.json()["audio_url"].startswith("/audio/sample_salsa_")
+    assert client.get(r.json()["audio_url"]).status_code == 200
+    assert client.post("/api/voices/sample", json={"persona": "budi"}).status_code == 422
+    assert client.post("/api/voices/sample", json={"persona": "raka", "voice_id": "tidak-ada"}).status_code == 422

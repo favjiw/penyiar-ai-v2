@@ -12,7 +12,7 @@ import unicodedata
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from app.schemas import Blocker
+from app.schemas import MAX_TOPICS, Blocker
 
 WIB = timezone(timedelta(hours=7))
 
@@ -48,16 +48,14 @@ def normalize(blocker: Blocker) -> Blocker:
 
     Id ini dipakai Showrunner untuk menandai poin yang tercakup, jadi harus stabil
     setelah blocker dikunci; karena itu hanya dinormalisasi selama masih draf.
+    Draf boleh setengah jadi (topik baru tanpa judul/bahan) supaya editor bisa simpan
+    otomatis; kelengkapan baru ditegakkan `validate_for_lock` saat siaran dimulai.
     """
-    if not 1 <= len(blocker.topics) <= 3:
-        raise BlockerInvalid("Blocker harus berisi 1-3 topik")
+    if not 1 <= len(blocker.topics) <= MAX_TOPICS:
+        raise BlockerInvalid(f"Materi harus berisi 1-{MAX_TOPICS} topik")
     for i, topic in enumerate(blocker.topics, 1):
         topic.id = f"t{i}"
         topic.poin = [p for p in topic.poin if p.text.strip()]
-        if not topic.poin:
-            raise BlockerInvalid(f"Topik {i} tidak punya poin")
-        if not topic.judul.strip():
-            raise BlockerInvalid(f"Topik {i} tanpa judul")
         for j, point in enumerate(topic.poin, 1):
             point.id = f"t{i}p{j}"
     blocker.opening.poin = [p for p in blocker.opening.poin if p.strip()]
@@ -68,16 +66,19 @@ MIN_POINTS, MAX_POINTS = 3, 5
 
 
 def validate_for_lock(blocker: Blocker) -> None:
-    """Aturan FR-1 yang wajib terpenuhi sebelum blocker dikunci (draf boleh belum rapi)."""
+    """Aturan FR-1 yang wajib terpenuhi sebelum materi dikunci (draf boleh belum rapi).
+    Pesan memakai istilah UI (DESIGN.md §5) karena tampil ke operator."""
     problems = []
     if not blocker.opening.hook.strip():
-        problems.append("Opening: hook kosong")
+        problems.append("Opening: kalimat pembuka kosong")
     if not blocker.closing.rangkuman.strip() or not blocker.closing.ajakan.strip():
         problems.append("Closing: rangkuman atau ajakan kosong")
     for i, t in enumerate(blocker.topics, 1):
+        if not t.judul.strip():
+            problems.append(f"Topik {i}: judul kosong")
         if not MIN_POINTS <= len(t.poin) <= MAX_POINTS:
-            problems.append(f"Topik {i} ({t.judul[:30]}): {len(t.poin)} poin, harus {MIN_POINTS}-{MAX_POINTS}")
-        for name, label in (("sudut_pandang", "sudut pandang"), ("pertanyaan_penonton", "pertanyaan ke penonton"), ("transisi", "kalimat transisi")):
+            problems.append(f"Topik {i} ({t.judul[:30]}): {len(t.poin)} bahan obrolan, harus {MIN_POINTS}-{MAX_POINTS}")
+        for name, label in (("sudut_pandang", "sudut pandang"), ("pertanyaan_penonton", "pertanyaan ke penonton"), ("transisi", "kalimat pindah topik")):
             if not getattr(t, name).strip():
                 problems.append(f"Topik {i}: {label} kosong")
     if problems:
@@ -116,7 +117,7 @@ class BlockerStore:
         """Simpan editan isi; metadata (id, versi, status kunci, asal) tetap dari server."""
         current = self.get(blocker_id)
         if current.locked:
-            raise BlockerLocked(f"{blocker_id} sudah dikunci; buat versi baru untuk mengubah")
+            raise BlockerLocked("Materi ini sudah dikunci (pernah dipakai live); buat versi baru untuk mengubah")
         merged = edited.model_copy(
             update={
                 "id": current.id,
@@ -142,7 +143,7 @@ class BlockerStore:
     def new_version(self, blocker_id: str) -> Blocker:
         source = self.get(blocker_id)
         if not source.locked:
-            raise BlockerInvalid("Versi baru hanya dibuat dari blocker yang sudah dikunci; draf bisa langsung diedit")
+            raise BlockerInvalid("Versi baru hanya dibuat dari materi yang sudah dikunci; draf bisa langsung diubah")
         copy = source.model_copy(
             deep=True,
             update={

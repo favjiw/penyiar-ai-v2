@@ -22,7 +22,7 @@ def test_start_rejects_draft_that_cannot_be_locked(client):
     v["topics"].append({**v["topics"][0], "poin": v["topics"][0]["poin"][:1]})  # topik manual baru, baru satu poin
     assert client.put(f"/api/blocker/{v['id']}", json=v).status_code == 200
     r = client.post("/api/show/start", json={"blocker_id": v["id"]})
-    assert r.status_code == 422 and "poin" in r.json()["detail"]
+    assert r.status_code == 422 and "bahan obrolan" in r.json()["detail"]
     assert client.get(f"/api/blocker/{v['id']}").json()["locked"] is False
     assert client.post("/api/show/pause").status_code == 409  # tidak ada siaran
 

@@ -1,4 +1,4 @@
-"""Generator Blocker (FR-1): tema → 2–3 varian rundown Opening, 1–3 topik, Closing.
+"""Generator materi/blocker (FR-1): tema (+ durasi) → 2–3 varian Opening, topik, Closing.
 
 Keluaran LLM divalidasi terhadap aturan FR-1. Bila parsing atau validasi gagal,
 permintaan diulang (maksimal MAX_RETRIES kali) dengan daftar masalahnya; tetap gagal → galat ke UI.
@@ -22,6 +22,7 @@ from app.schemas import (
     DraftVariant,
     DraftVariants,
     GenerateBlockerRequest,
+    minutes_per_topic,
 )
 
 logger = logging.getLogger(__name__)
@@ -78,10 +79,12 @@ def validate_variants(drafts: DraftVariants, req: GenerateBlockerRequest) -> lis
 
 def to_blocker(variant: DraftVariant, req: GenerateBlockerRequest, generation_id: str) -> Blocker:
     """Draf LLM → Blocker: potong kelebihan, beri id, dan tandai poin berangka sebagai perlu_cek."""
+    menit = minutes_per_topic(req.durasi_menit, min(len(variant.topics), req.jumlah_topik))
     topics = [
         BlockerTopic(
             id="",
             judul=t.judul.strip(),
+            menit=menit,
             sudut_pandang=t.sudut_pandang.strip(),
             poin=[
                 BlockerPoint(id="", text=p.text.strip(), perlu_cek=p.perlu_cek or bool(_DIGIT.search(p.text)))
@@ -100,6 +103,7 @@ def to_blocker(variant: DraftVariant, req: GenerateBlockerRequest, generation_id
             catatan=req.catatan.strip(),
             created_at=now_iso(),
             variant_label=variant.variant_label.strip(),
+            durasi_menit=req.durasi_menit,
             opening=opening,
             topics=topics,
             closing=variant.closing,
@@ -114,6 +118,11 @@ def build_prompt(req: GenerateBlockerRequest, hindari: list[str] | None = None, 
         f"JUMLAH_TOPIK: {req.jumlah_topik}",
         f"JUMLAH_VARIAN: {req.jumlah_varian}",
     ]
+    if req.durasi_menit:
+        lines.append(
+            f"DURASI SIARAN: {req.durasi_menit} menit (±{minutes_per_topic(req.durasi_menit, req.jumlah_topik)} menit per topik); "
+            "topik harus cukup kaya untuk diobrolin selama itu."
+        )
     if req.catatan.strip():
         lines.append(f"CATATAN PRODUSER (sasaran penonton, nuansa, hal yang dihindari): {req.catatan.strip()}")
     if hindari:
@@ -171,6 +180,9 @@ class BlockerGenerator:
         """Buat ulang satu varian draf dengan tema dan jumlah topik yang sama."""
         old = self._store.get(blocker_id)
         req = GenerateBlockerRequest(tema=old.tema, catatan=old.catatan, jumlah_topik=len(old.topics), jumlah_varian=2)
+        if old.durasi_menit:
+            # Pertahankan menit dan durasi asal tanpa menghitung ulang jumlah topik dari durasi.
+            req = req.model_copy(update={"durasi_menit": old.durasi_menit})
         avoid = [old.variant_label, *hindari]
         try:
             drafts, meta = await self._draft(req, avoid)

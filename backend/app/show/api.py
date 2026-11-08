@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -13,7 +14,7 @@ from fastapi.responses import FileResponse
 
 from app.blocker.store import BlockerInvalid
 from app.data.personas import load_personas
-from app.schemas import PrecheckRequest, PTTTurnRequest, ShowState, StartShowRequest
+from app.schemas import PrecheckRequest, PTTTurnRequest, ShowState, StartShowRequest, VoiceSampleRequest
 from app.session_log import read_log
 from app.show.engine import ShowEngine
 from app.show.mode_a import HumanLedEngine
@@ -117,6 +118,32 @@ async def voices(request: Request):
         "voices": load_voice_catalog(),
         "current": {p: tts.voice_for(p) for p in load_personas()},
     }
+
+
+SAMPLE_TEXT = "Halo Sobat Hits, gue {name}. Yuk ngobrol santai bareng gue hari ini!"
+
+
+@router.post("/api/voices/sample")
+async def voice_sample(req: VoiceSampleRequest, request: Request):
+    """Contoh suara untuk tombol "Dengar" sebelum live (PRD v2.7 FR-6). Tidak tersedia saat siaran berjalan."""
+    running = current(request)
+    if running is not None and running.state != ShowState.ENDED:
+        raise HTTPException(409, "Contoh suara hanya bisa diputar sebelum live")
+    personas = load_personas()
+    if req.persona not in personas:
+        raise HTTPException(422, f"Persona {req.persona!r} tidak dikenal")
+    tts = request.app.state.tts
+    try:
+        tts.set_voices({req.persona: req.voice_id} if req.voice_id else {}, list(DEFAULT_AI_IDS))
+        result = await tts.synthesize(SAMPLE_TEXT.format(name=personas[req.persona].name), req.persona)
+    except TTSError as e:
+        raise HTTPException(422, str(e)[:300])
+    name = f"sample_{req.persona}_{hashlib.sha1(result.voice.encode()).hexdigest()[:10]}.{result.ext}"
+    path = audio_dir(request) / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(result.audio)
+    # fallback=True: suara utama gagal, yang terdengar adalah suara cadangan (bukan suara yang dipilih).
+    return {"audio_url": f"/audio/{name}", "voice": result.voice.split("|")[0], "provider": result.provider, "fallback": result.fallback_used}
 
 
 @router.post("/api/precheck")
