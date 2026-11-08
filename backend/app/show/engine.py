@@ -72,6 +72,7 @@ ALERT_TEXT: dict[str, tuple[str, str, str]] = {
     "engine_error": ("yellow", "Ada gangguan di sistem", "Siaran tetap jalan. Lihat Detail teknis."),
 }
 ALERT_STAGE_CODE = {"tts": "tts_silent", "quota": "llm_fallback", "engine": "ai_failing"}
+OPENING_CLOSING_MAX_TURNS = 24  # batas atas giliran Opening/Closing berbasis waktu (cegah AI mengulang-ulang)
 OPENING_CLOSING_TARGET_S = 180  # Opening ±3 menit, Closing ±3 menit (PRD v2.7 FR-1, §1.3.3)
 
 
@@ -192,6 +193,7 @@ class ShowEngine:
         self._paused_at: Optional[float] = None
         self._ended_at: Optional[float] = None
         self._segment_started_active = 0.0
+        self._seg_audio_s = 0.0  # audio Opening/Closing yang sudah dibuat (mode B, materi berdurasi)
         # Diisi API saat mulai: {credits_left, per_min, used_at_start}; credits_left None = sisa tidak diketahui.
         self.tts_budget: dict[str, Any] = {}
         self._tts_low_alerted = False
@@ -408,6 +410,7 @@ class ShowEngine:
 
     def _advance_segment(self, reason: str = "advance") -> None:
         p = self.plan
+        self._seg_audio_s = 0.0
         self._end_point(reason)
         p.point_idx, self._early_close, self._closed_point = 0, False, None
         self.point_clock.reset()
@@ -451,6 +454,17 @@ class ShowEngine:
         return next(p for p in self.personas if p.id == choice)
 
     # ── Batas waktu per poin (R4) ────────────────────────────────────────────
+
+    def _segment_done(self, turns: int, min_turns: int) -> bool:
+        """Opening/Closing mode B selesai? Materi berdurasi (PRD v2.7): setelah ±3 menit audio (minimal `min_turns`,
+        maksimal OPENING_CLOSING_MAX_TURNS giliran). Materi lama tanpa durasi: tepat `min_turns` giliran seperti dulu."""
+        if not self.blocker.durasi_menit:
+            return turns >= min_turns
+        if turns >= OPENING_CLOSING_MAX_TURNS:
+            return True
+        # Perkiraan audio setelah giliran ini: rata-rata giliran segmen ini, supaya giliran penutup tidak jauh melewati target.
+        avg = self._seg_audio_s / max(1, turns - 1) if turns > 1 else 0.0
+        return turns >= min_turns and self._seg_audio_s + avg * 0.5 >= OPENING_CLOSING_TARGET_S
 
     def _sync_point_limit(self) -> None:
         """Mode B: batas poin = menit topik ÷ jumlah poin (keputusan Favian 8 Nov 2026), minimal POINT_TIME_LIMIT_S
@@ -568,7 +582,7 @@ class ShowEngine:
             steer_hint=self.steer_hint,
             transition_to=b.topics[p.topic_idx + 1] if p.pending == "transition" else None,
             to_closing=p.pending == "to_closing",
-            closing_final=p.segment == "closing" and p.seg_turns >= self.settings.CLOSING_TURNS - 1,
+            closing_final=p.segment == "closing" and self._segment_done(p.seg_turns + 1, self.settings.CLOSING_TURNS),
             topics_done=done,
             mode=self.mode,
             others=others if len(others) > 1 else [],  # satu lawan bicara cukup lewat partner_name
@@ -777,9 +791,11 @@ class ShowEngine:
             self._advance_segment()
             return
         p.seg_turns += 1
-        if p.segment == "opening" and p.seg_turns >= self.settings.OPENING_TURNS:
+        if p.segment in ("opening", "closing"):
+            self._seg_audio_s += prepared.duration_s
+        if p.segment == "opening" and self._segment_done(p.seg_turns, self.settings.OPENING_TURNS):
             self._advance_segment()
-        elif p.segment == "closing" and p.seg_turns >= self.settings.CLOSING_TURNS:
+        elif p.segment == "closing" and self._segment_done(p.seg_turns, self.settings.CLOSING_TURNS):
             p.finished = True
         elif p.segment == "topic":
             prog = self.progress[ctx.topic.id]

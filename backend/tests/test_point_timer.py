@@ -218,3 +218,20 @@ async def test_mode_b_point_limit_follows_topic_minutes(tmp_path):
     engine._advance_segment()  # Opening → topik 1
     t = engine.blocker.topics[0]
     assert engine.point_clock.limit_s == max(20, t.menit * 60 / len(t.poin))
+
+
+async def test_mode_b_opening_and_closing_follow_minutes_for_duration_materials(tmp_path):
+    """Materi berdurasi (PRD v2.7): Opening/Closing mode B diisi ±3 menit audio (maks. 24 giliran), bukan 2 giliran."""
+    engine, _ = make_engine(tmp_path, **TIMER)
+    engine.blocker.durasi_menit = 60
+    engine.start()
+    await wait_end(engine, timeout=30)
+    turns = [l for l in read_log(engine.log.path) if l["type"] == "turn"]
+    opening = [t for t in turns if t["segment"] == "opening"]
+    closing = [t for t in turns if t["segment"] == "closing"]
+    assert len(opening) > 2 and len(closing) > 2
+    assert len(opening) <= 24 and len(closing) <= 24
+    old, _ = make_engine(tmp_path / "lama", **TIMER)  # materi lama tanpa durasi: tetap 2 giliran
+    old.start()
+    await wait_end(old, timeout=30)
+    assert sum(1 for l in read_log(old.log.path) if l["type"] == "turn" and l["segment"] == "opening") == 2
