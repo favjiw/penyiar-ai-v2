@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Stage · Panel AI</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+@keyframes bob{0%,100%{transform:translateY(0) rotate(0deg)}30%{transform:translateY(-5px) rotate(1.5deg)}65%{transform:translateY(-2px) rotate(-1deg)}}
+@keyframes talk{0%,100%{transform:scaleY(.25)}25%{transform:scaleY(1)}50%{transform:scaleY(.5)}75%{transform:scaleY(.9)}}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+@keyframes blinkEye{0%,93%,100%{transform:scaleY(1)}96%{transform:scaleY(.1)}}
+@media (prefers-reduced-motion: reduce){*{animation:none!important}}
+</style>
+</helmet>
+<div style="position: relative; width: 540px; height: 480px; overflow: hidden; background: repeating-conic-gradient(#FFFBE6 0 25%, #FFFFFF 0 50%) 0 0 / 60px 60px">
+  <div aria-hidden="true" style="position: absolute; inset: 0; background: radial-gradient(circle at 50% 58%, #FFFFFF 0 34%, rgba(255,255,255,0) 68%)"></div>
+  <svg aria-hidden="true" width="540" height="480" viewBox="0 0 540 480" fill="none" stroke="#F6E7A6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; inset: 0">
+    <path d="M440 60h62a14 14 0 0 1 14 14v22a14 14 0 0 1-14 14h-10v12l-14-12h-38a14 14 0 0 1-14-14V74a14 14 0 0 1 14-14z"/>
+    <path d="M454 85h0M471 85h0M488 85h0" stroke-width="6"/>
+    <path d="M50 92c-8-12-26-6-22 8 3 10 22 20 22 20s19-10 22-20c4-14-14-20-22-8z"/>
+    <path d="M34 250h56a14 14 0 0 1 14 14v22a14 14 0 0 1-14 14H60l-14 12v-12H34a14 14 0 0 1-14-14v-22a14 14 0 0 1 14-14z"/>
+    <path d="M450 250c10-12 20 12 30 0s20 12 30 0"/>
+  </svg>
+  <div aria-hidden="true" style="position: absolute; left: 50%; top: 120px; width: 330px; height: 330px; margin-left: -165px; border-radius: 999px; background: #FEE980; animation: pulse 1.6s ease-in-out infinite"></div>
+  <svg role="img" aria-label="Salsa sedang bicara" width="360" height="360" viewBox="0 0 300 300" style="position: absolute; left: 90px; bottom: 20px">
+    <g style="transform-box: view-box; transform-origin: 150px 300px; animation: bob 1.4s ease-in-out infinite">
+      <path d="M84 120c-8 70 0 130 20 170h92c20-40 28-100 20-170z" fill="#3B2A22" stroke="#111312" stroke-width="4" stroke-linejoin="round"/>
+      <path d="M40 300c4-58 46-86 110-86s106 28 110 86z" fill="#DBF4FA" stroke="#111312" stroke-width="4" stroke-linejoin="round"/>
+      <path d="M120 214c8 16 18 22 30 22s22-6 30-22" fill="none" stroke="#111312" stroke-width="4" stroke-linecap="round"/>
+      <rect x="134" y="178" width="32" height="40" rx="10" fill="#F3D2B3" stroke="#111312" stroke-width="4"/>
+      <rect x="100" y="62" width="100" height="126" rx="48" fill="#F8DCC2" stroke="#111312" stroke-width="4"/>
+      <path d="M96 128c-6-52 18-84 56-84 36 0 58 26 52 84-10-30-24-46-44-52-14 18-38 30-64 52z" fill="#3B2A22" stroke="#111312" stroke-width="4" stroke-linejoin="round"/>
+      <path d="M124 106l14-3M176 106l-14-3" stroke="#111312" stroke-width="4" stroke-linecap="round"/>
+      <g style="transform-box: fill-box; transform-origin: center; animation: blinkEye 4.5s infinite">
+        <circle cx="132" cy="126" r="6" fill="#111312"/>
+        <circle cx="168" cy="126" r="6" fill="#111312"/>
+      </g>
+      <ellipse cx="150" cy="160" rx="12" ry="10" fill="#7A2E2A" stroke="#111312" stroke-width="3.5" style="transform-box: fill-box; transform-origin: center; animation: talk .42s ease-in-out infinite"/>
+      <circle cx="118" cy="146" r="7" fill="#F5A9A0" opacity=".7"/>
+      <circle cx="182" cy="146" r="7" fill="#F5A9A0" opacity=".7"/>
+      <path d="M88 130c-6-60 26-92 62-92s68 32 62 92" fill="none" stroke="#111312" stroke-width="9" stroke-linecap="round"/>
+      <rect x="76" y="112" width="26" height="42" rx="10" fill="#FEE980" stroke="#111312" stroke-width="4"/>
+      <rect x="198" y="112" width="26" height="42" rx="10" fill="#FEE980" stroke="#111312" stroke-width="4"/>
+    </g>
+  </svg>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":540,"height":480}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

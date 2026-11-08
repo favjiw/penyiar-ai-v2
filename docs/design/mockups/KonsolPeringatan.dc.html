@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Konsol · Peringatan saat live</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F8F7F4}
+a{color:#106C7D}a:hover{color:#00515F}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes slide{from{transform:translateY(-8px);opacity:0}to{transform:translateY(0);opacity:1}}
+@media (prefers-reduced-motion: reduce){*{animation:none!important}}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: radial-gradient(#E6E4E2 1.3px, transparent 1.6px) 0 0 / 24px 24px, #F8F7F4; font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif; color: #111312; font-size: 16px; line-height: 1.5">
+
+  <header style="background: #FFFFFF; border-bottom: 1px solid #E6E4E2">
+    <div style="max-width: 1600px; margin: 0 auto; padding: 12px 40px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
+      <img src="/_blob/a41e09b7cd0f65ec8fada66c984e7e4c" alt="HITS Unikom Radio 103.9 FM" style="height: 40px; width: auto">
+      <span style="display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 800; letter-spacing: .04em; background: #FC9445; color: #111312; border: 2px solid #111312; border-radius: 8px; padding: 4px 10px; box-shadow: 3px 3px 0 #111312">
+        <span style="width: 8px; height: 8px; border-radius: 999px; background: #111312; animation: blink 1.4s ease-in-out infinite"></span>LIVE
+      </span>
+      <span style="display: flex; flex-direction: column; line-height: 1.3; min-width: 0">
+        <span style="font-weight: 700">Kencan dan kecocokan zodiak</span>
+        <span style="font-size: 13px; color: #646361">Favian + Salsa · 34:12 berjalan</span>
+      </span>
+      <span style="flex: 1"></span>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap">
+        <button type="button" style="font: inherit; font-size: 14px; font-weight: 600; height: 44px; padding: 0 16px; border: 1.5px solid #E6E4E2; border-radius: 10px; background: #FFFFFF; color: #111312; cursor: pointer">Jeda</button>
+        <button type="button" style="font: inherit; font-size: 14px; font-weight: 600; height: 44px; padding: 0 16px; border: 1.5px solid #E6E4E2; border-radius: 10px; background: #FFFFFF; color: #111312; cursor: pointer">Topik selanjutnya</button>
+        <span style="width: 1px; background: #E6E4E2; margin: 4px 4px"></span>
+        <button type="button" style="font: inherit; font-size: 14px; font-weight: 700; height: 44px; padding: 0 16px; border: 1.5px solid #A83630; border-radius: 10px; background: #FFFFFF; color: #A83630; cursor: pointer">Akhiri siaran</button>
+      </div>
+    </div>
+  </header>
+
+  <main style="max-width: 1600px; margin: 0 auto; padding: 32px 40px; display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+
+    <section aria-label="Peringatan" aria-live="assertive" style="flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+
+      <div role="alert" style="background: #FFF2F0; border: 2px solid #A83630; border-radius: 16px; padding: 18px 20px; display: flex; gap: 16px; align-items: flex-start; animation: slide .32s ease-out both">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A83630" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 2px"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3M3 3l18 18"></path></svg>
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+          <span style="font-size: 17px; font-weight: 800; color: #A83630">Mikrofon studio tidak terdengar</span>
+          <span style="font-size: 15px">Sudah 8 detik tidak ada suara dari mixer. Penyiar belum bisa ngobrol dengan AI.</span>
+          <div style="display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap">
+            <button type="button" style="font: inherit; font-size: 14px; font-weight: 700; height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: #111312; color: #FFFFFF; cursor: pointer">Pilih mikrofon lain</button>
+            <button type="button" style="font: inherit; font-size: 14px; font-weight: 600; height: 44px; padding: 0 16px; border: 1.5px solid #E6E4E2; border-radius: 10px; background: #FFFFFF; color: #111312; cursor: pointer">Jeda siaran</button>
+          </div>
+        </div>
+        <span style="font-size: 13px; color: #646361; flex: none">15.27</span>
+      </div>
+
+      <div role="alert" style="background: #FFF2F0; border: 2px solid #A83630; border-radius: 16px; padding: 18px 20px; display: flex; gap: 16px; align-items: flex-start">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A83630" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 2px"><rect x="3" y="4" width="18" height="13" rx="2"></rect><path d="M8 21h8M3 3l18 18"></path></svg>
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+          <span style="font-size: 17px; font-weight: 800; color: #A83630">Layar untuk OBS tertutup</span>
+          <span style="font-size: 15px">Penonton tidak mendengar suara AI. Buka lagi lalu pastikan OBS menangkap jendela yang sama.</span>
+          <div style="display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap">
+            <button type="button" style="font: inherit; font-size: 14px; font-weight: 700; height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: #111312; color: #FFFFFF; cursor: pointer">Buka lagi layar OBS</button>
+          </div>
+        </div>
+        <span style="font-size: 13px; color: #646361; flex: none">15.26</span>
+      </div>
+
+      <div role="status" style="background: #FFF8D4; border: 2px solid #111312; border-radius: 16px; padding: 18px 20px; display: flex; gap: 16px; align-items: flex-start">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#111312" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 2px"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v6M12 16.5v.5"></path></svg>
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+          <span style="font-size: 17px; font-weight: 800">Kuota suara AI tinggal ±5 menit</span>
+          <span style="font-size: 15px">Setelah habis, suara pindah ke cadangan dan terdengar sedikit berbeda. Bisa mulai disiapkan penutupnya.</span>
+          <div style="display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap">
+            <button type="button" style="font: inherit; font-size: 14px; font-weight: 700; height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: #111312; color: #FFFFFF; cursor: pointer">Lanjut ke penutup</button>
+            <button type="button" style="font: inherit; font-size: 14px; font-weight: 600; height: 44px; padding: 0 16px; border: 1.5px solid #D5D4D1; border-radius: 10px; background: #FFFFFF; color: #111312; cursor: pointer">Oke, lanjut dulu</button>
+          </div>
+        </div>
+        <span style="font-size: 13px; color: #646361; flex: none">15.25</span>
+      </div>
+
+      <div role="status" style="background: #E9FBFF; border: 1.5px solid #69C1D5; border-radius: 16px; padding: 14px 16px 14px 20px; display: flex; gap: 16px; align-items: center">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#106C7D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"></path></svg>
+        <span style="flex: 1; min-width: 0; font-size: 15px"><strong>Suara cadangan aktif.</strong> Kuota suara habis pukul 15.31, siaran tetap jalan.</span>
+        <span style="font-size: 13px; color: #646361; flex: none">15.31</span>
+        <button type="button" aria-label="Tutup pemberitahuan" style="width: 44px; height: 44px; border: 0; border-radius: 10px; background: transparent; color: #111312; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex: none">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+        </button>
+      </div>
+    </section>
+
+    <aside style="flex: 1 1 380px; min-width: 0; background: #FFFFFF; border-radius: 16px; box-shadow: 0 1px 2px rgba(17,19,18,.04), 0 4px 16px rgba(17,19,18,.06); padding: 24px; display: flex; flex-direction: column; gap: 16px">
+      <h2 style="margin: 0; font-size: 16px; font-weight: 700">Status</h2>
+      <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; font-size: 14px">
+        <li style="display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #F1F0ED">
+          <span style="width: 8px; height: 8px; border-radius: 999px; background: #A83630"></span>
+          <span style="flex: 1">Mikrofon studio</span><span style="color: #A83630; font-weight: 700">Tidak terdengar</span>
+        </li>
+        <li style="display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #F1F0ED">
+          <span style="width: 8px; height: 8px; border-radius: 999px; background: #A83630"></span>
+          <span style="flex: 1">Layar untuk OBS</span><span style="color: #A83630; font-weight: 700">Tertutup</span>
+        </li>
+        <li style="display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #F1F0ED">
+          <span style="width: 8px; height: 8px; border-radius: 999px; background: #077836"></span>
+          <span style="flex: 1">Prompter</span><span style="color: #646361">Tersambung</span>
+        </li>
+        <li style="display: flex; align-items: center; gap: 10px; padding: 10px 0">
+          <span style="width: 8px; height: 8px; border-radius: 999px; background: #DAA951"></span>
+          <span style="flex: 1">Kuota suara</span><span style="font-weight: 700">Cadangan aktif</span>
+        </li>
+      </ul>
+    </aside>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1920,"height":820}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
