@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, ApiError, type VoiceCatalog } from '../api'
+import { api, ApiError } from '../api'
 import type { LiveSession } from '../live/useLiveSession'
 import { ttsLabel } from '../live/tts'
-import type { Blocker } from '../types'
 import { openStageWindow } from '../stage/openStageWindow'
 import { PointCountdown } from './PointCountdown'
 import { VoiceStage } from './VoiceStage'
@@ -13,8 +12,6 @@ const isTyping = (el: Element | null) => !!el && ['INPUT', 'TEXTAREA', 'SELECT']
 
 interface Props {
   live: LiveSession
-  blockers: Blocker[]
-  onRefreshBlockers: () => void
 }
 
 /** Judul segmen untuk satu giliran: Opening, Closing, atau judul topik (id `t2` = topik kedua). */
@@ -25,46 +22,19 @@ function segmentLabel(t: { segment: string; topic_id: string | null }, topics: s
   return topics[i] ?? 'Topik'
 }
 
-/** Kontrol dan pemantauan siaran (FR-11): orb giliran bicara, transkrip, dan panel agen. */
-export function LivePanel({ live, blockers, onRefreshBlockers }: Props) {
+/**
+ * Kontrol dan pemantauan siaran yang sedang berjalan (FR-11): orb giliran bicara, transkrip, panel agen.
+ * Persiapan dan tombol Mulai ada di halaman Siapkan siaran (console/prep, PRD v2.7).
+ */
+export function LivePanel({ live }: Props) {
   const { snapshot: snap, transcript, showrunner, supervisor, output, pointClock } = live
-  const [blockerId, setBlockerId] = useState('')
-  const [mode, setMode] = useState<'A' | 'B'>('B')
-  const [aiPersona, setAiPersona] = useState('salsa')
-  const [humanName, setHumanName] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
-  const [precheck, setPrecheck] = useState<string>('')
-  const [catalog, setCatalog] = useState<VoiceCatalog | null>(null)
-  const [voiceChoice, setVoiceChoice] = useState<Record<string, string>>({})
   const [elapsed, setElapsed] = useState(0)
   const transcriptEnd = useRef<HTMLDivElement>(null)
   const onAir = snap.state === 'live' || snap.state === 'paused'
   const stageOpen = (output?.clients?.stage ?? 0) > 0
-  const openStage = () => {
-    const m = onAir ? (snap.mode === 'A' ? 'A' : 'B') : mode
-    openStageWindow(m, onAir ? snap.ai_persona : aiPersona)
-  }
-
-  useEffect(() => {
-    if (!blockerId && blockers.length) setBlockerId(blockers[0].id)
-  }, [blockers, blockerId])
-
-  // Daftar suara terkurasi; pilihan awal = suara aktif sekarang (id sebelum tanda '|' untuk Edge)
-  useEffect(() => {
-    api
-      .voices()
-      .then((c) => {
-        setCatalog(c)
-        const pick: Record<string, string> = {}
-        for (const [persona, cur] of Object.entries(c.current)) {
-          const id = cur.split('|')[0]
-          if (c.voices.some((v) => v.id === id && v.provider === c.provider)) pick[persona] = id
-        }
-        setVoiceChoice(pick)
-      })
-      .catch(() => setCatalog(null))
-  }, [])
+  const openStage = () => openStageWindow(snap.mode === 'A' ? 'A' : 'B', snap.ai_persona)
 
   // Jam siaran: snapshot server + detak lokal
   useEffect(() => {
@@ -92,24 +62,6 @@ export function LivePanel({ live, blockers, onRefreshBlockers }: Props) {
       setBusy(false)
     }
   }
-
-  const runPrecheck = () =>
-    act(async () => {
-      setPrecheck('Memeriksa… (memanaskan suara TTS)')
-      const r = await api.precheck(chosenVoices)
-      const warm = r.tts_warmup_ms ? Object.values(r.tts_warmup_ms).map((ms) => `${(ms / 1000).toFixed(1)} s`).join(', ') : ''
-      setPrecheck(
-        [
-          r.models_ok ? 'Model LLM ✓' : 'Model LLM belum diisi di .env ✗',
-          r.tts_ok ? `TTS ✓ (pemanasan ${warm})` : `TTS ✗ ${r.tts_error ?? ''}`,
-        ].join(' · '),
-      )
-    })
-
-  const aiIds = mode === 'A' ? [aiPersona] : ['raka', 'salsa']
-  const chosenVoices = Object.fromEntries(aiIds.filter((id) => voiceChoice[id]).map((id) => [id, voiceChoice[id]]))
-  const effectiveVoice = (id: string) => voiceChoice[id] || catalog?.current[id]?.split('|')[0] || ''
-  const sameVoice = mode === 'B' && !!effectiveVoice('raka') && effectiveVoice('raka') === effectiveVoice('salsa')
 
   const control = (a: 'pause' | 'resume' | 'next' | 'stop') => act(() => api.control(a))
   const stop = () => window.confirm('Hentikan siaran sekarang?') && control('stop')
@@ -156,87 +108,7 @@ export function LivePanel({ live, blockers, onRefreshBlockers }: Props) {
               Stop <kbd>S</kbd>
             </button>
           </>
-        ) : (
-          <>
-            <select value={blockerId} onChange={(e) => setBlockerId(e.target.value)} onFocus={onRefreshBlockers} aria-label="Blocking">
-              {blockers.length === 0 && <option value="">Belum ada blocking; buat di tab Blocker</option>}
-              {blockers.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.tema} · {b.variant_label} · v{b.versi}
-                  {b.locked ? ' · terkunci' : ' · draf'}
-                </option>
-              ))}
-            </select>
-            <button onClick={() => void runPrecheck()} disabled={busy}>
-              Cek pra-live
-            </button>
-            <select value={mode} onChange={(e) => setMode(e.target.value as 'A' | 'B')} aria-label="Mode">
-              <option value="B">Mode B: Raka + Salsa (AI + AI)</option>
-              <option value="A">Mode A: penyiar + 1 AI</option>
-            </select>
-            {mode !== 'B' && (
-              <>
-                <select value={aiPersona} onChange={(e) => setAiPersona(e.target.value)} aria-label="Gender AI">
-                  <option value="raka">Gender AI: Cowo</option>
-                  <option value="salsa">Gender AI: Cewe</option>
-                </select>
-                <input
-                  type="text"
-                  className="host-name"
-                  value={humanName}
-                  maxLength={40}
-                  placeholder="Nama penyiar"
-                  onChange={(e) => setHumanName(e.target.value)}
-                />
-              </>
-            )}
-            {catalog &&
-              aiIds.map((id) => {
-                const targetGender = id === 'raka' ? 'male' : 'female'
-                const genderLabel = id === 'raka' ? 'Cowo' : 'Cewe'
-                const prefix = mode === 'A' ? `Suara (${genderLabel})` : `Suara ${id === 'raka' ? 'Raka (Cowo)' : 'Salsa (Cewe)'}`
-                const availableVoices = catalog.voices.filter((v) => v.provider === catalog.provider && v.gender === targetGender)
-                return (
-                  <select
-                    key={id}
-                    value={voiceChoice[id] ?? ''}
-                    onChange={(e) => setVoiceChoice({ ...voiceChoice, [id]: e.target.value })}
-                    aria-label={`Suara ${id}`}
-                    title={catalog.voices.find((v) => v.id === voiceChoice[id])?.notes}
-                  >
-                    <option value="">{prefix}: bawaan</option>
-                    {availableVoices.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {prefix}: {v.name}
-                      </option>
-                    ))}
-                  </select>
-                )
-              })}
-            {sameVoice && <span className="error" role="alert">Raka dan Salsa memakai suara yang sama</span>}
-            <button
-              className="primary"
-              onClick={() => {
-                const b = blockers.find((x) => x.id === blockerId)
-                const toCheck = b ? b.topics.flatMap((t) => t.poin).filter((p) => p.perlu_cek).length : 0
-                if (toCheck && !window.confirm(`Ada ${toCheck} poin bertanda "perlu cek". Blocking akan dikunci dan dipakai live. Lanjutkan?`)) return
-                if (mode === 'A' && !output?.clients?.prompter) {
-                  window.open('/prompter', 'hits-prompter')
-                }
-                // Layar OBS adalah satu-satunya pemutar suara: buka sekarang bila belum (klik ini = gestur pengguna).
-                if (!stageOpen) openStageWindow(mode, aiPersona)
-                void act(() =>
-                  mode === 'A'
-                    ? api.startShow(blockerId, 'A', { ai_persona: aiPersona, human_name: humanName, voices: chosenVoices })
-                    : api.startShow(blockerId, 'B', { voices: chosenVoices }),
-                )
-              }}
-              disabled={busy || !blockerId || (mode !== 'B' && !humanName.trim())}
-            >
-              Mulai
-            </button>
-          </>
-        )}
+        ) : null}
         <a className="button-link" href="/prompter" target="hits-prompter" title="Prompter (tablet atau monitor kedua)">
           {output?.clients?.prompter ? 'Prompter terbuka' : 'Buka Prompter'}
         </a>
@@ -249,7 +121,6 @@ export function LivePanel({ live, blockers, onRefreshBlockers }: Props) {
         </button>
       </section>
 
-      {precheck && !onAir && <div className="status">{precheck}</div>}
       {message && <div className="error">{message}</div>}
       {snap.error && <div className="error">Siaran berhenti karena galat: {snap.error}</div>}
       {live.alerts.length > 0 && (
@@ -278,7 +149,7 @@ export function LivePanel({ live, blockers, onRefreshBlockers }: Props) {
       )}
       {!live.connected && <div className="error">Tersambung ulang ke server…</div>}
 
-      <VoiceStage live={live} previewMode={mode} previewAi={aiPersona} previewHuman={humanName} />
+      <VoiceStage live={live} previewMode={snap.mode ?? 'B'} previewAi={snap.ai_persona ?? 'salsa'} previewHuman={snap.human?.name ?? ''} />
 
       <div className="live-grid">
         <section className="panel transcript">

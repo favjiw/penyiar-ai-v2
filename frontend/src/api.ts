@@ -54,6 +54,8 @@ export const api = {
   pttTurn: (text: string, stt_ms: number, speech_ms = 0) =>
     post<{ filler?: string | null; responder?: string }>('/api/ptt/turn', { text, stt_ms, speech_ms }),
   control: (action: 'pause' | 'resume' | 'next' | 'stop') => post<ShowSnapshot>(`/api/show/${action}`),
+  voiceSample: (persona: string, voice_id = '') =>
+    post<{ audio_url: string; voice: string; provider: string; fallback: boolean }>('/api/voices/sample', { persona, voice_id }),
   precheck: (voices: Record<string, string> = {}) =>
     post<{ models_ok: boolean; tts_ok: boolean; tts_error?: string; tts_warmup_ms?: Record<string, number>; models: Record<string, string> }>(
       '/api/precheck',

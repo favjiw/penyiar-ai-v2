@@ -275,6 +275,10 @@ export function useLiveSession(role: Role): LiveSession {
         attempts = 0
         reportedReadyRef.current = null // server baru/terhubung ulang belum tahu status suara stage
         setConnected(true)
+        if (role === 'stage' && ctxRef.current?.state === 'running') {
+          reportedReadyRef.current = true
+          ws.send(JSON.stringify({ action: 'audio_state', data: { blocked: false, ready: true } }))
+        }
       }
       ws.onclose = () => {
         setConnected(false)

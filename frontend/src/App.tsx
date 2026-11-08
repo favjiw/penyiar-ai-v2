@@ -1,19 +1,17 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { api } from './api'
-import { BlockerStudio } from './console/BlockerStudio'
 import { LivePanel } from './console/LivePanel'
+import { PrepPage } from './console/prep/PrepPage'
 import { ttsLabel, type TtsStatus } from './live/tts'
 import { useLiveSession, type LiveSession } from './live/useLiveSession'
 import { NotFound } from './NotFound'
 import { PrompterPage } from './prompter/PrompterPage'
 import { StagePage } from './stage/StagePage'
-import type { Blocker } from './types'
-
-type Tab = 'blocker' | 'live'
+import { IconAlert } from './ui'
 
 type Health = { llm: string; tts?: TtsStatus } | 'down' | null
 
-/** Status backend untuk header: dari /api/health, lalu dari snapshot siaran (lebih baru: cadangan aktif, breaker). */
+/** Status backend: dari /api/health, lalu dari snapshot siaran (lebih baru: cadangan aktif, breaker). */
 function useHealth(live: LiveSession) {
   const [health, setHealth] = useState<Health>(null)
   const state = live.snapshot.state
@@ -27,14 +25,27 @@ function useHealth(live: LiveSession) {
   return { health, tts }
 }
 
-/** Label kecil di header: mode LLM dan provider TTS aktif, mis. "LLM live · TTS: Edge (gratis)". */
-function ModeBadge({ health, tts }: { health: Health; tts?: TtsStatus }) {
-  if (health === 'down') return <span className="mode">backend tidak tersambung</span>
+/**
+ * Nama model/vendor dan pesan mentah hanya di "Detail teknis" (DESIGN.md §5), untuk peneliti.
+ * Peringatan suara tetap terlihat sebagai tanda kecil di judulnya.
+ */
+function TechDetails({ health, tts }: { health: Health; tts?: TtsStatus }) {
+  const warnings = tts?.warnings ?? []
   return (
-    <span className="mode" title={tts?.fallbacks?.length ? `Cadangan: ${tts.fallbacks.join(', ')}` : 'Tanpa cadangan TTS'}>
-      {health ? `LLM ${health.llm} · ` : ''}
-      {ttsLabel(tts)}
-    </span>
+    <details className="tech">
+      <summary>
+        Detail teknis{warnings.length > 0 && <span className="tech__badge">{warnings.length} catatan</span>}
+      </summary>
+      <div className="tech__body">
+        <div>{health === 'down' ? 'Server tidak tersambung' : `LLM ${health ? health.llm : '…'} · ${ttsLabel(tts)}`}</div>
+        {tts?.fallbacks?.length ? <div>Cadangan suara: {tts.fallbacks.join(', ')}</div> : null}
+        {warnings.map((w) => (
+          <div key={w} className="tech__warn">
+            {w}
+          </div>
+        ))}
+      </div>
+    </details>
   )
 }
 
@@ -43,46 +54,41 @@ function Console() {
   const live = useLiveSession('console')
   const { health, tts } = useHealth(live)
   const onAir = live.snapshot.state === 'live' || live.snapshot.state === 'paused'
-  const [tab, setTab] = useState<Tab>('blocker')
-  const [locked, setLocked] = useState<Blocker[]>([])
-  const refresh = useCallback(() => {
-    api.list().then(setLocked).catch(() => setLocked([]))
-  }, [])
 
-  useEffect(refresh, [refresh, tab])
   useEffect(() => {
-    if (onAir) setTab('live')
+    document.title = onAir ? 'LIVE · Penyiar AI HITS' : 'Siapkan siaran · Penyiar AI HITS'
   }, [onAir])
 
   return (
-    <>
-      <header className="top">
-        <h1>Penyiar AI · Konsol</h1>
-        <nav className="tabs" role="tablist">
-          <button role="tab" aria-selected={tab === 'blocker'} className={tab === 'blocker' ? 'on' : ''} onClick={() => setTab('blocker')}>
-            Blocker
-          </button>
-          <button role="tab" aria-selected={tab === 'live'} className={tab === 'live' ? 'on' : ''} onClick={() => setTab('live')}>
-            Live {onAir && <span className="dot" />}
-          </button>
-        </nav>
-        <ModeBadge health={health} tts={tts} />
+    <div className="console">
+      <header className="console-top">
+        <div className="console-top__inner">
+          <img src="/logo-hits.png" alt="HITS Unikom Radio 103.9 FM" className="console-top__logo" />
+          <span className="console-top__name">Penyiar AI</span>
+          <span className="console-top__spacer" />
+          {!live.connected && (
+            <span className="console-top__offline" role="status">
+              Menyambung ke server…
+            </span>
+          )}
+          <TechDetails health={health} tts={tts} />
+        </div>
+        {/* Peringatan suara tetap terlihat (FR-6) sampai sistem peringatan konsol dibuat (HANDOFF §3 langkah 6). */}
+        {(tts?.warnings ?? []).length > 0 && (
+          <div className="console-warn" role="status">
+            <IconAlert size={20} />
+            <span>Ada catatan soal suara AI: {(tts?.warnings ?? [])[0]}</span>
+          </div>
+        )}
       </header>
-      {(tts?.warnings ?? []).length > 0 && (
-        <div className="error tts-warning" role="alert">
-          {(tts?.warnings ?? []).map((w) => (
-            <div key={w}>⚠ {w}</div>
-          ))}
-        </div>
+      {onAir ? (
+        <main className="console-live">
+          <LivePanel live={live} />
+        </main>
+      ) : (
+        <PrepPage live={live} />
       )}
-      <main>
-        {/* BlockerStudio tetap terpasang agar editan yang belum disimpan tidak hilang saat pindah tab */}
-        <div hidden={tab !== 'blocker'}>
-          <BlockerStudio />
-        </div>
-        {tab === 'live' && <LivePanel live={live} blockers={locked} onRefreshBlockers={refresh} />}
-      </main>
-    </>
+    </div>
   )
 }
 
