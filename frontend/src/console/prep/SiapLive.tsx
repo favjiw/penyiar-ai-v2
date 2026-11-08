@@ -186,7 +186,7 @@ export function SiapLive({ live, mode, onMode: setMode, readiness, materi, duras
     catalog ? catalog.voices.filter((v) => v.provider === catalog.provider && v.gender === gender) : []
 
   return (
-    <aside className="prep-step prep-siap" aria-labelledby="siap-title">
+    <aside className="prep-step prep-siap" aria-labelledby="siap-title" data-tour="siap">
       <div className="prep-step__head">
         <span className="prep-step__n" aria-hidden="true">
           3
@@ -342,10 +342,10 @@ export function SiapLive({ live, mode, onMode: setMode, readiness, materi, duras
             <Check ok={!readinessSummary(readiness, durasi).short && !readinessSummary(readiness, durasi).unknown}>
               Kesiapan siaran ·{' '}
               {readiness.minutes_safe == null
-                ? readiness.unknown.length
-                  ? `sisa kuota ${readiness.unknown.join(' dan ').toLowerCase()} belum diketahui`
+                ? (readiness.unknown ?? []).length
+                  ? `sisa kuota ${(readiness.unknown ?? []).join(' dan ').toLowerCase()} belum diketahui`
                   : 'kuota tidak membatasi'
-                : `±${readiness.minutes_safe} dari ${durasi} menit${readiness.minutes_safe < durasi && readiness.fallbacks.length ? ', lalu cadangan' : ''}${readiness.unknown.length ? ` (${readiness.unknown.join(', ').toLowerCase()} belum diketahui)` : ''}`}
+                : `±${readiness.minutes_safe} dari ${durasi} menit${readiness.minutes_safe < durasi && readiness.fallbacks.length ? ', lalu cadangan' : ''}${(readiness.unknown ?? []).length ? ` (${(readiness.unknown ?? []).join(', ').toLowerCase()} belum diketahui)` : ''}`}
             </Check>
           )}
           {materi && (
@@ -370,7 +370,7 @@ export function SiapLive({ live, mode, onMode: setMode, readiness, materi, duras
       </div>
 
       {confirmFacts && (
-        <div className="siap-confirm" role="alertdialog" aria-labelledby="facts-title">
+        <div className="siap-confirm" role="alertdialog" aria-labelledby="facts-title" data-tour="mulai">
           <span id="facts-title" className="siap-confirm__title">
             Ada {facts} bahan obrolan bertanda “Cek fakta”.
           </span>
@@ -396,7 +396,7 @@ export function SiapLive({ live, mode, onMode: setMode, readiness, materi, duras
         </div>
       )}
       {!confirmFacts && (
-        <Button variant="primary" size="xl" className="siap-start" onClick={() => void start()} disabled={!canStart}>
+        <Button variant="primary" size="xl" className="siap-start" onClick={() => void start()} disabled={!canStart} data-tour="mulai">
           <span className="siap-start__dot" aria-hidden="true" />
           {starting ? 'Memulai…' : 'Mulai live'}
         </Button>

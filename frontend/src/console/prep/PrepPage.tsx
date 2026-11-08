@@ -8,9 +8,10 @@ import { topicsForDuration } from '../../lib/materi'
 import { usePersisted } from '../../lib/usePersisted'
 import type { LiveSession } from '../../live/useLiveSession'
 import type { Blocker } from '../../types'
-import { Button } from '../../ui'
+import { Button, IconHelp } from '../../ui'
 import { MateriCard } from './MateriCard'
 import { MateriEditor } from './MateriEditor'
+import { GuidedTour, hasSeenTour } from './GuidedTour'
 import { ReadinessButton, useReadiness } from './Readiness'
 import { SiapLive, useDurasi, useMode } from './SiapLive'
 import './prep.css'
@@ -27,6 +28,7 @@ export function PrepPage({ live, headerExtras }: { live: LiveSession; headerExtr
   const [durasi, setDurasi] = useDurasi()
   const [mode, setMode] = useMode()
   const readiness = useReadiness(mode, durasi) // GET tanpa memanaskan suara; dipakai header dan Siap live
+  const [tourOpen, setTourOpen] = useState(() => !hasSeenTour())
   const [all, setAll] = useState<Blocker[]>([])
   const [variants, setVariants] = useState<Blocker[]>([])
   const [editing, setEditing] = useState<Blocker | null>(null)
@@ -128,13 +130,18 @@ export function PrepPage({ live, headerExtras }: { live: LiveSession; headerExtr
         <img src="/logo-hits.png" alt="HITS Unikom Radio 103.9 FM" className="console-top__logo" />
         <span className="console-top__name">Penyiar AI</span>
         <span className="console-top__spacer" />
-        <ReadinessButton readiness={readiness} durasi={durasi} onDurasi={setDurasi} />
+        <Button variant="secondary" onClick={() => setTourOpen(true)} icon={<IconHelp size={18} />}>
+          Panduan
+        </Button>
+        <span data-tour="cek">
+          <ReadinessButton readiness={readiness} durasi={durasi} onDurasi={setDurasi} />
+        </span>
         {headerExtras}
       </div>
     </header>
     <main className="prep">
       <div className="prep-main">
-        <section className="prep-step" aria-labelledby="step1">
+        <section className="prep-step" aria-labelledby="step1" data-tour="tema">
           <div className="prep-step__head">
             <span className="prep-step__n" aria-hidden="true">
               1
@@ -192,7 +199,7 @@ export function PrepPage({ live, headerExtras }: { live: LiveSession; headerExtr
           )}
         </section>
 
-        <section className="prep-step" aria-labelledby="step2">
+        <section className="prep-step" aria-labelledby="step2" data-tour="materi">
           <div className="prep-step__head">
             <span className="prep-step__n" aria-hidden="true">
               2
@@ -261,6 +268,7 @@ export function PrepPage({ live, headerExtras }: { live: LiveSession; headerExtr
         generating={busy === 'generate'}
       />
     </main>
+    <GuidedTour open={tourOpen} onClose={() => setTourOpen(false)} />
     </>
   )
 }

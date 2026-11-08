@@ -247,3 +247,33 @@
 .rd-bar { display: block; height: 6px; border-radius: 999px; background: var(--n-200); margin-top: 6px; overflow: hidden; }
 .rd-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--brand-blue); }
 .rd-list li.is-warn .rd-bar > span { background: var(--ink); }
+
+/* ── Panduan pengguna baru (mockup Tutorial) ─────────────────────────── */
+.tour-backdrop { position: fixed; inset: 0; z-index: 50; background: rgba(17, 19, 18, .55); display: grid; place-items: center; padding: 16px; }
+.tour-backdrop--plain { display: block; }
+.tour-welcome { width: min(520px, 100%); background: var(--n-0); border-radius: var(--r-panel); box-shadow: var(--shadow-pop); padding: 32px; display: flex; flex-direction: column; gap: 14px; text-align: center; align-items: center; }
+.tour-welcome:focus { outline: none; }
+.tour-welcome__logo { height: 56px; width: auto; }
+.tour-welcome h2 { margin: 0; font-size: 28px; font-weight: 800; }
+.tour-welcome p { margin: 0; color: var(--n-700); }
+.tour-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
+.tour-layer { position: fixed; inset: 0; z-index: 50; }
+.tour-spot { position: fixed; border-radius: 20px; box-shadow: 0 0 0 3px var(--brand-yellow), 0 0 0 4000px rgba(17, 19, 18, .55); transition: left var(--t-state) var(--ease), top var(--t-state) var(--ease), width var(--t-state) var(--ease), height var(--t-state) var(--ease); pointer-events: none; }
+.tour-card { position: fixed; width: min(440px, calc(100vw - 32px)); background: var(--n-0); border-radius: var(--r-card); box-shadow: 0 16px 48px rgba(17, 19, 18, .25); padding: 22px 24px; display: flex; flex-direction: column; gap: 12px; animation: tour-pop var(--t-state) ease-out both; }
+.tour-card:focus { outline: none; }
+.tour-card h2 { margin: 0; font-size: 21px; font-weight: 800; }
+.tour-card p { margin: 0; font-size: 15px; color: var(--n-700); }
+.tour-card__missing { font-style: italic; }
+.tour-card__head { display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 700; color: var(--n-600); }
+.tour-card__foot { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.tour-dots { display: flex; gap: 6px; margin-right: auto; }
+.tour-dots span { display: block; height: 8px; width: 8px; border-radius: 999px; background: var(--n-200); transition: all var(--t-base) ease; }
+.tour-dots span.is-on { width: 24px; background: var(--ink); }
+.tour-dots span.is-done { background: var(--brand-blue); }
+.tour-arrow { position: absolute; width: 16px; height: 16px; background: var(--n-0); transform: rotate(45deg); }
+.tour-arrow--up { top: -8px; left: 40px; }
+.tour-arrow--down { bottom: -8px; left: 40px; }
+.tour-arrow--right { right: -8px; top: 40px; }
+.tour-arrow--left { left: -8px; top: 40px; }
+@keyframes tour-pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .tour-card { animation: none; } .tour-spot { transition: none; } }

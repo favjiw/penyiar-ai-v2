@@ -40,7 +40,7 @@ export function useReadiness(mode: 'A' | 'B', target: number): ReadinessState {
 /** Ringkasan untuk pil header dan baris Siap live: "Tidak terbatas" hanya bila semua layanan tanpa batas. */
 export function readinessSummary(data: Readiness, target: number): { text: string; short: boolean; unknown: boolean } {
   const safe = data.minutes_safe
-  const unknown = data.unknown.length > 0
+  const unknown = (data.unknown ?? []).length > 0 // server lama tanpa medan `unknown`: anggap kosong
   if (safe == null) return { text: unknown ? 'Belum diketahui' : 'Tidak terbatas', short: false, unknown }
   const short = safe < target
   return { text: `±${Math.min(safe, 999)} dari ${target} mnt${unknown ? '*' : ''}`, short, unknown }
@@ -114,7 +114,7 @@ export function ReadinessButton({ readiness, durasi, onDurasi }: Props) {
             <div className={`rd-summary${short ? ' is-warn' : ''}`}>
               <span className="rd-summary__label">Target {durasi} menit · kuota aman sekitar</span>
               <span className="rd-summary__big">{safe == null ? sum!.text : `±${safe} menit`}</span>
-              {sum!.unknown && <span>Sisa kuota {data.unknown.join(' dan ').toLowerCase()} belum bisa dibaca; angka ini bisa lebih kecil.</span>}
+              {sum!.unknown && <span>Sisa kuota {(data.unknown ?? []).join(' dan ').toLowerCase()} belum bisa dibaca; angka ini bisa lebih kecil.</span>}
               {short ? (
                 <>
                   <span>

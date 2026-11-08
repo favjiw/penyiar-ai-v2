@@ -55,7 +55,7 @@ export interface Readiness {
   services: ReadinessService[]
   minutes_safe: number | null
   /** Layanan berkuota yang sisanya belum bisa dibaca (mis. Suara AI tanpa izin baca kredit). */
-  unknown: string[]
+  unknown?: string[] // server lama belum mengirim
   target_minutes: number
   fallbacks: string[]
   rates_source: 'log' | 'bawaan'
