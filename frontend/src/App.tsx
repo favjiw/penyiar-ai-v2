@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { api } from './api'
 import { BlockerStudio } from './console/BlockerStudio'
 import { LivePanel } from './console/LivePanel'
@@ -84,8 +84,16 @@ function Console() {
   )
 }
 
+const DevGallery = import.meta.env.DEV ? lazy(() => import('./ui/DevGallery').then((m) => ({ default: m.DevGallery }))) : null
+
 export function App() {
   const path = window.location.pathname
   if (path.startsWith('/prompter')) return <PrompterPage />
+  if (DevGallery && path === '/_ui')
+    return (
+      <Suspense fallback={null}>
+        <DevGallery />
+      </Suspense>
+    )
   return <Console />
 }
