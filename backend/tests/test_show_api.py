@@ -162,3 +162,19 @@ def test_invalid_ai_persona_does_not_lock_the_draft(client):
     v = client.post("/api/blocker/generate", json={"tema": "Kopi", "jumlah_topik": 1, "jumlah_varian": 2}).json()["variants"][0]
     r = client.post("/api/show/start", json={"blocker_id": v["id"], "mode": "A", "ai_persona": "tidak-ada"})
     assert r.status_code == 422 and client.get(f"/api/blocker/{v['id']}").json()["locked"] is False
+
+
+def test_prompter_mic_state_reaches_console(client):
+    with client.websocket_connect("/ws/session?role=console") as console:
+        console.receive_json()
+        assert _output_status(console)["mic"] is None
+        with client.websocket_connect("/ws/session?role=prompter") as prompter:
+            prompter.receive_json()
+            _output_status(console)
+            prompter.send_json({"action": "mic_state", "data": {"down": True, "reason": "silent"}})
+            assert _output_status(console)["mic"] == {"down": True, "reason": "silent"}
+        for _ in range(5):
+            st = _output_status(console)
+            if st["clients"]["prompter"] == 0:
+                break
+        assert st["mic"] is None  # prompter pergi: status mic ikut hilang

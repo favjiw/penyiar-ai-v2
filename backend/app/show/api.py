@@ -226,6 +226,12 @@ async def ws_session(ws: WebSocket, role: str = "console"):
                 if "ready" in data:
                     (manager.audio_ready.add if data.get("ready") else manager.audio_ready.discard)(ws)
                 await manager.broadcast_output_status()
+            elif action == "mic_state" and manager.clients.get(ws) == "prompter":
+                # Prompter memantau mic studio (PRD v2.7 FR-7); konsol menampilkan peringatan merah bila putus.
+                state = {"down": bool(data.get("down")), "reason": str(data.get("reason", ""))[:20]}
+                if manager.mic.get(ws) != state:
+                    manager.mic[ws] = state
+                    await manager.broadcast_output_status()
             elif action == "level" and ws is manager.audio_owner():
                 # Level audio dari stage (pemilik audio) diteruskan ke konsol/prompter (indikator bicara).
                 try:

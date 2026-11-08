@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { OnAirTopic, OutputStatus, PointClock, ShowClock, ShowSnapshot, ShowrunnerDecision, SupervisorEvent, TranscriptEntry, TurnEvent } from './types'
+import type { AlertEvent, OnAirTopic, OutputStatus, PointClock, ShowClock, ShowSnapshot, ShowrunnerDecision, SupervisorEvent, TranscriptEntry, TurnEvent } from './types'
 
 export type Role = 'console' | 'prompter' | 'stage'
 const RECONNECT_MS = 1500
@@ -22,7 +22,8 @@ export interface LiveSession {
   /** Pindah topik terakhir yang terjadi saat klien ini tersambung (untuk band "Pindah topik"). */
   lastTopicChange: { topic: OnAirTopic | { id: null; judul: string }; at: number } | null
   speaking: string | null
-  alerts: { stage: string; message: string; turn: number }[]
+  /** Peringatan dari server (PRD v2.7 §6.3); `id` lokal untuk menutup per item. */
+  alerts: AlertEvent[]
   sttPartial: string
   /** Mikrofon penyiar manusia sedang ditahan (push-to-talk di prompter). */
   micActive: boolean
@@ -80,6 +81,7 @@ export function useLiveSession(role: Role): LiveSession {
   const sessionRef = useRef<string | undefined>()
   // Naik setiap stopAudio: callback pemutaran lama (resume/play yang masih menunggu) diabaikan.
   const genRef = useRef(0)
+  const alertSeq = useRef(0) // id unik per peringatan (untuk ditutup satu per satu)
   const reportedReadyRef = useRef<boolean | null>(null)
   // Level dari stage (lewat WS) untuk klien yang bukan pemilik audio: konsol dan prompter.
   const remoteLevelRef = useRef<{ level: number; at: number }>({ level: 0, at: 0 })
@@ -364,7 +366,7 @@ export function useLiveSession(role: Role): LiveSession {
             setSupervisor((l) => [...l, data].slice(-KEEP))
             break
           case 'alert':
-            setAlerts((l) => [...l, data].slice(-20))
+            setAlerts((l) => [...l, { ...data, id: `a${++alertSeq.current}` }].slice(-20))
             break
           case 'level':
             remoteLevelRef.current = { level: Number(data.level) || 0, at: Date.now() }

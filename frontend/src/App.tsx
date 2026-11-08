@@ -59,6 +59,9 @@ function Console() {
     document.title = onAir ? 'LIVE · Penyiar AI HITS' : 'Siapkan siaran · Penyiar AI HITS'
   }, [onAir])
 
+  // Saat live, panel live memakai header sendiri (LIVE + kontrol siaran, mockup KonsolLive).
+  if (onAir) return <LivePanel live={live} />
+
   return (
     <div className="console">
       <header className="console-top">
@@ -81,13 +84,7 @@ function Console() {
           </div>
         )}
       </header>
-      {onAir ? (
-        <main className="console-live">
-          <LivePanel live={live} />
-        </main>
-      ) : (
-        <PrepPage live={live} />
-      )}
+      <PrepPage live={live} />
     </div>
   )
 }

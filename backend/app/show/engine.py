@@ -60,6 +60,17 @@ logger = logging.getLogger(__name__)
 Emit = Callable[[str, dict[str, Any]], Awaitable[None]]
 PLAYBACK_GRACE_SEC = 5.0
 TRANSCRIPT_KEEP = 60
+# Peringatan untuk konsol (DESIGN.md §4): kode → (tingkat, judul, pesan dengan istilah UI).
+ALERT_TEXT: dict[str, tuple[str, str, str]] = {
+    "tts_silent": ("yellow", "Satu giliran AI tanpa suara", "Suara AI gagal dibuat untuk giliran ini. Siaran tetap jalan; cek Detail teknis bila berulang."),
+    "tts_fallback": ("blue", "Suara cadangan aktif", "Suara AI pindah ke cadangan dan terdengar sedikit berbeda. Siaran tetap jalan."),
+    "tts_warning": ("yellow", "Ada catatan soal suara AI", "Suara AI mungkin tidak sesuai pilihan. Lihat Detail teknis."),
+    "llm_fallback": ("blue", "Otak AI pindah ke cadangan", "Kuota otak AI habis; siaran memakai cadangan otomatis."),
+    "ai_failing": ("yellow", "AI gagal menjawab", "Kalau terus berulang, siaran dibawa ke penutup. Penyiar bisa ambil alih dulu."),
+    "supervisor_rules": ("blue", "Pemeriksaan ucapan AI disederhanakan", "Ucapan AI sementara diperiksa dengan aturan dasar saja. Siaran tetap jalan."),
+    "engine_error": ("yellow", "Ada gangguan di sistem", "Siaran tetap jalan. Lihat Detail teknis."),
+}
+ALERT_STAGE_CODE = {"tts": "tts_silent", "quota": "llm_fallback", "engine": "ai_failing"}
 OPENING_CLOSING_TARGET_S = 180  # Opening ±3 menit, Closing ±3 menit (PRD v2.7 FR-1, §1.3.3)
 
 
@@ -280,7 +291,7 @@ class ShowEngine:
             "opening": {"hook": b.opening.hook, "poin": b.opening.poin},
             "topics": [
                 {
-                    "id": t.id, "judul": t.judul, "sudut_pandang": t.sudut_pandang,
+                    "id": t.id, "judul": t.judul, "sudut_pandang": t.sudut_pandang, "menit": t.menit,
                     "poin": [{"id": p.id, "text": p.text} for p in t.poin],
                     "pertanyaan_penonton": t.pertanyaan_penonton, "transisi": t.transisi,
                 }
@@ -538,15 +549,24 @@ class ShowEngine:
 
     # ── Membuat satu giliran ─────────────────────────────────────────────────
 
-    async def _alert(self, stage: str, message: str) -> None:
-        """Masalah yang perlu diketahui operator, tapi siaran tetap jalan."""
-        self.log.event("error", stage=stage, message=message[:300])
-        await self._emit("alert", {"stage": stage, "message": message[:300], "turn": self.turn_no})
+    async def _alert(self, stage: str, message: str, code: str = "") -> None:
+        """Masalah yang perlu diketahui operator, tapi siaran tetap jalan.
 
-    async def _alert_once(self, key: str, message: str) -> None:
+        Event `alert` (PRD v2.7 §6.3): `level` red|yellow|blue, `code`, `title` dan `message` dengan
+        istilah UI untuk operator; pesan mentah (nama vendor/model) hanya di `detail` (Detail teknis).
+        """
+        self.log.event("error", stage=stage, message=message[:300])
+        code = code or ALERT_STAGE_CODE.get(stage, "engine_error")
+        level, title, friendly = ALERT_TEXT.get(code, ALERT_TEXT["engine_error"])
+        await self._emit("alert", {
+            "level": level, "code": code, "title": title, "message": friendly,
+            "detail": message[:300], "stage": stage, "turn": self.turn_no, "at": wall_clock(),
+        })
+
+    async def _alert_once(self, key: str, message: str, code: str = "tts_fallback") -> None:
         if key not in self._alerted:
             self._alerted.add(key)
-            await self._alert("tts", message)
+            await self._alert("tts", message, code)
 
     async def _persona_turn(self, speaker: PersonaCard, ctx: TurnContext, correction=None) -> PersonaResult:
         try:
@@ -608,7 +628,7 @@ class ShowEngine:
         reviewed = await self.supervisor.check(speaker, candidate, ctx, lambda corr: self._persona_turn(speaker, ctx, corr), turn)
         latency.supervisor = int((time.perf_counter() - sup_start) * 1000)
         if self.supervisor.mode != self._supervisor_mode:
-            await self._alert("quota", f"Supervisor turun ke mode {self.supervisor.mode}: {self.supervisor.last_llm_error[:120]}")
+            await self._alert("quota", f"Supervisor turun ke mode {self.supervisor.mode}: {self.supervisor.last_llm_error[:120]}", "supervisor_rules")
             self._supervisor_mode = self.supervisor.mode
 
         if ctx.max_words:  # backstop anggaran kata: buang kalimat utuh di ujung, tidak pernah memotong kalimat
@@ -909,7 +929,7 @@ class ShowEngine:
             prompts={a.prompt.name: a.prompt.version for a in (self.persona_agent, self.supervisor, self.showrunner)},
         )
         for warning in self.tts.warnings:  # mis. ELEVENLABS_API_KEY kosong → jatuh ke Edge
-            await self._alert("tts", warning)
+            await self._alert("tts", warning, "tts_warning")
         await self._broadcast_state()
         # Pipelining (FR-2): produsen menyiapkan sampai PIPELINE_DEPTH giliran di depan;
         # satu slot terbuka setiap kali sebuah giliran mulai diputar. Depth 1 = giliran n+1

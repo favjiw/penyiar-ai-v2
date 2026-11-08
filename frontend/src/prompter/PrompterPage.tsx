@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
 import { shout } from '../lib/materi'
 import { useLiveSession } from '../live/useLiveSession'
+import { useShowClock } from '../live/useShowClock'
 import { fmtClock, IconCheck, IconMicOff, LevelBars, Ring, ringState } from '../ui'
 import './prompter.css'
 import { useMicMonitor } from './useMicMonitor'
@@ -76,7 +77,8 @@ export function PrompterPage() {
   const aiBusy = !!speakingAi || !!thinkingAi || !!snap.busy
   const shouldListen = isModeA && snap.state === 'live' && !aiBusy
 
-  useTicker(onAir)
+  useTicker(onAir) // band "Pindah topik" berakhir sendiri setelah beberapa detik
+  const clock = useShowClock(showClock)
 
   // ── Mic hands-free ──────────────────────────────────────────────────────
   const sendTurn = async (text: string, sttMs: number, speechMs = 0) => {
@@ -116,6 +118,11 @@ export function PrompterPage() {
   const mic = useMicMonitor(isModeA && snap.state === 'live')
   const micDown = isModeA && onAir && (mic.down || MIC_ERROR_CODES.has(stt.errorCode))
   const aiLevel = useRelayedLevel(live.level, !!speakingAi)
+  // Konsol menampilkan peringatan merah "Mikrofon studio tidak terdengar" dari laporan ini (HANDOFF §2).
+  const micReason = micDown ? mic.reason || stt.errorCode || 'stt' : ''
+  useEffect(() => {
+    send('mic_state', { down: !!micReason, reason: micReason })
+  }, [micReason, send, live.connected])
 
   const next = useCallback(async () => {
     try {
@@ -170,9 +177,13 @@ export function PrompterPage() {
       ? { label: 'AJAKAN', text: shout(rundown?.closing.ajakan ?? '') }
       : { label: 'KALIMAT PEMBUKA', text: shout(rundown?.opening.hook ?? '') }
   const points = snap.topic_points ?? []
-  const currentIdx = topic ? Math.max(points.findIndex((p) => p.current), points.findIndex((p) => !p.covered)) : -1
+  // Poin aktif dari server; hanya bila server tidak menandai, pakai poin pertama yang belum dibahas.
+  // Tepat setelah pindah topik, poin dari server belum tiba: tampilkan poin materi, mulai dari yang pertama.
+  const pointList = points.length ? points : (topic?.poin ?? []).map((p) => ({ ...p, covered: false, current: undefined as boolean | undefined }))
+  const flagged = pointList.findIndex((p) => p.current)
+  const currentIdx = topic ? (flagged >= 0 ? flagged : pointList.findIndex((p) => !p.covered)) : -1
   const items: { text: string; state: 'done' | 'now' | 'todo' }[] = topic
-    ? (points.length ? points : topic.poin.map((p) => ({ ...p, covered: false }))).map((p, i) => ({
+    ? pointList.map((p, i) => ({
         text: p.text,
         state: p.covered && i !== currentIdx ? 'done' : i === currentIdx ? 'now' : 'todo',
       }))
@@ -183,12 +194,9 @@ export function PrompterPage() {
       : (rundown?.opening.poin ?? []).map((t) => ({ text: t, state: 'todo' as const }))
 
   // ── Jam ──────────────────────────────────────────────────────────────────
-  const clock = showClock?.clock
-  const drift = clock?.running ? (performance.now() - (showClock?.at ?? 0)) / 1000 : 0
-  const elapsed = (clock?.elapsed_s ?? 0) + drift
-  const segElapsed = (clock?.segment_elapsed_s ?? 0) + drift
-  const segTarget = clock?.segment_target_s ?? 0
-  const remaining = segTarget - segElapsed
+  const elapsed = clock?.elapsed ?? 0
+  const segTarget = clock?.segTarget ?? 0
+  const remaining = clock?.remaining ?? 0
   const rs = ringState(remaining)
   const nearEnd = rs !== 'normal'
 
@@ -306,7 +314,7 @@ export function PrompterPage() {
 
         <aside className="pr-side">
           <div className="pr-total">
-            Siaran {fmtClock(elapsed)} / {fmtClock(clock?.target_s ?? 0)}
+            Siaran {fmtClock(elapsed)} / {fmtClock(clock?.target ?? 0)}
             {paused && ' · dijeda'}
           </div>
           {segTarget > 0 && (

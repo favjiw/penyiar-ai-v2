@@ -128,12 +128,12 @@ class HumanLedEngine(ShowEngine):
             prompts={a.prompt.name: a.prompt.version for a in (self.persona_agent, self.supervisor, self.showrunner, self.summary)},
         )
         for warning in self.tts.warnings:  # mis. ELEVENLABS_API_KEY kosong → jatuh ke Edge
-            await self._alert("tts", warning)
+            await self._alert("tts", warning, "tts_warning")
         await self._broadcast_state()
         counts = await asyncio.gather(*(self.fillers.prepare(p) for p in self.personas))  # semua persona sekaligus
         for persona, n in zip(self.personas, counts):
             if n == 0:
-                await self._alert("tts", f"Bank filler {persona.name} kosong (TTS gagal); jawaban tetap jalan tanpa filler")
+                await self._alert("tts", f"Bank filler {persona.name} kosong (TTS gagal); jawaban tetap jalan tanpa filler", "tts_warning")
         self.log.event("quota", fillers_ready=sum(counts), tts=self.tts.status())
         await self._broadcast_state()
 
@@ -285,7 +285,7 @@ class HumanLedEngine(ShowEngine):
         reviewed = await self.supervisor.check(speaker, candidate, ctx, lambda corr: self._persona_turn(speaker, ctx, corr), turn)
         latency.supervisor = int((time.perf_counter() - sup_start) * 1000)
         if self.supervisor.mode != self._supervisor_mode:
-            await self._alert("quota", f"Supervisor turun ke mode {self.supervisor.mode}: {self.supervisor.last_llm_error[:120]}")
+            await self._alert("quota", f"Supervisor turun ke mode {self.supervisor.mode}: {self.supervisor.last_llm_error[:120]}", "supervisor_rules")
             self._supervisor_mode = self.supervisor.mode
 
         if ctx.max_words:  # backstop anggaran kata: buang kalimat utuh di ujung, tidak pernah memotong kalimat
