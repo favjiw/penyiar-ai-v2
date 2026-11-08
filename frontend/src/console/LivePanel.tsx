@@ -170,9 +170,9 @@ export function LivePanel({ live, blockers, onRefreshBlockers }: Props) {
             </select>
             {mode !== 'B' && (
               <>
-                <select value={aiPersona} onChange={(e) => setAiPersona(e.target.value)} aria-label="Lawan bicara AI">
-                  <option value="salsa">AI: Salsa</option>
-                  <option value="raka">AI: Raka</option>
+                <select value={aiPersona} onChange={(e) => setAiPersona(e.target.value)} aria-label="Gender AI">
+                  <option value="raka">Gender AI: Cowo</option>
+                  <option value="salsa">Gender AI: Cewe</option>
                 </select>
                 <input
                   type="text"
@@ -185,24 +185,28 @@ export function LivePanel({ live, blockers, onRefreshBlockers }: Props) {
               </>
             )}
             {catalog &&
-              aiIds.map((id) => (
-                <select
-                  key={id}
-                  value={voiceChoice[id] ?? ''}
-                  onChange={(e) => setVoiceChoice({ ...voiceChoice, [id]: e.target.value })}
-                  aria-label={`Suara ${id}`}
-                  title={catalog.voices.find((v) => v.id === voiceChoice[id])?.notes}
-                >
-                  <option value="">Suara {id === 'raka' ? 'Raka' : 'Salsa'}: bawaan</option>
-                  {catalog.voices
-                    .filter((v) => v.provider === catalog.provider)
-                    .map((v) => (
+              aiIds.map((id) => {
+                const targetGender = id === 'raka' ? 'male' : 'female'
+                const genderLabel = id === 'raka' ? 'Cowo' : 'Cewe'
+                const prefix = mode === 'A' ? `Suara (${genderLabel})` : `Suara ${id === 'raka' ? 'Raka (Cowo)' : 'Salsa (Cewe)'}`
+                const availableVoices = catalog.voices.filter((v) => v.provider === catalog.provider && v.gender === targetGender)
+                return (
+                  <select
+                    key={id}
+                    value={voiceChoice[id] ?? ''}
+                    onChange={(e) => setVoiceChoice({ ...voiceChoice, [id]: e.target.value })}
+                    aria-label={`Suara ${id}`}
+                    title={catalog.voices.find((v) => v.id === voiceChoice[id])?.notes}
+                  >
+                    <option value="">{prefix}: bawaan</option>
+                    {availableVoices.map((v) => (
                       <option key={v.id} value={v.id}>
-                        Suara {id === 'raka' ? 'Raka' : 'Salsa'}: {v.name} ({v.gender === 'male' ? 'pria' : 'wanita'})
+                        {prefix}: {v.name}
                       </option>
                     ))}
-                </select>
-              ))}
+                  </select>
+                )
+              })}
             {sameVoice && <span className="error" role="alert">Raka dan Salsa memakai suara yang sama</span>}
             <button
               className="primary"
@@ -210,6 +214,9 @@ export function LivePanel({ live, blockers, onRefreshBlockers }: Props) {
                 const b = blockers.find((x) => x.id === blockerId)
                 const toCheck = b ? b.topics.flatMap((t) => t.poin).filter((p) => p.perlu_cek).length : 0
                 if (toCheck && !window.confirm(`Ada ${toCheck} poin bertanda "perlu cek". Blocking akan dikunci dan dipakai live. Lanjutkan?`)) return
+                if (mode === 'A' && !output?.clients?.prompter) {
+                  window.open('/prompter', 'hits-prompter')
+                }
                 void act(() =>
                   mode === 'A'
                     ? api.startShow(blockerId, 'A', { ai_persona: aiPersona, human_name: humanName, voices: chosenVoices })
@@ -222,11 +229,9 @@ export function LivePanel({ live, blockers, onRefreshBlockers }: Props) {
             </button>
           </>
         )}
-        {(onAir ? snap.mode !== 'B' : mode !== 'B') && (
-          <a className="button-link" href="/prompter" target="hits-prompter" title="Prompter untuk penyiar (tablet atau monitor kedua)">
-            {output?.clients?.prompter ? 'Prompter ✓' : 'Buka Prompter'}
-          </a>
-        )}
+        <a className="button-link" href="/prompter" target="hits-prompter" title="Prompter (tablet atau monitor kedua)">
+          {output?.clients?.prompter ? 'Prompter ✓' : 'Buka Prompter'}
+        </a>
       </section>
 
       {precheck && !onAir && <div className="status">{precheck}</div>}

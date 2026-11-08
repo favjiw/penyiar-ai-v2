@@ -18,14 +18,22 @@ export function usePointCountdown(pc: LiveSession['pointClock']) {
   return { remaining: Math.max(0, c.limit_s - c.played_s - extra), idx: c.idx, total: c.total, text: c.text, limit: c.limit_s }
 }
 
-/** Label kecil "Poin 2/4 · 0:42" dengan warna peringatan saat waktu menipis. */
+/** Label kecil "Poin 2/4 · 0:42" (atau "⏱ 1:00" saat di luar segmen topik) dengan warna peringatan saat waktu menipis. */
 export function PointCountdown({ pointClock }: { pointClock: LiveSession['pointClock'] }) {
   const cd = usePointCountdown(pointClock)
-  if (!cd) return null
-  const low = cd.remaining <= 15
+  if (cd) {
+    const low = cd.remaining <= 15
+    return (
+      <span className={`point-countdown${low ? ' low' : ''}`} title={cd.text} aria-label={`Sisa waktu obrolan poin ${cd.idx + 1} dari ${cd.total}`}>
+        Poin {cd.idx + 1}/{cd.total} · {fmt(cd.remaining)}
+      </span>
+    )
+  }
+  const idleLimit = pointClock && !pointClock.clock.active ? pointClock.clock.limit_s : undefined
+  if (!idleLimit || idleLimit <= 0) return null
   return (
-    <span className={`point-countdown${low ? ' low' : ''}`} title={cd.text} aria-label={`Sisa waktu obrolan poin ${cd.idx + 1} dari ${cd.total}`}>
-      Poin {cd.idx + 1}/{cd.total} · {fmt(cd.remaining)}
+    <span className="point-countdown" title="Batas waktu obrolan per poin" aria-label={`Timer obrolan per poin ${fmt(idleLimit)}`}>
+      ⏱ {fmt(idleLimit)}
     </span>
   )
 }

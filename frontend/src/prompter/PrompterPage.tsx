@@ -15,14 +15,18 @@ const isTyping = (el: Element | null) => !!el && ['INPUT', 'TEXTAREA'].includes(
 export function PrompterPage() {
   const live = useLiveSession('prompter')
   const { snapshot: snap, transcript, showrunner } = live
+  const [autoMic, setAutoMic] = useState(true)
   const [toggleMode, setToggleMode] = useState(false)
   const [partial, setPartial] = useState('')
   const [typed, setTyped] = useState('')
   const [message, setMessage] = useState('')
   const lastPartialSent = useRef(0)
   const onAir = snap.state === 'live' || snap.state === 'paused'
+  const isModeA = snap.mode !== 'B'
   const aiNames = (snap.personas ?? []).map((p) => p.name).join(' dan ')
   const advice = [...showrunner].reverse().find((d) => d.advisory)
+  const aiSpeaking = snap.busy || (snap.personas ?? []).some((p) => p.id === live.speaking)
+  const shouldAutoListen = isModeA && snap.state === 'live' && autoMic && !aiSpeaking
 
   const sendTurn = async (text: string, sttMs: number, speechMs = 0) => {
     setPartial('')
@@ -45,9 +49,22 @@ export function PrompterPage() {
       }
     },
     onFinal: (text, sttMs, speechMs) => void sendTurn(text, sttMs, speechMs),
+    autoSendSilenceMs: autoMic ? 1200 : 0,
+    keepAlive: shouldAutoListen,
   })
 
-  // Konsol menyalakan indikator mikrofon selama tombol bicara ditahan.
+  // Otomatis nyalakan mikrofon begitu siaran Mode A live dan AI selesai bicara; matikan sementara saat AI menjawab.
+  const { start: startMic, cancel: cancelMic, listening } = ptt
+  useEffect(() => {
+    if (!speechSupported) return
+    if (shouldAutoListen && !listening) {
+      startMic()
+    } else if (autoMic && (!onAir || snap.state === 'paused' || aiSpeaking) && listening && !partial) {
+      cancelMic()
+    }
+  }, [shouldAutoListen, listening, autoMic, onAir, snap.state, aiSpeaking, partial, startMic, cancelMic])
+
+  // Konsol menyalakan indikator mikrofon selama mikrofon aktif.
   const { send } = live
   useEffect(() => {
     send('stt_partial', { text: '', active: ptt.listening })
@@ -65,16 +82,16 @@ export function PrompterPage() {
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (!onAir || isTyping(document.activeElement)) return
-      if (e.code === 'Space') {
+      if (e.code === 'Space' && isModeA) {
         e.preventDefault()
         if (e.repeat) return
-        if (toggleMode && ptt.listening) ptt.stop()
+        if ((autoMic || toggleMode) && ptt.listening) ptt.stop()
         else ptt.start()
-      } else if (e.key === 'Escape') ptt.cancel()
+      } else if (e.key === 'Escape' && isModeA) ptt.cancel()
       else if (e.key.toLowerCase() === 'n') void next()
     }
     const up = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && !toggleMode && !isTyping(document.activeElement)) {
+      if (e.code === 'Space' && isModeA && !autoMic && !toggleMode && !isTyping(document.activeElement)) {
         e.preventDefault()
         ptt.stop()
       }
@@ -95,16 +112,8 @@ export function PrompterPage() {
     return (
       <div className="prompter idle">
         <h1>Prompter</h1>
-        <p>{snap.state === 'ended' ? 'Siaran selesai.' : 'Menunggu operator memulai siaran mode A dari konsol.'}</p>
+        <p>{snap.state === 'ended' ? 'Siaran selesai.' : 'Menunggu operator memulai siaran dari konsol.'}</p>
         {!live.connected && <p className="warn">Belum tersambung ke server…</p>}
-      </div>
-    )
-  }
-  if (snap.mode === 'B') {
-    return (
-      <div className="prompter idle">
-        <h1>Prompter</h1>
-        <p>Siaran yang berjalan adalah mode B (AI + AI); prompter dipakai di mode A (penyiar + 1 AI).</p>
       </div>
     )
   }
@@ -114,14 +123,13 @@ export function PrompterPage() {
   const currentTopic = snap.rundown?.topics.find((t) => t.id === snap.topic?.id)
   const covered = points.filter((p) => p.covered).length
   const recent = transcript.slice(-4)
-  const aiSpeaking = snap.busy || (snap.personas ?? []).some((p) => p.id === live.speaking)
 
   return (
     <div className="prompter">
       <header>
         <span className={`state ${snap.state}`}>{snap.state === 'paused' ? 'PAUSE' : '● LIVE'}</span>
         <span className="tema">{snap.blocker?.tema}</span>
-        <span className="with">bersama {aiNames} (AI)</span>
+        <span className="with">{isModeA ? `bersama ${aiNames} (AI)` : `${aiNames} (AI + AI)`}</span>
         <PointCountdown pointClock={live.pointClock} />
         <button className="next" onClick={() => void next()}>
           Next topik <kbd>N</kbd>
@@ -221,36 +229,51 @@ export function PrompterPage() {
         </section>
       )}
 
-      <section className="talk">
-        {speechSupported ? (
-          <button
-            className={`ptt ${ptt.listening ? 'on' : ''}`}
-            onPointerDown={() => (toggleMode && ptt.listening ? ptt.stop() : ptt.start())}
-            onPointerUp={() => !toggleMode && ptt.stop()}
-            onPointerLeave={() => !toggleMode && ptt.listening && ptt.stop()}
-          >
-            {ptt.listening ? 'Mendengarkan… lepas untuk kirim' : toggleMode ? 'Tekan untuk bicara' : 'Tahan untuk bicara'}
-            <kbd>Spasi</kbd>
-          </button>
-        ) : (
-          <form
-            className="typed"
-            onSubmit={(e) => {
-              e.preventDefault()
-              if (typed.trim()) void sendTurn(typed.trim(), 0)
-              setTyped('')
-            }}
-          >
-            <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Browser ini tanpa Web Speech: ketik ucapan lalu Enter" />
-          </form>
-        )}
-        <label className="toggle">
-          <input type="checkbox" checked={toggleMode} onChange={(e) => setToggleMode(e.target.checked)} /> tekan sekali mulai, tekan lagi selesai
-        </label>
-        <div className="partial">{partial || (aiSpeaking ? `${aiNames} sedang menjawab…` : '')}</div>
-        {(ptt.error || message) && <div className="warn">{ptt.error || message}</div>}
-        {ptt.listening && <div className="hint">Esc = batal</div>}
-      </section>
+      {isModeA && (
+        <section className="talk">
+          {speechSupported ? (
+            <button
+              className={`ptt ${ptt.listening ? 'on' : ''}`}
+              onPointerDown={() => ((autoMic || toggleMode) && ptt.listening ? ptt.stop() : ptt.start())}
+              onPointerUp={() => !autoMic && !toggleMode && ptt.stop()}
+              onPointerLeave={() => !autoMic && !toggleMode && ptt.listening && ptt.stop()}
+            >
+              {ptt.listening
+                ? autoMic
+                  ? '🎤 Mic Aktif (otomatis kirim saat jeda bicara · klik/Spasi untuk kirim sekarang)'
+                  : 'Mendengarkan… lepas untuk kirim'
+                : autoMic
+                  ? 'Klik atau bicara untuk mengaktifkan mic'
+                  : toggleMode
+                    ? 'Tekan untuk bicara'
+                    : 'Tahan untuk bicara'}
+              <kbd>Spasi</kbd>
+            </button>
+          ) : (
+            <form
+              className="typed"
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (typed.trim()) void sendTurn(typed.trim(), 0)
+                setTyped('')
+              }}
+            >
+              <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Browser ini tanpa Web Speech: ketik ucapan lalu Enter" />
+            </form>
+          )}
+          <label className="toggle">
+            <input type="checkbox" checked={autoMic} onChange={(e) => setAutoMic(e.target.checked)} /> mikrofon otomatis menyala (hands-free)
+          </label>
+          {!autoMic && (
+            <label className="toggle">
+              <input type="checkbox" checked={toggleMode} onChange={(e) => setToggleMode(e.target.checked)} /> tekan sekali mulai, tekan lagi selesai
+            </label>
+          )}
+          <div className="partial">{partial || (aiSpeaking ? `${aiNames} sedang menjawab…` : '')}</div>
+          {(ptt.error || message) && <div className="warn">{ptt.error || message}</div>}
+          {ptt.listening && <div className="hint">Esc = batal</div>}
+        </section>
+      )}
 
       <section className="recent">
         {recent.map((t) => (

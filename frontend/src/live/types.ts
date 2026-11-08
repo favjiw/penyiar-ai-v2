@@ -34,7 +34,7 @@ export interface TopicPoint {
 
 /** Jam satu obrolan (poin): `played_s` dari audio yang sudah diputar; `running` = ada giliran yang sedang diputar. */
 export type PointClock =
-  | { active: false }
+  | { active: false; limit_s?: number }
   | { active: true; topic_id: string; point_id: string; idx: number; total: number; text: string; limit_s: number; played_s: number; running: boolean; ts: number }
 
 export interface OnAirTopic {

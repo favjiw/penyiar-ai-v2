@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     GEMINI_RPM_SUPERVISOR: int = 0
     GEMINI_RPM_SHOWRUNNER: int = 0
     GEMINI_RPM_TTS: int = 0
-    GEMINI_RPM_DEFAULT: int = 5
+    GEMINI_RPM_DEFAULT: int = 15
 
     # Endpoint kompatibel OpenAI (opsional): dipakai lewat model `compat:<nama>` di GEMINI_MODEL_*
     OPENAI_COMPAT_BASE_URL: str = ""
@@ -83,7 +83,7 @@ class Settings(BaseSettings):
     SHOWRUNNER_TIMEOUT_MS: int = 6000  # lewat batas → keputusan fixed_turns
     PERSONA_FAILURES_BEFORE_WRAP: int = 3  # persona gagal beruntun sebanyak ini...
     PERSONA_FAILURE_WRAP_SEC: int = 90  # ...dan selama ini (detik) → ke Closing; gangguan jaringan sesaat tidak menutup siaran
-    PIPELINE_DEPTH: int = 1
+    PIPELINE_DEPTH: int = 2
     OPENING_TURNS: int = 2  # batas lunak Opening (mode B)
     CLOSING_TURNS: int = 2
     POINT_TIME_LIMIT_S: int = 60  # batas satu obrolan (satu poin) untuk kedua penyiar; 0 = mati (mode lama: Showrunner per topik). Rencana uji: 90

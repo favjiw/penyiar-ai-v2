@@ -212,10 +212,26 @@ class ShowEngine:
             "transcript": self.transcript[-TRANSCRIPT_KEEP:],
             "showrunner": self.last_showrunner.model_dump() if self.last_showrunner else None,
             "coverage": {tid: {"covered": sorted(p.covered), "total": len(p.topic.poin)} for tid, p in self.progress.items()},
+            "topic_points": self._topic_points(),
             "tts": self.tts.status(),
             "point_clock": self._clock_payload(self._clock_running),
             "error": self.error,
         }
+
+    def _topic_points(self) -> list[dict[str, Any]]:
+        """Poin topik aktif dengan centang dan penanda poin aktif (prompter, FR-11)."""
+        if self.on_air.get("segment") != "topic":
+            return []
+        on_topic = self.on_air.get("topic")
+        topic = next((t for t in self.blocker.topics if on_topic and t.id == on_topic.get("id")), None)
+        if topic is None:
+            topic = self.blocker.topics[self.plan.topic_idx]
+        covered = self.progress[topic.id].covered
+        if self.timed:
+            on_point = self.on_air.get("point")
+            cur = on_point["idx"] if on_point and on_point.get("topic_id") == topic.id else min(self.plan.point_idx, len(topic.poin) - 1)
+            return [{"id": p.id, "text": p.text, "covered": i < cur or p.id in covered, "current": i == cur} for i, p in enumerate(topic.poin)]
+        return [{"id": p.id, "text": p.text, "covered": p.id in covered} for p in topic.poin]
 
     def _rundown(self) -> dict[str, Any]:
         """Blocker terkunci apa adanya, untuk prompter penyiar manusia."""
@@ -371,9 +387,11 @@ class ShowEngine:
         self.on_air["point"] = self._point_info(self.blocker.topics[self.plan.topic_idx], self.plan.point_idx) if key else None
 
     def _clock_payload(self, running: bool) -> dict[str, Any]:
-        pos = self.on_air.get("point") if self.timed else None
-        if not pos:
+        if not self.timed or self.state == ShowState.ENDED:
             return {"active": False}
+        pos = self.on_air.get("point")
+        if not pos:
+            return {"active": False, "limit_s": self.point_clock.limit_s}
         played = self.point_played.get((pos["topic_id"], pos["point_id"]), 0.0)
         return {"active": True, **pos, "limit_s": self.point_clock.limit_s, "played_s": round(played, 1), "running": running, "ts": round(wall_clock(), 2)}
 

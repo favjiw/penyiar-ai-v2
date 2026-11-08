@@ -220,6 +220,7 @@ async def test_mode_a_next_topic_during_closing_answer_does_not_skip_the_new_top
     engine, _ = make(tmp_path, POINT_TIME_LIMIT_S=20, POINT_WRAP_S=6)
     engine.start()
     await settle(engine)
+    assert engine.snapshot()["point_clock"] == {"active": False, "limit_s": 20}
     await engine.skip()  # topik 1, poin 1
     key = engine._point_key()
     engine._closed_point = key  # jawaban penutup baru selesai diputar...
