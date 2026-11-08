@@ -20,7 +20,9 @@ from app.show.engine import ShowEngine
 from app.show.mode_a import HumanLedEngine
 from app.show.participants import DEFAULT_AI_IDS
 from app.tts.base import TTSError
+from app.show.readiness import build_readiness, rates_from_logs
 from app.tts.catalog import load_voice_catalog
+from app.tts.credits import elevenlabs_credits_left
 from app.ws import ConnectionManager
 
 logger = logging.getLogger(__name__)
@@ -65,6 +67,7 @@ async def start_show(req: StartShowRequest, request: Request):
         except BlockerInvalid as e:
             raise HTTPException(422, str(e))
     app.state.tts.set_voices(req.voices, ai_ids)
+    budget = await _tts_budget(app, req.mode, fresh=True)
     ws: ConnectionManager = app.state.ws
     common = dict(seed=req.seed, has_audio_owner=lambda: ws.audio_owner() is not None)
     if req.mode == "A":
@@ -77,9 +80,46 @@ async def start_show(req: StartShowRequest, request: Request):
         engine = ShowEngine(
             app.state.settings, app.state.llm, app.state.tts, blocker, personas, ws.broadcast, audio_dir(request), mode="B", **common
         )
+    engine.tts_budget = budget  # peringatan "kuota suara tinggal ±N menit" saat live
     app.state.engine = engine
     engine.start()
     return engine.snapshot()
+
+
+START_CREDITS_TIMEOUT_S = 2.5  # Mulai tidak boleh tertahan lama oleh ElevenLabs (KT FR-2: tombol ≤1 s sebisanya)
+
+
+async def _tts_budget(app, mode: str, fresh: bool = False) -> dict:
+    """Sisa kredit suara saat mulai + laju per menit; sisa None bila tidak diketahui (tanpa peringatan)."""
+    s = app.state.settings
+    rates = rates_from_logs(s.LOG_DIR, mode, s.AI_TURNS_PER_MIN_A if mode == "A" else s.AI_TURNS_PER_MIN_B, s.TTS_CREDITS_PER_MIN)
+    left, note = (None, "")
+    used_at = app.state.tts.credits_used
+    if app.state.tts.primary.name == "elevenlabs":
+        if fresh:
+            left, note = await elevenlabs_credits_left(s.ELEVENLABS_API_KEY, timeout_sec=START_CREDITS_TIMEOUT_S, fresh=True)
+        else:
+            left, note = await elevenlabs_credits_left(s.ELEVENLABS_API_KEY)
+        used_at = app.state.tts.credits_used
+    return {"credits_left": left, "per_min": rates.tts_credits_per_min, "used_at_start": used_at, "note": note, "rates": rates}
+
+
+async def _readiness(app, mode: str, target_minutes: int) -> dict:
+    s = app.state.settings
+    budget = await _tts_budget(app, mode)
+    return build_readiness(
+        s, app.state.quota, mode=mode, target_minutes=target_minutes, rates=budget["rates"],
+        tts_primary=app.state.tts.primary.name, tts_fallbacks=[f.name for f in app.state.tts.fallbacks],
+        tts_credits_left=budget["credits_left"], tts_note=budget["note"],
+    )
+
+
+@router.get("/api/readiness")
+async def readiness(request: Request, mode: str = "B", target_minutes: int = 60):
+    """Cek kesiapan tanpa memanaskan suara (header konsol): menit aman per layanan, PERKIRAAN."""
+    if mode not in ("A", "B"):
+        raise HTTPException(422, "mode harus A atau B")
+    return await _readiness(request.app, mode, max(1, min(240, target_minutes)))
 
 
 @router.get("/api/show")
@@ -179,6 +219,8 @@ async def precheck(request: Request, req: Optional[PrecheckRequest] = None):
     except Exception as e:
         result["tts_ok"], result["tts_error"] = False, str(e)[:300]
     result["tts"] = app.state.tts.status()
+    req = req or PrecheckRequest()
+    result["readiness"] = await _readiness(app, req.mode, req.target_minutes)
     return result
 
 

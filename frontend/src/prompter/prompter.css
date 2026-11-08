@@ -8,6 +8,11 @@
 .pr-wait__logo { height: 96px; width: auto; }
 .pr-wait__title { margin: 0; font-size: 96px; font-weight: 800; line-height: 1.05; letter-spacing: -.02em; }
 .pr-wait__hint { margin: 0; font-size: 34px; color: var(--n-700); max-width: 1400px; }
+.pr-wait__mic { display: flex; align-items: center; gap: 20px; background: var(--n-50); border-radius: var(--r-card); padding: 18px 26px; text-align: left; font-size: 22px; max-width: 1100px; }
+.pr-wait__mic > span { display: flex; flex-direction: column; gap: 4px; }
+.pr-wait__mic > span > span { font-size: 18px; color: var(--n-700); }
+.pr-wait__mic .ui-level { color: var(--ink); }
+.pr-wait__mic svg { color: var(--danger); }
 .pr-wait__warn { margin: 0; font-size: 28px; font-weight: 700; color: var(--danger); }
 
 /* ── Band status ─────────────────────────────────────────────────────── */

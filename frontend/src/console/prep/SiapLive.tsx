@@ -3,13 +3,14 @@
  * cek otomatis, dan satu-satunya tombol Mulai live di konsol.
  */
 import { useEffect, useRef, useState } from 'react'
-import { api, ApiError, type VoiceCatalog, type VoiceOption } from '../../api'
+import { api, ApiError, type Readiness, type VoiceCatalog, type VoiceOption } from '../../api'
 import { DURASI_PILIHAN, factCheckCount, materiIssues, materiSummary, planMinutes, type Durasi } from '../../lib/materi'
 import { usePersisted } from '../../lib/usePersisted'
 import type { LiveSession } from '../../live/useLiveSession'
 import { openStageWindow } from '../../stage/openStageWindow'
 import type { Blocker } from '../../types'
 import { Button, IconAlert, IconCheck, IconPlay } from '../../ui'
+import { readinessSummary } from './Readiness'
 
 type Mode = 'A' | 'B'
 type Persona = 'raka' | 'salsa'
@@ -30,8 +31,15 @@ export function useDurasi() {
   return usePersisted<Durasi>('hits.durasi', 60, isDurasi)
 }
 
+export function useMode() {
+  return usePersisted<Mode>('hits.mode', 'A', isMode)
+}
+
 interface Props {
   live: LiveSession
+  mode: Mode
+  onMode: (m: Mode) => void
+  readiness: Readiness | null
   materi: Blocker | null
   durasi: Durasi
   onDurasi: (d: Durasi) => void
@@ -42,9 +50,8 @@ interface Props {
 
 type Precheck = { state: 'idle' | 'running' } | { state: 'ok' } | { state: 'fail'; message: string; detail?: string }
 
-export function SiapLive({ live, materi, durasi, onDurasi, onEdit, onRegenerateForDuration, generating }: Props) {
+export function SiapLive({ live, mode, onMode: setMode, readiness, materi, durasi, onDurasi, onEdit, onRegenerateForDuration, generating }: Props) {
   const { output } = live
-  const [mode, setMode] = usePersisted<Mode>('hits.mode', 'A', isMode)
   const [aiPersona, setAiPersona] = usePersisted<Persona>('hits.aiPersona', 'salsa', isPersona)
   const [hostName, setHostName] = usePersisted<string>('hits.hostName', '', isStr)
   const [voices, setVoices] = usePersisted<Record<string, string>>('hits.voices', {}, isVoiceMap)
@@ -101,6 +108,7 @@ export function SiapLive({ live, materi, durasi, onDurasi, onEdit, onRegenerateF
       setBusyFlag(true)
       setPrecheck({ state: 'running' })
       try {
+        // Memanaskan suara terpilih (memakai kredit bila ElevenLabs): hanya saat materi/suara berubah, bukan mode/durasi.
         const r = await api.precheck(JSON.parse(chosenKey) as Record<string, string>)
         if (cancelled) return
         if (!r.models_ok) setPrecheck({ state: 'fail', message: 'Otak AI belum diatur', detail: 'Model LLM belum diisi di .env' })
@@ -330,6 +338,16 @@ export function SiapLive({ live, materi, durasi, onDurasi, onEdit, onRegenerateF
                   : 'Otak AI dan suara AI dicek setelah materi dipilih'}
             {precheck.state === 'fail' && precheck.detail && <span className="siap-detail" title={precheck.detail}> · detail</span>}
           </Check>
+          {readiness && (
+            <Check ok={!readinessSummary(readiness, durasi).short && !readinessSummary(readiness, durasi).unknown}>
+              Kesiapan siaran ·{' '}
+              {readiness.minutes_safe == null
+                ? readiness.unknown.length
+                  ? `sisa kuota ${readiness.unknown.join(' dan ').toLowerCase()} belum diketahui`
+                  : 'kuota tidak membatasi'
+                : `±${readiness.minutes_safe} dari ${durasi} menit${readiness.minutes_safe < durasi && readiness.fallbacks.length ? ', lalu cadangan' : ''}${readiness.unknown.length ? ` (${readiness.unknown.join(', ').toLowerCase()} belum diketahui)` : ''}`}
+            </Check>
+          )}
           {materi && (
             <Check ok={issues.length === 0}>
               {issues.length === 0 ? 'Materi lengkap' : `Materi belum lengkap: ${issues.length} bagian`}

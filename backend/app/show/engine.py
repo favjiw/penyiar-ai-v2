@@ -67,6 +67,7 @@ ALERT_TEXT: dict[str, tuple[str, str, str]] = {
     "tts_warning": ("yellow", "Ada catatan soal suara AI", "Suara AI mungkin tidak sesuai pilihan. Lihat Detail teknis."),
     "llm_fallback": ("blue", "Otak AI pindah ke cadangan", "Kuota otak AI habis; siaran memakai cadangan otomatis."),
     "ai_failing": ("yellow", "AI gagal menjawab", "Kalau terus berulang, siaran dibawa ke penutup. Penyiar bisa ambil alih dulu."),
+    "tts_quota_low": ("yellow", "Kuota suara AI hampir habis", "Setelah habis, suara pindah ke cadangan dan terdengar sedikit berbeda. Bisa mulai disiapkan penutupnya."),
     "supervisor_rules": ("blue", "Pemeriksaan ucapan AI disederhanakan", "Ucapan AI sementara diperiksa dengan aturan dasar saja. Siaran tetap jalan."),
     "engine_error": ("yellow", "Ada gangguan di sistem", "Siaran tetap jalan. Lihat Detail teknis."),
 }
@@ -191,6 +192,10 @@ class ShowEngine:
         self._paused_at: Optional[float] = None
         self._ended_at: Optional[float] = None
         self._segment_started_active = 0.0
+        # Diisi API saat mulai: {credits_left, per_min, used_at_start}; credits_left None = sisa tidak diketahui.
+        self.tts_budget: dict[str, Any] = {}
+        self._tts_low_alerted = False
+        self._bg_tasks: set[asyncio.Task] = set()  # tugas latar yang harus tetap dirujuk sampai selesai
         self._resume = asyncio.Event()
         self._resume.set()
         self._playback_id: Optional[str] = None
@@ -213,6 +218,23 @@ class ShowEngine:
             logger.warning("Emit %s gagal: %s", type_, e)
         if type_ == "topic_change":
             await self._emit("show_clock", self.show_clock())
+
+    def tts_minutes_left(self) -> Optional[float]:
+        """Perkiraan menit suara AI yang tersisa (kredit saat mulai − kredit terpakai sesi ini) ÷ laju; None bila tidak diketahui."""
+        b = self.tts_budget
+        if not b or b.get("credits_left") is None or not b.get("per_min"):
+            return None
+        used = self.tts.credits_used - b.get("used_at_start", 0)
+        return max(0.0, (b["credits_left"] - used) / b["per_min"])
+
+    def _check_tts_quota(self) -> None:
+        left = self.tts_minutes_left()
+        if left is None or self._tts_low_alerted or left > self.settings.TTS_QUOTA_ALERT_MIN:
+            return
+        self._tts_low_alerted = True
+        task = asyncio.get_running_loop().create_task(self._alert("tts", f"Perkiraan sisa kredit suara ±{left:.0f} menit", "tts_quota_low"))
+        self._bg_tasks.add(task)
+        task.add_done_callback(self._bg_tasks.discard)
 
     def _active_s(self) -> float:
         """Detik siaran berjalan sejak mulai, tanpa waktu jeda."""
@@ -266,6 +288,8 @@ class ShowEngine:
             "tts": self.tts.status(),
             "point_clock": self._clock_payload(self._clock_running),
             "show_clock": self.show_clock(),
+            "tts_minutes_left": None if (m := self.tts_minutes_left()) is None else int(m),
+            "tts_quota_low": m is not None and m <= self.settings.TTS_QUOTA_ALERT_MIN,
             "error": self.error,
         }
 
@@ -715,6 +739,8 @@ class ShowEngine:
         timing_breakdown: Optional[dict[str, Any]] = None, nudge: bool = False,
     ) -> None:
         """Satu baris `sessions/<id>/turns.jsonl` (lihat turnlog.py untuk arti tiap medan)."""
+        if not is_human:
+            self._check_tts_quota()
         try:
             self.turn_log.write(
                 session_id=self.session_id, mode=self.mode, turn_idx=turn, speaker=speaker, speaker_name=speaker_name, is_human=is_human,

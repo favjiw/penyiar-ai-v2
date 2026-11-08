@@ -64,27 +64,26 @@ function Console() {
 
   return (
     <div className="console">
-      <header className="console-top">
-        <div className="console-top__inner">
-          <img src="/logo-hits.png" alt="HITS Unikom Radio 103.9 FM" className="console-top__logo" />
-          <span className="console-top__name">Penyiar AI</span>
-          <span className="console-top__spacer" />
-          {!live.connected && (
-            <span className="console-top__offline" role="status">
-              Menyambung ke server…
-            </span>
-          )}
-          <TechDetails health={health} tts={tts} />
+      <PrepPage
+        live={live}
+        headerExtras={
+          <>
+            {!live.connected && (
+              <span className="console-top__offline" role="status">
+                Menyambung ke server…
+              </span>
+            )}
+            <TechDetails health={health} tts={tts} />
+          </>
+        }
+      />
+      {/* Peringatan suara tetap terlihat (FR-6) sebelum live; saat live, konsol live punya peringatan sendiri. */}
+      {(tts?.warnings ?? []).length > 0 && (
+        <div className="console-warn console-warn--float" role="status">
+          <IconAlert size={20} />
+          <span>Ada catatan soal suara AI: {(tts?.warnings ?? [])[0]}</span>
         </div>
-        {/* Peringatan suara tetap terlihat (FR-6) sampai sistem peringatan konsol dibuat (HANDOFF §3 langkah 6). */}
-        {(tts?.warnings ?? []).length > 0 && (
-          <div className="console-warn" role="status">
-            <IconAlert size={20} />
-            <span>Ada catatan soal suara AI: {(tts?.warnings ?? [])[0]}</span>
-          </div>
-        )}
-      </header>
-      <PrepPage live={live} />
+      )}
     </div>
   )
 }

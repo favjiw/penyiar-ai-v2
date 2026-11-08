@@ -57,3 +57,18 @@ async def test_speaking_cleared_after_each_turn_mode_b(tmp_path):
     turns = sum(1 for t, _ in events if t == "turn")
     cleared = sum(1 for t, d in events if t == "speaking" and d.get("persona") is None)
     assert turns > 0 and cleared >= turns
+
+
+async def test_tts_quota_low_alert_fires_once(tmp_path):
+    engine, events = make(tmp_path, TTS_QUOTA_ALERT_MIN=5)
+    engine.tts_budget = {"credits_left": 900, "per_min": 200, "used_at_start": engine.tts.credits_used}  # ±4,5 menit
+    engine.start()
+    await settle(engine)
+    await engine.human_turn("halo Salsa")
+    await settle(engine)
+    await engine.human_turn("terus?")
+    await settle(engine)
+    low = [d for t, d in events if t == "alert" and d["code"] == "tts_quota_low"]
+    assert len(low) == 1 and low[0]["level"] == "yellow"
+    assert engine.snapshot()["tts_minutes_left"] == 4
+    await engine.stop()

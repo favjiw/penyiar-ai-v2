@@ -121,7 +121,8 @@ export function PrompterPage() {
     send('stt_partial', { text: '', active: listening })
   }, [listening, send])
 
-  const mic = useMicMonitor(isModeA && snap.state === 'live')
+  // Mic dipantau saat giliran penyiar (mode A live) dan di layar tunggu, supaya mic bisa dicek sebelum live.
+  const mic = useMicMonitor((isModeA && snap.state === 'live') || !onAir)
   const micDown = isModeA && onAir && (mic.down || MIC_ERROR_CODES.has(stt.errorCode))
   const aiLevel = useRelayedLevel(live.level, !!speakingAi)
   // Konsol menampilkan peringatan merah "Mikrofon studio tidak terdengar" dari laporan ini (HANDOFF §2).
@@ -164,6 +165,17 @@ export function PrompterPage() {
             : 'Layar ini otomatis berganti saat siaran dimulai dari konsol. Kamu tidak perlu menekan apa pun.'}
         </p>
         {!speechSupported && <p className="pr-wait__warn">Buka prompter di Google Chrome supaya mikrofon bisa mendengar suaramu.</p>}
+        <div className="pr-wait__mic" aria-live="polite">
+          {mic.down ? <IconMicOff size={36} /> : <LevelBars level={mic.level} height={40} />}
+          <span>
+            <strong>{mic.down ? (mic.reason === 'denied' ? 'Izin mikrofon belum diberikan' : 'Mikrofon tidak terdengar') : `Mikrofon: ${mic.device || 'bawaan Chrome'}`}</strong>
+            <span>
+              {mic.reason === 'denied'
+                ? 'Izinkan mikrofon lewat ikon di ujung kiri bilah alamat Chrome, lalu muat ulang halaman ini.'
+                : 'Coba bicara: bar ikut bergerak. Ganti mic lewat setelan suara Chrome atau sistem operasi.'}
+            </span>
+          </span>
+        </div>
         {!live.connected && <p className="pr-wait__warn">Belum tersambung ke server…</p>}
       </div>
     )

@@ -188,3 +188,12 @@ def test_undo_topic_endpoint(client):
     client.post("/api/show/start", json={"blocker_id": blocker["id"], "mode": "A", "ai_persona": "salsa", "human_name": "Favian"})
     assert client.post("/api/show/undo-topic").status_code == 409  # belum ada pindah lewat ucapan
     client.post("/api/show/stop")
+
+
+def test_readiness_endpoint_reports_minutes_per_service(client):
+    r = client.get("/api/readiness", params={"mode": "A", "target_minutes": 60}).json()
+    kinds = [s["kind"] for s in r["services"]]
+    assert kinds == ["llm", "tts", "stt"] and r["target_minutes"] == 60 and r["estimated"] is True
+    assert client.get("/api/readiness", params={"mode": "X"}).status_code == 422
+    pre = client.post("/api/precheck", json={"mode": "B", "target_minutes": 45}).json()
+    assert pre["readiness"]["target_minutes"] == 45

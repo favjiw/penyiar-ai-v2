@@ -251,6 +251,8 @@ export function LivePanel({ live }: { live: LiveSession }) {
   statusRows.push({ label: 'Layar untuk OBS', value: !stageOpen ? 'Tertutup' : output?.audio_ready ? 'Tersambung' : 'Belum bersuara', tone: stageOpen && output?.audio_ready ? 'ok' : 'bad' })
   if (isModeA) statusRows.push({ label: 'Prompter', value: prompterOpen ? 'Tersambung' : 'Tertutup', tone: prompterOpen ? 'ok' : 'bad' })
   statusRows.push({ label: 'Suara AI', value: backupVoice ? 'Cadangan aktif' : 'Normal', tone: backupVoice ? 'info' : 'ok' })
+  if (snap.tts_minutes_left != null)
+    statusRows.push({ label: 'Kuota suara', value: `±${snap.tts_minutes_left} menit lagi, lalu cadangan`, tone: snap.tts_quota_low ? 'bad' : 'ok' })
 
   const hostName = snap.human?.name
   const who = isModeA ? `${hostName ?? 'Penyiar'} + ${personas[0]?.name ?? 'AI'}` : personas.map((p) => p.name).join(' + ')

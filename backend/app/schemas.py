@@ -202,6 +202,8 @@ class VoiceSampleRequest(BaseModel):
 
 class PrecheckRequest(BaseModel):
     voices: dict[str, str] = Field(default_factory=dict)
+    mode: ShowMode = "B"  # laju pemakaian per menit berbeda per mode (cek kesiapan, PRD v2.7)
+    target_minutes: int = Field(default=60, ge=1, le=240)
 
 
 class PTTTurnRequest(BaseModel):

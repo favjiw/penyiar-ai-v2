@@ -211,3 +211,39 @@
 .ed-pv__boxtext { font-size: 19px; font-weight: 800; line-height: 1.3; overflow-wrap: anywhere; }
 .ed-pv__items { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 16px; }
 .ed-pv__items li { overflow-wrap: anywhere; }
+
+/* ── Cek kesiapan (mockup KonsolCekKesiapan) ─────────────────────────── */
+.console-warn--float { position: fixed; left: 16px; right: 16px; bottom: 16px; max-width: 900px; margin: 0 auto; border-radius: var(--r-card); box-shadow: var(--shadow-pop); z-index: 30; }
+.rd { position: relative; }
+.rd-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; border-radius: var(--r-pill); padding: 3px 10px; background: var(--n-100); color: var(--ink); }
+.rd-pill.is-ok { background: var(--success-bg); color: var(--success); }
+.rd-pill.is-warn { background: var(--yellow-50); color: var(--ink); }
+.rd-pill__dot { width: 7px; height: 7px; border-radius: 999px; background: currentColor; }
+.rd-pill.is-warn .rd-pill__dot { background: var(--gold-ring); }
+.rd-panel { position: absolute; right: 0; top: calc(100% + 10px); z-index: 25; width: min(440px, 92vw); background: var(--n-0); border-radius: var(--r-card); box-shadow: var(--shadow-pop); padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+.rd-head { display: flex; align-items: baseline; gap: 8px; }
+.rd-head h2 { margin: 0; font-size: 16px; font-weight: 700; flex: 1; }
+.rd-head span, .rd-note { font-size: 13px; color: var(--n-600); }
+.rd-note { margin: 0; }
+.rd-error { margin: 0; color: var(--danger); font-size: 14px; }
+.rd-summary { background: var(--success-bg); border-radius: var(--r-input); padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.rd-summary.is-warn { background: var(--yellow-50); }
+.rd-summary__label { font-size: 13px; font-weight: 600; color: var(--n-700); }
+.rd-summary__big { font-size: 33px; font-weight: 800; line-height: 1.1; letter-spacing: -.01em; }
+.rd-choices { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.rd-choice { display: flex; gap: 10px; align-items: flex-start; background: var(--n-0); border: 1.5px solid var(--n-200); border-radius: var(--r-input); padding: 10px 12px; cursor: pointer; }
+.rd-choice.is-on { border: 2px solid var(--ink); }
+.rd-choice input { margin: 3px 0 0; accent-color: var(--ink); }
+.rd-choice > span { display: flex; flex-direction: column; font-size: 14px; }
+.rd-choice > span > span { color: var(--n-600); }
+.rd-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.rd-list li { display: flex; gap: 12px; padding: 10px 12px; border-radius: var(--r-input); align-items: flex-start; }
+.rd-list li.is-warn { background: var(--yellow-50); }
+.rd-list__icon { color: var(--success); flex: none; margin-top: 1px; }
+.rd-list li.is-warn .rd-list__icon { color: var(--yellow-ink); }
+.rd-list__text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.rd-list__text > span { color: var(--n-600); }
+.rd-list__verdict { font-weight: 700; white-space: nowrap; }
+.rd-bar { display: block; height: 6px; border-radius: 999px; background: var(--n-200); margin-top: 6px; overflow: hidden; }
+.rd-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--brand-blue); }
+.rd-list li.is-warn .rd-bar > span { background: var(--ink); }

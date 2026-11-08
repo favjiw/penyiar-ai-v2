@@ -12,6 +12,8 @@ export interface MicState {
   /** Mic tidak terdengar: izin ditolak, perangkat lepas, atau sinyal nol ≥8 dtk. */
   down: boolean
   reason: '' | 'denied' | 'ended' | 'silent' | 'unavailable'
+  /** Nama perangkat input bawaan yang dipakai Chrome (Web Speech juga memakai yang ini). */
+  device: string
 }
 
 /**
@@ -21,19 +23,21 @@ export interface MicState {
  */
 export function useMicMonitor(enabled: boolean): MicState {
   // Dimatikan saat jeda/selesai oleh pemanggil (enabled=false) supaya cek sunyi 8 dtk tidak jalan.
-  const [state, setState] = useState<MicState>({ level: 0, down: false, reason: '' })
+  const [state, setState] = useState<MicState>({ level: 0, down: false, reason: '', device: '' })
 
   useEffect(() => {
     if (!enabled) {
-      setState({ level: 0, down: false, reason: '' })
+      setState({ level: 0, down: false, reason: '', device: '' })
       return
     }
     let stopped = false
     let stream: MediaStream | null = null
     let ctx: AudioContext | null = null
     let raf = 0
-    const set = (s: MicState) => {
-      if (!stopped) setState((prev) => (prev.level === s.level && prev.down === s.down && prev.reason === s.reason ? prev : s))
+    let device = ''
+    const set = (partial: Omit<MicState, 'device'>) => {
+      const s = { ...partial, device }
+      if (!stopped) setState((prev) => (prev.level === s.level && prev.down === s.down && prev.reason === s.reason && prev.device === s.device ? prev : s))
     }
 
     ;(async () => {
@@ -45,6 +49,7 @@ export function useMicMonitor(enabled: boolean): MicState {
       }
       if (stopped) return stream.getTracks().forEach((t) => t.stop())
       const track = stream.getAudioTracks()[0]
+      device = track?.label ?? ''
       track?.addEventListener('ended', () => set({ level: 0, down: true, reason: 'ended' }))
       ctx = new AudioContext()
       void ctx.resume()

@@ -38,6 +38,18 @@ class Settings(BaseSettings):
     GEMINI_RPM_SHOWRUNNER: int = 0
     GEMINI_RPM_TTS: int = 0
     GEMINI_RPM_DEFAULT: int = 15
+    # Kuota harian per model (RPD) untuk cek kesiapan (PRD v2.7 §8). Free tier terukur 500/hari/model (Tahap 2).
+    GEMINI_RPD_DEFAULT: int = 500
+    GEMINI_RPD_BLOCKER: int = 0  # 0 = pakai GEMINI_RPD_DEFAULT
+    GEMINI_RPD_PERSONA: int = 0
+    GEMINI_RPD_SUPERVISOR: int = 0
+    GEMINI_RPD_SHOWRUNNER: int = 0
+    QUOTA_FILE: str = ""  # kosong = <DATA_DIR>/quota.json
+    # Laju bawaan untuk perkiraan menit aman bila log sesi belum cukup (diganti otomatis dari log).
+    AI_TURNS_PER_MIN_A: float = 4.0
+    AI_TURNS_PER_MIN_B: float = 7.0
+    TTS_CREDITS_PER_MIN: float = 200.0  # ElevenLabs flash: ±4 rb kredit per 20 menit mode B (Tahap 0)
+    TTS_QUOTA_ALERT_MIN: int = 5  # peringatan kuning saat perkiraan sisa suara ≤ sekian menit
 
     # Endpoint kompatibel OpenAI (opsional): dipakai lewat model `compat:<nama>` di GEMINI_MODEL_*
     OPENAI_COMPAT_BASE_URL: str = ""
@@ -133,6 +145,16 @@ class Settings(BaseSettings):
         if unknown:
             raise ValueError(f"TTS_FALLBACK memuat provider tidak dikenal: {', '.join(unknown)}")
         return [n for n in names if n != "none"]
+
+    def rpd_for_model(self, model: str) -> int:
+        """Kuota harian sebuah model: yang paling ketat di antara peran yang memakainya (kuota Google per model)."""
+        limits = [getattr(self, f"GEMINI_RPD_{r.upper()}", 0) or self.GEMINI_RPD_DEFAULT
+                  for r in ("blocker", "persona", "supervisor", "showrunner") if self.model_for(r) == model]
+        return min(limits) if limits else self.GEMINI_RPD_DEFAULT
+
+    @property
+    def quota_path(self) -> Path:
+        return Path(self.QUOTA_FILE) if self.QUOTA_FILE else Path(self.DATA_DIR) / "quota.json"
 
     def rpm_for(self, role: str) -> int:
         """RPM untuk satu peran (blocker, persona, ...); 0 berarti pakai default."""

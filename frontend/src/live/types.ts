@@ -126,6 +126,9 @@ export interface ShowSnapshot {
   topic_points?: TopicPoint[]
   point_clock?: PointClock
   show_clock?: ShowClock
+  /** Perkiraan menit suara AI tersisa (null = tidak diketahui). */
+  tts_minutes_left?: number | null
+  tts_quota_low?: boolean
   fillers_ready?: number
 }
 

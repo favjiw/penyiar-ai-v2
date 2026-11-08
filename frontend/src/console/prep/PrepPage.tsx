@@ -2,7 +2,7 @@
  * Konsol · Siapkan siaran (mockup Main, HANDOFF §1): satu halaman tiga langkah.
  * (1) tema + target pendengar → Buat materi, (2) pilih materi, (3) Siap live.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { api, ApiError } from '../../api'
 import { topicsForDuration } from '../../lib/materi'
 import { usePersisted } from '../../lib/usePersisted'
@@ -11,18 +11,22 @@ import type { Blocker } from '../../types'
 import { Button } from '../../ui'
 import { MateriCard } from './MateriCard'
 import { MateriEditor } from './MateriEditor'
-import { SiapLive, useDurasi } from './SiapLive'
+import { ReadinessButton, useReadiness } from './Readiness'
+import { SiapLive, useDurasi, useMode } from './SiapLive'
 import './prep.css'
 
 const MAX_TEMA = 60
 const MAX_CATATAN = 500
 const isStr = (v: unknown): v is string => typeof v === 'string'
 
-export function PrepPage({ live }: { live: LiveSession }) {
+/** `headerExtras`: status sambungan dan Detail teknis dari App (header milik halaman ini karena Cek kesiapan butuh mode/durasi). */
+export function PrepPage({ live, headerExtras }: { live: LiveSession; headerExtras?: ReactNode }) {
   const [tema, setTema] = usePersisted<string>('hits.tema', '', isStr)
   const [catatan, setCatatan] = usePersisted<string>('hits.catatan', '', isStr)
   const [selectedId, setSelectedId] = usePersisted<string>('hits.materi', '', isStr)
   const [durasi, setDurasi] = useDurasi()
+  const [mode, setMode] = useMode()
+  const readiness = useReadiness(mode, durasi) // GET tanpa memanaskan suara; dipakai header dan Siap live
   const [all, setAll] = useState<Blocker[]>([])
   const [variants, setVariants] = useState<Blocker[]>([])
   const [editing, setEditing] = useState<Blocker | null>(null)
@@ -118,6 +122,16 @@ export function PrepPage({ live }: { live: LiveSession }) {
   const temaVariants = variants.length ? variants[0].tema : ''
 
   return (
+    <>
+    <header className="console-top">
+      <div className="console-top__inner">
+        <img src="/logo-hits.png" alt="HITS Unikom Radio 103.9 FM" className="console-top__logo" />
+        <span className="console-top__name">Penyiar AI</span>
+        <span className="console-top__spacer" />
+        <ReadinessButton readiness={readiness} durasi={durasi} onDurasi={setDurasi} />
+        {headerExtras}
+      </div>
+    </header>
     <main className="prep">
       <div className="prep-main">
         <section className="prep-step" aria-labelledby="step1">
@@ -236,6 +250,9 @@ export function PrepPage({ live }: { live: LiveSession }) {
 
       <SiapLive
         live={live}
+        mode={mode}
+        onMode={setMode}
+        readiness={readiness.data}
         materi={selected}
         durasi={durasi}
         onDurasi={setDurasi}
@@ -244,5 +261,6 @@ export function PrepPage({ live }: { live: LiveSession }) {
         generating={busy === 'generate'}
       />
     </main>
+    </>
   )
 }
