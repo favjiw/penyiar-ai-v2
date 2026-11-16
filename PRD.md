@@ -197,8 +197,7 @@ Hasil diskusi desain bersama Claude Design. Acuan visual dan perilaku: `docs/des
 Penyiar menahan PTT dan berbicara
   → STT (final transcript)
   → Show Engine menyusun konteks: blocker, topik aktif, riwayat, ucapan penyiar
-  → filler pendek AI langsung diputar (audio cache) sambil menunggu
-  → Persona AI → Supervisor → TTS (dipecah per kalimat) → Stage (audio + avatar berbicara)
+  → Persona AI langsung menjawab (filler dicabut [F, 11 Nov 2026]) → Supervisor → TTS (dipecah per kalimat) → Stage (audio + avatar berbicara)
   → avatar kembali ke klip "mendengarkan"
 Setiap N giliran: Showrunner (mode saran) → panel konsol / prompter
 "Next topik" ditekan penyiar/operator → topik berikutnya; AI diberi konteks topik baru
@@ -951,6 +950,7 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
   - FR-10 Stage dihidupkan lagi versi ringan (tanpa teks, satu-satunya pemutar audio, popup `hits-stage`); role `stage` kembali dipakai (§2.2, §6.3);
   - konsol satu halaman, editor materi, cek kesiapan berbasis kuota (penghitung kuota harian per model), peringatan tiga tingkat, panduan pengguna; prompter tanpa pengaturan (FR-6, FR-11, §6.3, §6.4, §8);
   - target uji mode A dan B 60 menit (§8, Tahap 9); §15.2 #2 dan #3 ditutup.
+- **v2.8 (11 Nov 2026) [F]:** filler Mode A dicabut: AI langsung menjawab ucapan penyiar tanpa memutar audio filler lebih dulu (§5.2, FR-7).
 
 ---
 

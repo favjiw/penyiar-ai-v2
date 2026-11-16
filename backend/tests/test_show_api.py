@@ -129,9 +129,6 @@ def test_mode_a_start_ptt_and_next(client):
     assert snap["mode"] == "A" and snap["human"]["name"] == "Kak Dimas" and snap["ai_persona"] == "raka"
     import time
 
-    deadline = time.time() + 10
-    while client.get("/api/show").json()["fillers_ready"] == 0 and time.time() < deadline:
-        time.sleep(0.05)  # bank filler disiapkan di latar
     with client.websocket_connect("/ws/session?role=prompter") as prompter:
         prompter.receive_json()
         r = client.post("/api/ptt/turn", json={"text": "Raka, lo tim kopi atau teh?", "stt_ms": 300})
@@ -139,7 +136,7 @@ def test_mode_a_start_ptt_and_next(client):
         seen = []
         while "turn" not in seen:
             seen.append(prompter.receive_json()["type"])
-        assert "human_turn" in seen and "filler" in seen
+        assert "human_turn" in seen and "filler" not in seen
     assert client.post("/api/show/next").json()["segment"] == "topic"
     assert client.post("/api/ptt/turn", json={"text": ""}).status_code == 422
     client.post("/api/show/stop")

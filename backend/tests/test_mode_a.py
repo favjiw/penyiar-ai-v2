@@ -38,21 +38,22 @@ def test_split_sentences_merges_short_ones():
     assert split_sentences("Satu kalimat saja") == ["Satu kalimat saja"]
 
 
-async def test_human_turn_gets_filler_then_sentence_parts(tmp_path):
+async def test_human_turn_replies_directly_without_filler(tmp_path):
     engine, events = make(tmp_path)
     engine.start()
     await settle(engine)
     info = await engine.human_turn("Salsa, lo tim teh atau kopi?", stt_ms=420)
-    assert info["filler"]
+    assert info["filler"] is None
     await settle(engine)
     types = [t for t, _ in events]
-    assert types.index("human_turn") < types.index("filler") < types.index("turn")
+    assert "filler" not in types
+    assert types.index("human_turn") < types.index("turn")
     turn = next(d for t, d in events if t == "turn")
     assert turn["persona"] == "salsa" and turn["parts"] >= 1 and turn["audio_url"]
     assert sum(1 for t, _ in events if t == "audio_part") == turn["parts"] - 1
     log = list(read_log(engine.log.path))
     rec = next(l for l in log if l["type"] == "turn")
-    assert rec["mode"] == "A" and rec["filler"] == info["filler"] and rec["latency_ms"]["stt"] == 420
+    assert rec["mode"] == "A" and rec["filler"] is None and rec["latency_ms"]["stt"] == 420
     assert any(l["type"] == "stt" and "teh atau kopi" in l["text"] for l in log)
     assert [e["persona"] for e in engine.transcript] == ["human", "salsa"]
 

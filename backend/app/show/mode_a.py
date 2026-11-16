@@ -27,7 +27,6 @@ from app.show.engine import Plan, ShowEngine
 from app.show.intent import detect_topic_switch
 from app.show.participants import HUMAN_ID
 from app.show.pointclock import trim_to_budget
-from app.tts.filler import FillerBank
 
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 MIN_PART_WORDS = 4
@@ -69,7 +68,6 @@ class HumanLedEngine(ShowEngine):
             self.settings.SUPERVISOR_TIMEOUT_MS_MODE_A,
         )
         self._supervisor_mode = mode
-        self.fillers = FillerBank(self.tts, self.audio_dir)
         self._reply: Optional[asyncio.Task] = None
         self._answering = False  # pertukaran AI sedang berjalan; False sebelum snapshot terakhir dari blok finally
         self._thinking: Optional[str] = None  # id AI yang sedang menyiapkan jawaban (LLM/TTS), belum bersuara
@@ -96,7 +94,7 @@ class HumanLedEngine(ShowEngine):
         snap["busy"] = self._answering
         snap["thinking"] = self._thinking
         snap["topic_points"] = self._topic_points()
-        snap["fillers_ready"] = sum(len(self.fillers._bank.get(p.id, [])) for p in self.personas)
+        snap["fillers_ready"] = 0
         return snap
 
     def _topic_points(self) -> list[dict[str, Any]]:
@@ -138,12 +136,7 @@ class HumanLedEngine(ShowEngine):
         )
         for warning in self.tts.warnings:  # mis. ELEVENLABS_API_KEY kosong → jatuh ke Edge
             await self._alert("tts", warning, "tts_warning")
-        await self._broadcast_state()
-        counts = await asyncio.gather(*(self.fillers.prepare(p) for p in self.personas))  # semua persona sekaligus
-        for persona, n in zip(self.personas, counts):
-            if n == 0:
-                await self._alert("tts", f"Bank filler {persona.name} kosong (TTS gagal); jawaban tetap jalan tanpa filler", "tts_warning")
-        self.log.event("quota", fillers_ready=sum(counts), tts=self.tts.status())
+        self.log.event("quota", fillers_ready=0, tts=self.tts.status())
         await self._broadcast_state()
 
     async def stop(self) -> None:
@@ -256,17 +249,14 @@ class HumanLedEngine(ShowEngine):
         # dan dua ucapan yang tiba bersamaan tidak boleh memulai dua jawaban.
         if self._reply and not self._reply.done():
             # Giliran ketat (PRD v2.7): AI tidak pernah disela. Ucapan ini masuk riwayat dan dijawab
-            # setelah jawaban yang sedang berjalan selesai (tanpa filler, karena AI masih bicara).
+            # setelah jawaban yang sedang berjalan selesai.
             # Satu jawaban untuk semua ucapan yang menumpuk (semuanya sudah masuk riwayat); waktu tunggu dari ucapan pertama.
             first = self._queued[0] if self._queued else received
             self._queued = (first, stt_ms)
             self.log.event("operator_action", action="queued_while_ai_busy", turn=self.turn_no)
             return {"filler": None, "responder": responder, "queued": True}
-        filler = self.fillers.pick(responder)
-        if filler:
-            await self._emit("filler", {"persona": responder, "audio_url": filler.url, "duration_s": filler.duration_s, "text": filler.text})
-        self._reply = asyncio.create_task(self._exchange(received, filler.text if filler else None, stt_ms))
-        return {"filler": filler.text if filler else None, "responder": responder}
+        self._reply = asyncio.create_task(self._exchange(received, None, stt_ms))
+        return {"filler": None, "responder": responder}
 
     def _segment_label(self) -> str:
         p = self.plan
