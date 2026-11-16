@@ -11,6 +11,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 from app.blocker.store import BlockerInvalid
 from app.data.personas import load_personas
@@ -244,6 +245,42 @@ async def get_log(session_id: str, request: Request):
     if not _SAFE_NAME.match(session_id) or not path.exists():
         raise HTTPException(404, "Log tidak ditemukan")
     return list(read_log(path))
+
+
+class SimliTokenRequest(BaseModel):
+    face_id: Optional[str] = None
+
+
+@router.post("/api/simli/token")
+async def get_simli_token(req: SimliTokenRequest, request: Request):
+    settings = request.app.state.settings
+    api_key = (settings.SIMLI_API_KEY or "").strip().strip("'\"")
+    if not api_key:
+        raise HTTPException(400, "SIMLI_API_KEY belum dikonfigurasi di .env")
+    face_id = (req.face_id or settings.SIMLI_FACE_ID or "bf13113a-355a-4d97-8b90-4edccd1da7b2").strip().strip("'\"")
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.post(
+                "https://api.simli.ai/compose/token",
+                headers={
+                    "x-simli-api-key": api_key,
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "faceId": face_id,
+                    "handleSilence": True,
+                    "maxSessionLength": 300,  # 5 menit safety cap
+                    "maxIdleTime": 60,
+                },
+            )
+            if res.status_code != 200:
+                logger.error("Simli token error %d: %s (api_key len: %d, prefix: %s...)", res.status_code, res.text, len(api_key), api_key[:4] if len(api_key) >= 4 else "***")
+                raise HTTPException(res.status_code, f"Simli API error: {res.text}")
+            return res.json()
+    except httpx.HTTPError as e:
+        logger.error("Simli connection error: %s", e)
+        raise HTTPException(502, f"Gagal menghubungi Simli API: {e}")
 
 
 @router.websocket("/ws/session")

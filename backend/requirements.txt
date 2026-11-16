@@ -11,3 +11,4 @@ edge-tts>=7.3.1
 pytest>=8.0.0
 pytest-asyncio>=0.24.0
 gTTS>=2.5.0
+tzdata; sys_platform == 'win32'

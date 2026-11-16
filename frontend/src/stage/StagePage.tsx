@@ -3,9 +3,10 @@
  * dan satu-satunya pemutar audio siaran. Mode B: dua panel bertumpuk (9:16).
  * Mode A: satu panel AI (kamera studio ditumpuk di OBS).
  */
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useLiveSession } from '../live/useLiveSession'
 import { AvatarPanel, type AvatarPersona } from './Avatar'
+import { SimliAvatar } from './SimliAvatar'
 import './stage.css'
 
 const NAMES: Record<AvatarPersona, string> = { raka: 'Raka', salsa: 'Salsa' }
@@ -13,8 +14,11 @@ const isPersona = (x: unknown): x is AvatarPersona => x === 'raka' || x === 'sal
 
 export function StagePage() {
   const live = useLiveSession('stage')
-  const { snapshot: snap, speaking, level, audioReady, unlockAudio, output } = live
+  const { snapshot: snap, speaking, level, audioReady, unlockAudio, output, getAudioTrack, setLocalMuted } = live
   const params = new URLSearchParams(window.location.search)
+
+  // Opsi ganti avatar: 'simli' (default untuk uji coba visual) atau '2d'
+  const [useSimli, setUseSimli] = useState(() => params.get('avatar') !== '2d')
 
   useEffect(() => {
     document.title = 'Layar untuk OBS · Penyiar AI HITS'
@@ -30,9 +34,32 @@ export function StagePage() {
 
   return (
     <div className={`stage stage--${mode === 'A' ? 'a' : 'b'}`}>
-      {personas.map((p) => (
-        <AvatarPanel key={p} persona={p} name={NAMES[p]} speaking={speaking === p} getLevel={level} />
-      ))}
+      {useSimli && mode === 'A' ? (
+        <SimliAvatar
+          persona={soloAi}
+          name={NAMES[soloAi]}
+          audioReady={audioReady}
+          getAudioTrack={getAudioTrack}
+          setLocalMuted={setLocalMuted}
+          onToggle2D={() => setUseSimli(false)}
+        />
+      ) : (
+        personas.map((p) => (
+          <AvatarPanel key={p} persona={p} name={NAMES[p]} speaking={speaking === p} getLevel={level} />
+        ))
+      )}
+
+      {/* Tombol beralih ke Simli jika sedang di mode 2D */}
+      {!useSimli && mode === 'A' && !onAir && (
+        <button
+          type="button"
+          className="stage-mode-switch"
+          onClick={() => setUseSimli(true)}
+        >
+          Coba Visual Simli
+        </button>
+      )}
+
       {/* Satu-satunya elemen non-karakter, dan hanya SEBELUM live: browser butuh satu klik di
           jendela ini supaya suara AI boleh diputar. Saat on air tidak pernah tampil (tanpa teks);
           klik di mana pun pada jendela tetap menyalakan suara, dan konsol yang memberi tahu operator. */}
