@@ -112,6 +112,10 @@ def build_app(settings: Settings | None = None) -> FastAPI:
             "issues_first_attempt": meta.issues_first_attempt,
             "blocker_ids": [b.id for b in blockers],
         }
+        if app.state.db is not None:
+            with app.state.db.engine.begin() as conn:
+                conn.execute(insert(generation_log).values(ts=line["ts"], data=line))
+            return
         with open(Path(app.state.settings.LOG_DIR) / "blocker_generations.jsonl", "a", encoding="utf-8") as f:
             f.write(json.dumps(line, ensure_ascii=False) + "\n")
 

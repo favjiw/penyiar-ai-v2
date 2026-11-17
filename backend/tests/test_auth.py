@@ -8,7 +8,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from app.auth import COOKIE, hash_password, verify_password
 from app.config import Settings
-from app.db import auth_sessions
+from app.db import auth_sessions, generation_log
 from app.main import build_app
 
 PASSWORD = "sandi-uji-panjang"
@@ -142,6 +142,10 @@ def test_blocker_flow_persists_in_database(client):
     assert client.post(f"/api/blocker/{first['id']}/lock").json()["locked"] is True
     assert len(client.get("/api/blockers", params={"generation_id": first["generation_id"]}).json()) == 3
     assert not (Path(client.app.state.settings.DATA_DIR) / "blockers").exists()  # materi ada di database, bukan file
+    with client.app.state.db.engine.connect() as conn:  # catatan pembuatan materi juga di database, bukan file
+        rows = conn.execute(generation_log.select()).all()
+    assert len(rows) == 1 and rows[0].data["tema"] == "Kopi" and len(rows[0].data["blocker_ids"]) == 3
+    assert not (Path(client.app.state.settings.LOG_DIR) / "blocker_generations.jsonl").exists()
 
 
 # ── WebSocket ────────────────────────────────────────────────────────────────
