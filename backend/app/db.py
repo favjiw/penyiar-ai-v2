@@ -80,6 +80,38 @@ generation_log = Table(
     Column("data", _JSON, nullable=False),
 )
 
+# Setelan yang diatur admin (kunci API, model, suara, Simli). Nilai rahasia disimpan terenkripsi (lihat app/secrets.py).
+# Baris `meta.*` menandai langkah satu kali (mis. katalog suara sudah diisi dari voices.json).
+app_settings = Table(
+    "app_settings",
+    metadata,
+    Column("key", String(80), primary_key=True),
+    Column("value", String, nullable=False),
+    Column("secret", Boolean, nullable=False, default=False),
+    Column("updated_at", String(32), nullable=False),
+    Column("updated_by", String(64)),
+)
+
+voices = Table(
+    "voices",
+    metadata,
+    Column("id", String(200), primary_key=True),  # voice id provider
+    Column("provider", String(16), nullable=False),
+    Column("name", String(100), nullable=False),
+    Column("gender", String(8), nullable=False),
+    Column("notes", String(500), nullable=False, default=""),
+    Column("position", Integer, nullable=False, default=0),
+)
+
+simli_faces = Table(
+    "simli_faces",
+    metadata,
+    Column("id", String(80), primary_key=True),  # face id Simli
+    Column("name", String(100), nullable=False),
+    Column("notes", String(500), nullable=False, default=""),
+    Column("position", Integer, nullable=False, default=0),
+)
+
 
 class Database:
     def __init__(self, url: str):

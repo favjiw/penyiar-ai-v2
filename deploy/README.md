@@ -65,6 +65,14 @@ docker compose exec app python -m app.cli set-password rani     # lupa sandi; se
 
 Selanjutnya admin menambah, menonaktifkan, dan mengganti peran lewat halaman `/pengguna`. Pindah dari file: `python -m app.cli import-files` menyalin materi lama (DATA_DIR/blockers) ke database dan aman diulang.
 
+## Halaman admin (kunci API, suara, Simli)
+Admin mengelola di `/admin` (tab Otak AI, Suara, Avatar Simli) tanpa menyentuh `.env`: kunci API Gemini/ElevenLabs/Simli/LLM cadangan, model, setelan suara, daftar suara, daftar wajah Simli dan pilihan wajah per penyiar. Tombol **Uji** memeriksa kunci yang tersimpan.
+
+- Nilai di halaman admin **menimpa** `.env`; "Kembalikan ke bawaan server" menghapus timpaannya. `.env` tetap jadi nilai awal.
+- Kunci API disimpan **terenkripsi** (Fernet) dengan `SECRETS_KEY` di `/opt/penyiar/.env`. **Simpan cadangan `SECRETS_KEY` terpisah dari cadangan database**: tanpanya kunci tersimpan tidak terbaca (aplikasi kembali ke `.env`). Buat: `docker compose exec app python -m app.cli gen-secrets-key`.
+- Perubahan berlaku tanpa restart. Saat ada siaran live/jeda, perubahan **tersimpan dan menunggu** sampai siaran selesai (berlaku saat halaman admin dibuka, atau saat siaran berikutnya dimulai).
+- Suara baru ElevenLabs harus sudah ada di akun (My Voices); ID diperiksa saat ditambahkan.
+
 ## Data dan cadangan
 - **Postgres** (volume `penyiar_pg-data`): pengguna, sesi login, materi, catatan pembuatan materi.
 - **Volume `penyiar_app-data`**: log siaran (`logs/*.jsonl`), log giliran riset (`sessions/<id>/turns.jsonl`), kuota harian, cache audio. Ini file tambah-saja untuk riset; sengaja tidak di database.

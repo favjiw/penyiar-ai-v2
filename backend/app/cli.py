@@ -103,6 +103,12 @@ def cmd_import_files(args: argparse.Namespace) -> None:
             print(f"Catatan pembuatan materi: {len(rows)} baris disalin.")
 
 
+def cmd_gen_secrets_key(_: argparse.Namespace) -> None:
+    from app.secretbox import generate_key
+
+    print(generate_key())
+
+
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(prog="python -m app.cli", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -120,6 +126,8 @@ def main(argv: list[str] | None = None) -> None:
     s.set_defaults(fn=cmd_set_password)
 
     sub.add_parser("list-users", help="daftar pengguna").set_defaults(fn=cmd_list_users)
+
+    sub.add_parser("gen-secrets-key", help="buat SECRETS_KEY (kunci induk enkripsi kunci API) untuk .env server").set_defaults(fn=cmd_gen_secrets_key)
 
     i = sub.add_parser("import-files", help="salin materi lama (file) ke database")
     i.add_argument("--data-dir", default="")

@@ -83,8 +83,61 @@ export interface UserRow extends AuthUser {
   last_login_at: string | null
 }
 
+export interface AdminField {
+  key: string
+  label: string
+  kind: 'text' | 'secret' | 'number' | 'choice' | 'face'
+  help: string
+  choices: string[]
+  source: 'admin' | 'env'
+  value?: string // bukan rahasia
+  is_set?: boolean // rahasia: sudah terisi?
+  masked?: string // rahasia: "••••" + 4 karakter terakhir
+}
+
+export interface AdminConfig {
+  groups: { id: string; label: string; fields: AdminField[] }[]
+  secrets_enabled: boolean
+  pending: boolean
+  live: boolean
+  changed?: string[]
+  applied?: boolean
+  apply_error?: string | null
+}
+
+export interface AdminVoice {
+  id: string
+  provider: 'elevenlabs' | 'edge'
+  name: string
+  gender: 'male' | 'female'
+  notes: string
+}
+
+export interface AdminFace {
+  id: string
+  name: string
+  notes: string
+}
+
+export type TestService = 'gemini' | 'compat' | 'elevenlabs' | 'simli'
+
+export const adminApi = {
+  config: () => request<AdminConfig>('/api/admin/config'),
+  /** null = hapus timpaan (kembali ke .env); kunci rahasia "" = biarkan. */
+  saveConfig: (values: Record<string, string | null>) => request<AdminConfig>('/api/admin/config', { method: 'PUT', body: JSON.stringify({ values }) }),
+  test: (service: TestService) => post<{ ok: boolean; message: string }>(`/api/admin/test/${service}`),
+  voices: () => request<AdminVoice[]>('/api/admin/voices'),
+  addVoice: (v: Omit<AdminVoice, 'notes'> & { notes?: string }) => post<{ voice: AdminVoice; warning: string | null }>('/api/admin/voices', v),
+  patchVoice: (id: string, patch: Partial<Pick<AdminVoice, 'name' | 'gender' | 'notes'>>) =>
+    request<AdminVoice>(`/api/admin/voices/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  deleteVoice: (id: string) => request<{ ok: boolean }>(`/api/admin/voices/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  faces: () => request<AdminFace[]>('/api/admin/faces'),
+  addFace: (f: { id: string; name: string; notes?: string }) => post<AdminFace>('/api/admin/faces', f),
+  deleteFace: (id: string) => request<{ ok: boolean }>(`/api/admin/faces/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+}
+
 export const api = {
-  me: () => request<{ user: AuthUser; auth_required: boolean }>('/api/auth/me'),
+  me:() => request<{ user: AuthUser; auth_required: boolean }>('/api/auth/me'),
   login: (username: string, password: string) => post<{ user: AuthUser }>('/api/auth/login', { username, password }),
   logout: () => post<{ ok: boolean }>('/api/auth/logout'),
   changePassword: (current: string, next: string) => post<{ ok: boolean }>('/api/auth/password', { current, new: next }),
