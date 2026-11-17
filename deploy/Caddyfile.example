@@ -1,0 +1,26 @@
+# Caddy di VPS (/etc/caddy/Caddyfile). Salin, ganti HOST dan hash, lalu `sudo systemctl reload caddy`.
+#
+# HOST    : alamat HTTPS. Uji tanpa domain: <ip-dengan-strip>.sslip.io (mis. 43-156-115-90.sslip.io).
+#           Produksi: domain atau subdomain sendiri yang A-recordnya mengarah ke IP VPS.
+# HASH    : hasil `caddy hash-password` (bcrypt) untuk login sementara; JANGAN simpan sandi asli di berkas ini.
+#
+# Login sementara (basic auth) melindungi seluruh situs, termasuk WebSocket, sampai login aplikasi selesai dibuat.
+# Sertifikat HTTPS diambil dan diperbarui Caddy otomatis (butuh port 80 dan 443 terbuka).
+
+HOST {
+	encode gzip
+
+	basic_auth {
+		operator HASH
+	}
+
+	# Satu proses menyajikan halaman dan API; WebSocket (/ws/session) ikut diteruskan otomatis.
+	reverse_proxy 127.0.0.1:8000 {
+		# Siaran berjam-jam: jangan putus koneksi WebSocket yang diam.
+		stream_timeout 24h
+		stream_close_delay 5s
+	}
+
+	# Jangan simpan salinan halaman yang berisi data siaran di cache perantara.
+	header Cache-Control "no-store"
+}

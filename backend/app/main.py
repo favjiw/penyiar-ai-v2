@@ -11,7 +11,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.blocker import (
@@ -23,7 +24,7 @@ from app.blocker import (
     BlockerStore,
 )
 from app.blocker.store import now_iso
-from app.config import Settings, get_settings
+from app.config import REPO_ROOT, Settings, get_settings
 from app.llm import create_llm_client
 from app.llm.quota import QuotaCounter
 from app.schemas import Blocker, GenerateBlockerRequest
@@ -144,7 +145,36 @@ def build_app(settings: Settings | None = None) -> FastAPI:
         log_generation(request.app, "regenerate", blocker.tema, meta, [blocker])
         return {"variant": blocker, "latency_ms": meta.latency_ms, "attempts": meta.attempts, "model": meta.model}
 
+    _serve_frontend(app, settings)
     return app
+
+
+API_PREFIXES = ("api/", "ws/", "audio/")
+
+
+def _serve_frontend(app: FastAPI, settings: Settings) -> None:
+    """Sajikan frontend hasil build (hosting: satu proses menyajikan API dan halaman).
+
+    Rute klien (/, /stage, /prompter, ...) memakai riwayat browser, jadi path yang bukan berkas dijawab index.html.
+    Path API tidak pernah ditimpa: yang tidak dikenal tetap 404. Tanpa build frontend (pengembangan) fungsi ini tidak
+    melakukan apa pun; Vite yang menyajikan halaman.
+    """
+    dist = Path(settings.FRONTEND_DIST) if settings.FRONTEND_DIST else REPO_ROOT / "frontend" / "dist"
+    index = dist / "index.html"
+    if not index.is_file():
+        return
+    root = dist.resolve()
+    if (dist / "assets").is_dir():
+        app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
+
+    @app.get("/{path:path}", include_in_schema=False)
+    async def frontend(path: str):
+        if path.startswith(API_PREFIXES):
+            raise HTTPException(404, "Tidak ditemukan")
+        target = (dist / path).resolve()
+        if path and target.is_file() and root in target.parents:
+            return FileResponse(target)
+        return FileResponse(index)
 
 
 app = build_app()

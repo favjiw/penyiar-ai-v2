@@ -1,0 +1,43 @@
+# Jalankan di VPS, dari folder berisi berkas ini dan `.env` (lihat deploy/README.md):
+#   docker compose pull && docker compose up -d
+# Aplikasi hanya mendengarkan di 127.0.0.1:8000; HTTPS dan login sementara ditangani Caddy di depannya.
+name: penyiar
+
+services:
+  app:
+    image: ghcr.io/favjiw/penyiar-ai-v2:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - app-data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+    mem_limit: 900m
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  # Postgres disiapkan untuk tahap pindah dari file ke database; aplikasi belum memakainya.
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: penyiar
+      POSTGRES_USER: penyiar
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?isi POSTGRES_PASSWORD di .env}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U penyiar -d penyiar"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: 300m
+    # Tanpa `ports`: hanya bisa dijangkau dari jaringan Compose, tidak dari internet.
+
+volumes:
+  app-data:
+  pg-data:
