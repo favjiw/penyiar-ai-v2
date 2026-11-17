@@ -110,10 +110,10 @@ Hasil diskusi desain bersama Claude Design. Acuan visual dan perilaku: `docs/des
 | FR-2 Show Engine (mode A dan B) | ✓ | ✓ | ✓ |
 | FR-3 Persona Engine | ✓ | ✓ | ✓ |
 | FR-4 Showrunner | ✓ (mode B) | ✓ | **fokus** |
-| FR-5 Supervisor | versi dasar (keamanan) | **fokus** | – |
+| FR-5 Supervisor | – (belum ada di KP; hook pass-through nonaktif, v2.9) | **fokus** | – |
 | FR-6 TTS | ✓ | ✓ | – |
 | FR-7 Input penyiar (hands-free + STT) | ✓ | ✓ | – |
-| ~~FR-8 Avatar T1 (bank klip)~~ ditunda | – | – | – |
+| FR-8 Avatar realistis Simli di /stage, menggantikan karakter 2D (v2.9; bank klip Flow tetap ditunda) | ✓ | ✓ | – |
 | ~~FR-9 Avatar T2 (lip-sync neural)~~ ditunda | – | – | – |
 | FR-10 Stage / output OBS (versi ringan, v2.7) | ✓ | ✓ | – |
 | FR-11 Konsol operator dan prompter | ✓ | ✓ | – |
@@ -131,7 +131,7 @@ Hasil diskusi desain bersama Claude Design. Acuan visual dan perilaku: `docs/des
 - Telepon pendengar.
 - Roleplay 3M/SKEMA.
 - Mode 1 penyiar manusia + 2 AI (dicabut v2.6, §1.3.2).
-- Layanan berbayar apa pun selain ElevenLabs untuk TTS dan LLM cadangan `compat:` (§1.3) [F]: HeyGen, Tavus, GPU cloud berbayar, dan sejenisnya.
+- Layanan berbayar apa pun selain ElevenLabs untuk TTS, LLM cadangan `compat:` (§1.3), dan Simli untuk avatar realistis di `/stage` (v2.9, [F] 17 Nov 2026): HeyGen, Tavus, GPU cloud berbayar, dan sejenisnya.
 
 ---
 
@@ -414,6 +414,8 @@ Format setiap FR: deskripsi → aturan → kriteria terima (KT).
 ### FR-5 Supervisor (fokus skripsi, AI-in-the-Loop)
 Kode Supervisor di repo lama masih **stub**: prompt satu baris, tanpa koreksi dan tanpa regenerasi. Supervisor dibangun baru di sini.
 
+**Status di KP [F, 17 Nov 2026]:** produk KP yang dibekukan **tanpa Supervisor**: LLM membalas langsung dan teksnya diteruskan ke TTS (`SUPERVISOR_MODE=off`, hook pass-through; tidak ada pembersihan markdown/emoji maupun aturan kata terlarang). Pemeriksaan di bawah hanya berlaku untuk riset (pilot tanpa vs dengan Supervisor penuh) dan tidak termasuk cakupan KP.
+
 - **Posisi:** setelah Persona, sebelum TTS, pada setiap giliran AI (kedua mode).
 - **Pemeriksaan:**
   1. **Konsistensi persona:** bertentangan dengan `background_facts`, `opinions`, atau klaim sebelumnya di ledger; berganti identitas atau gaya; mengaku AI tanpa konteks; memakai nama lawan bicara sebagai diri sendiri.
@@ -527,7 +529,7 @@ Kode Supervisor di repo lama masih **stub**: prompt satu baris, tanpa koreksi da
 - Bila gerbang gagal, catat angka RTF sebagai temuan dan tetap pakai T1.
 
 ### FR-10 Stage / output OBS
-- **Versi ringan, dihidupkan lagi [F, 8 Nov 2026]:** `/stage` **tanpa teks atau komponen apa pun**, hanya karakter; satu-satunya pemutar audio (konsol bisu). Dibuka sebagai popup bernama tetap `hits-stage`: mode B 540×960 dua panel, mode A 540×480 satu panel AI (kamera studio ditumpuk di OBS). Avatar final = klip video realistis (gaya Google Flow, FR-8); sementara memakai ilustrasi. Satu pengecualian, hanya sebelum live: bila browser belum mengizinkan suara, stage menampilkan ajakan "Klik sekali untuk menyalakan suara AI" (tidak pernah saat on air; saat live, klik di mana pun pada jendela menyalakan suara dan konsol yang memberi peringatan). Rute tak dikenal → 404. Spesifikasi lama di bawah (HUD, zona aman) tetap sebagai rujukan untuk avatar final.
+- **Versi ringan, dihidupkan lagi [F, 8 Nov 2026]:** `/stage` **tanpa teks atau komponen apa pun**, hanya karakter; satu-satunya pemutar audio (konsol bisu). Dibuka sebagai popup bernama tetap `hits-stage`: mode B 540×960 dua panel, mode A 540×480 satu panel AI (kamera studio ditumpuk di OBS). **Avatar [F, 17 Nov 2026, v2.9]:** karakter di tiap panel adalah avatar realistis **Simli** (video lewat WebRTC), menggantikan karakter 2D; tata letak, panel, dan perilaku layar tetap seperti sebelum Simli (tanpa teks atau tombol, tanpa klik). Sambungan mulai sendiri dan menyambung ulang bila putus; satu wajah per persona (`SIMLI_FACE_ID_RAKA` / `SIMLI_FACE_ID_SALSA`); satu jalur audio per persona supaya hanya penyiar yang bicara yang bibirnya bergerak. Karakter 2D tetap menjadi **cadangan otomatis** selama Simli belum tersambung atau bila putus (konsol memberi peringatan kuning), dan suara lokal menyala lagi saat itu. Kunci API hanya di server. Satu pengecualian, hanya sebelum live: bila browser belum mengizinkan suara, stage menampilkan ajakan "Klik sekali untuk menyalakan suara AI" (tidak pernah saat on air; saat live, klik di mana pun pada jendela menyalakan suara dan konsol yang memberi peringatan). Rute tak dikenal → 404. Spesifikasi lama di bawah (HUD, zona aman) tetap sebagai rujukan untuk avatar final.
 - Kanvas 9:16 (1080×1920). Pakai ulang zona aman TikTok dari `stageLayout.ts`:
   - header 0–10%;
   - bar bawah 93–100%;
@@ -613,7 +615,7 @@ Kode Supervisor di repo lama masih **stub**: prompt satu baris, tanpa koreksi da
 
 | Aspek | Kebutuhan |
 |---|---|
-| Biaya | Rp0 [F] untuk semua komponen kecuali TTS dan LLM cadangan: Gemini free tier, Edge TTS, model open source, perangkat yang ada. TTS utama ElevenLabs (berbayar/kredit) [F]; pemakaian kredit dicatat per sesi. LLM cadangan `compat:gemini-3.8-flash` (berbayar per panggilan, ±$0,003 per sesi 20 menit) hanya untuk cadangan persona dan eksperimen offline [F]; bukan model utama live karena latensinya ±3,7 s (`docs/kt/llm-compat-cosmoshub.md`). |
+| Biaya | Rp0 [F] untuk semua komponen kecuali TTS dan LLM cadangan: Gemini free tier, Edge TTS, model open source, perangkat yang ada. TTS utama ElevenLabs (berbayar/kredit) [F]; pemakaian kredit dicatat per sesi. LLM cadangan `compat:gemini-3.8-flash` (berbayar per panggilan, ±$0,003 per sesi 20 menit) hanya untuk cadangan persona dan eksperimen offline [F]; bukan model utama live karena latensinya ±3,7 s (`docs/kt/llm-compat-cosmoshub.md`). Avatar Simli (v2.9, [F]): satu sambungan per panel karakter (mode AI + AI = dua sambungan sekaligus); kuota dan harga di akun Simli belum dicatat di sini, cek sebelum siaran panjang. |
 | Kuota | Rate limiter per model (`GEMINI_RPM_*`). Model berbeda per peran untuk membagi beban: persona, Supervisor, Showrunner, blocker. Status kuota tampil di konsol. Bila kuota atau kredit habis: TTS ElevenLabs ke Edge, Supervisor ke `rules`, Showrunner ke `fixed_turns`; semua tercatat. v2.7 [F]: penghitung kuota harian per model (Gemini tidak memberi sisa RPD; reset 00.00 waktu Pasifik, disimpan ke file `QUOTA_FILE`; satu ember per model, dibagi semua peran yang memakainya; ditandai habis saat Google menolak kuota harian); target siaran 60 menit harus tercapai dengan cadangan otomatis. Menit aman = sisa ÷ laju per menit (laju dari log sesi ≥3 menit, atau `AI_TURNS_PER_MIN_A/B`, `TTS_CREDITS_PER_MIN`); semua angka ditampilkan sebagai perkiraan. Sisa kredit ElevenLabs dibaca dari `/v1/user/subscription` (butuh izin `user_read` pada kunci; tanpa itu "belum diketahui", tidak dianggap 0 atau penuh). |
 | Latensi | Mode B: jeda antargiliran p95 ≤4 s (T1). Mode A: §FR-7. |
 | Keandalan | Live uji 20 menit tanpa crash (KP); 60 menit (target akhir). v2.7 [F]: mode A dan B **60 menit** tanpa crash; mode A tanpa klik penyiar. Reconnect WS otomatis. Status live tetap benar setelah reload. |
@@ -913,6 +915,7 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 | 3b Strip + Orb + TTS + Mode C (mode C dicabut di v2.6) | Berjalan | 30 Okt 2026 | Fase 1 selesai (avatar, stage, T2, dan setelan komentar dihapus; audit di `docs/AUDIT-STRIP.md`; 92 tes lulus, show mock mode B berjalan di konsol). Fase 2 (orb, transkrip), 2b (lapisan TTS Edge/ElevenLabs/gTTS), dan 3 (retry parse 2×, aturan kunci 3-5 poin, `sessions/<id>/blocker.json`, rundown di prompter) selesai; 116 tes lulus. Fase 4 (mode A/B/C satu kerangka berdaftar peserta, mode C, `turns.jsonl`, ringkasan obrolan, hook Supervisor default off) selesai; mode B real time 34,2 menit tanpa crash (127 giliran, `docs/CATATAN-PROGRES.md`). Default berubah dari uji itu: `MAX_TURNS_PER_TOPIC` 60, `PERSONA_TIMEOUT_MS` 20000. |
 | 8 Revisi responsi HITS | Selesai dikerjakan, belum diuji nyata | 2 Nov 2026 | R1 mode C dihapus; R2 draf langsung dipakai dan dikunci saat Mulai; R3 pilihan suara terkurasi; R4 batas waktu obrolan per poin (§1.3.2, FR-2). 165 tes backend lulus, `tsc` dan build bersih; countdown dicek di browser dengan mock. Belum diuji dengan LLM, mikrofon, dan ElevenLabs nyata; kata per detik ElevenLabs belum terukur; 60 vs 90 detik belum dikalibrasi. |
 | 9 Desain UI | Selesai dikerjakan, belum diuji nyata | 8 Nov 2026 | Bahan desain di `docs/design/` (Claude Design). Selesai: langkah 1 (PRD v2.7), 2 (token, font, komponen dasar `frontend/src/ui/`, galeri dev `/_ui`), 3 (`/stage` satu-satunya pemutar audio, konsol bisu, level suara diteruskan ke konsol, rute tak dikenal → 404), 4 (konsol Siapkan siaran satu halaman + panel Siap live + durasi materi 30/45/60/90 di backend; contoh suara) 5 (prompter baru: band status, cincin waktu segmen, jam siaran tanpa jeda dari server `show_clock`, mic hands-free tanpa pengaturan, level mic nyata, deteksi mic putus), 6 (konsol saat live: progres per segmen + selisih jadwal, siapa bicara dengan level nyata, urutan materi, cincin waktu, saran pengarah acara, transkrip, status, peringatan tiga tingkat dari kondisi + event `alert {level, code, title, message, detail}`, status mic prompter diteruskan ke konsol; orb dihapus) 7 (backend: mode A tanpa pindah otomatis + giliran ketat + kode halus sekali per topik; batas poin mode B dari menit topik; pindah topik lewat ucapan + batal; penghitung kuota harian per model, cek kesiapan berbasis menit, peringatan kuota suara; nama mic bawaan + meter di layar tunggu prompter) 9 (panduan pengguna baru: sapaan + 5 langkah dengan sorotan elemen, tombol Panduan), 10 (uji 60 menit mock dipercepat mode A dan B + uji singkat LLM nyata, `docs/kt/tahap9-uji-60-menit.md`; Opening/Closing mode B materi berdurasi diisi ±3 menit audio, maks. 24 giliran) dan 8 (editor materi tiga kolom, dimajukan atas keputusan Favian; simpan otomatis). KT FR-1 dengan durasi, LLM nyata `gemini-3.5-flash-lite`: 60 mnt → 6 topik 12,4 s; 90 mnt → 8 topik 15,1 s (satu percobaan, 1 tema). Belum: siaran 60 menit penuh real time dengan LLM/TTS nyata (kuota mode B ±600 permintaan/jam > 500 RPD, perlu cadangan atau model per peran); uji mode A bersama penyiar sungguhan; sisa kredit ElevenLabs butuh izin `user_read` pada kunci (kunci sekarang belum punya, jadi "belum diketahui"); laju awal mode A/B (`AI_TURNS_PER_MIN_*`) masih tebakan sampai ada log sesi ≥3 menit; deteksi pindah lewat ucapan belum diuji dengan ucapan penyiar sungguhan; band "Giliranmu" dan deteksi mic putus belum diuji dengan mic/mixer sungguhan; cek mikrofon dan sisa kuota di cek kesiapan (langkah 7); "Buat ulang topik ini" di editor (backend belum punya buat ulang per topik); dua popup sekaligus (layar OBS + prompter) di mode A belum diuji di Chrome sungguhan. |
+| 10 KP beku (tanpa Supervisor, avatar Simli) | Berjalan | 17 Nov 2026 | Keputusan [F]: KP = LLM membalas langsung tanpa Supervisor; Simli menggantikan karakter 2D di kedua mode (cadangan 2D otomatis). Dikerjakan di branch `feat/kp-simli-stage`: sambungan Simli otomatis tanpa batas 5 menit, satu wajah dan satu jalur audio per persona, peringatan kuning di konsol, `session_start` mencatat kondisi/mode Supervisor yang berlaku, SHA, temperature, hash prompt dan persona; Vite dikembalikan ke 5 (Vite 8 membuat `npm ci` gagal ERESOLVE dengan plugin-react 4). 239 tes backend lulus, `tsc` dan build bersih. Belum: uji dengan akun Simli nyata (dua `faceId`, kuota/sesi paralel), uji 20 menit mode manusia + AI dan AI + AI, tag KP. |
 | 7 Eksperimen | Belum | | |
 
 ## 17. Riwayat
@@ -951,6 +954,7 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
   - konsol satu halaman, editor materi, cek kesiapan berbasis kuota (penghitung kuota harian per model), peringatan tiga tingkat, panduan pengguna; prompter tanpa pengaturan (FR-6, FR-11, §6.3, §6.4, §8);
   - target uji mode A dan B 60 menit (§8, Tahap 9); §15.2 #2 dan #3 ditutup.
 - **v2.8 (11 Nov 2026) [F]:** filler Mode A dicabut: AI langsung menjawab ucapan penyiar tanpa memutar audio filler lebih dulu (§5.2, FR-7).
+- **v2.9 (17 Nov 2026) [F]:** KP dibekukan tanpa Supervisor (FR-5 keluar dari cakupan KP, tetap untuk riset; §2.2, FR-5); avatar Simli menggantikan karakter 2D di `/stage` untuk kedua mode, 2D jadi cadangan otomatis (§2.2, §2.3, §8, FR-10, §16).
 
 ---
 

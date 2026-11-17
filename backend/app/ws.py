@@ -33,6 +33,7 @@ class ConnectionManager:
         self.audio_blocked: set[WebSocket] = set()
         self.audio_ready: set[WebSocket] = set()  # stage yang audionya sudah dinyalakan (gestur pengguna)
         self.mic: dict[WebSocket, dict[str, Any]] = {}  # status mic dari prompter: {down, reason}
+        self.avatar: dict[WebSocket, dict[str, str]] = {}  # status avatar per persona dari stage: simli | connecting | fallback
 
     async def connect(self, ws: WebSocket, role: str) -> None:
         await ws.accept()
@@ -43,6 +44,7 @@ class ConnectionManager:
         self.audio_blocked.discard(ws)
         self.audio_ready.discard(ws)
         self.mic.pop(ws, None)
+        self.avatar.pop(ws, None)
         self.clients.pop(ws, None)
 
     def audio_owner(self) -> Optional[WebSocket]:
@@ -62,7 +64,13 @@ class ConnectionManager:
             "clients": {r: roles.count(r) for r in ROLES},
             # Mic penyiar (mode A): down bila salah satu prompter melapor mic tidak terdengar.
             "mic": self._mic_summary(),
+            # Avatar di layar OBS: {persona: "simli" | "connecting" | "fallback"}; fallback = karakter 2D menggantikan Simli sementara.
+            "avatar": self._avatar_summary(),
         }
+
+    def _avatar_summary(self) -> Optional[dict[str, str]]:
+        owner = self.audio_owner()
+        return dict(self.avatar[owner]) if owner is not None and owner in self.avatar else None
 
     def _mic_summary(self) -> Optional[dict[str, Any]]:
         if not self.mic:

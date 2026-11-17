@@ -1,9 +1,10 @@
 /**
- * Avatar ilustrasi sementara untuk layar OBS (mockup StageModeA/B). Avatar final = klip video
- * realistis (FR-8); komponen ini cukup diganti tanpa mengubah StagePage.
- * Mulut mengikuti level audio sungguhan yang sedang diputar (bukan animasi loop).
+ * Satu panel karakter di layar OBS. Karakter utamanya avatar realistis Simli (video, tanpa klik); panel, latar,
+ * dan tata letaknya tetap seperti sebelum Simli. Karakter ilustrasi 2D (mockup StageModeA/B) tetap ada sebagai
+ * cadangan otomatis selama Simli belum tersambung atau bila putus, dan mulutnya mengikuti level audio sungguhan.
  */
 import { useEffect, useRef } from 'react'
+import { useSimliStream, type AvatarState } from './useSimliStream'
 
 export type AvatarPersona = 'raka' | 'salsa'
 
@@ -18,16 +19,28 @@ interface Props {
   speaking: boolean
   /** Level audio 0..1 yang sedang diputar; null bila tidak tersedia. */
   getLevel: () => number | null
+  /** Jalur audio dan bisu lokal per persona dari useLiveSession (suara Simli dan 2D tidak boleh bersamaan). */
+  getAudioTrack: (persona: string) => MediaStreamTrack | null
+  setLocalMuted: (persona: string, muted: boolean) => void
+  audioReady: boolean
+  /** Dilaporkan ke stage setiap berubah: simli | connecting | fallback (2D). */
+  onAvatarState: (persona: string, state: AvatarState) => void
 }
 
-export function AvatarPanel({ persona, name, speaking, getLevel }: Props) {
+export function AvatarPanel({ persona, name, speaking, getLevel, getAudioTrack, setLocalMuted, audioReady, onAvatarState }: Props) {
   const mouthRef = useRef<SVGEllipseElement>(null)
   const discRef = useRef<HTMLDivElement>(null)
   const t = THEME[persona]
+  const { videoRef, audioRef, state } = useSimliStream(persona, getAudioTrack, setLocalMuted, audioReady)
+  const simli = state === 'simli'
+
+  useEffect(() => {
+    onAvatarState(persona, state)
+  }, [persona, state, onAvatarState])
 
   // Mulut dan lingkaran latar mengikuti level audio per frame, tanpa render ulang React.
   useEffect(() => {
-    if (!speaking) return
+    if (!speaking || simli) return
     let raf = 0
     let smooth = 0
     const tick = () => {
@@ -42,21 +55,26 @@ export function AvatarPanel({ persona, name, speaking, getLevel }: Props) {
       cancelAnimationFrame(raf)
       if (discRef.current) discRef.current.style.transform = ''
     }
-  }, [speaking, getLevel])
+  }, [speaking, simli, getLevel])
 
   return (
     <div className="stage-panel" style={{ background: `repeating-conic-gradient(${t.checker} 0 25%, #FFFFFF 0 50%) 0 0 / 60px 60px` }}>
       <div className="stage-panel__glow" aria-hidden="true" />
       <Doodles color={t.doodle} flip={persona === 'salsa'} />
       <div ref={discRef} className="stage-panel__disc" style={{ background: t.disc }} aria-hidden="true" />
-      <svg
-        className={`stage-avatar ${speaking ? 'is-speaking' : 'is-idle'}`}
-        role="img"
-        aria-label={`${name} ${speaking ? 'sedang bicara' : 'sedang mendengarkan'}`}
-        viewBox="0 0 300 300"
-      >
-        <g className="stage-avatar__body">{persona === 'raka' ? <Raka speaking={speaking} mouthRef={mouthRef} /> : <Salsa speaking={speaking} mouthRef={mouthRef} />}</g>
-      </svg>
+      {/* Video dan audio Simli selalu ada di halaman (disembunyikan dengan opacity, bukan display) supaya sambungan bisa siap lebih dulu. */}
+      <video ref={videoRef} className={`stage-simli ${simli ? 'is-live' : ''}`} autoPlay playsInline muted aria-label={`${name} (avatar)`} />
+      <audio ref={audioRef} autoPlay />
+      {!simli && (
+        <svg
+          className={`stage-avatar ${speaking ? 'is-speaking' : 'is-idle'}`}
+          role="img"
+          aria-label={`${name} ${speaking ? 'sedang bicara' : 'sedang mendengarkan'}`}
+          viewBox="0 0 300 300"
+        >
+          <g className="stage-avatar__body">{persona === 'raka' ? <Raka speaking={speaking} mouthRef={mouthRef} /> : <Salsa speaking={speaking} mouthRef={mouthRef} />}</g>
+        </svg>
+      )}
     </div>
   )
 }

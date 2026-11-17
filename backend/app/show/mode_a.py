@@ -27,6 +27,7 @@ from app.show.engine import Plan, ShowEngine
 from app.show.intent import detect_topic_switch
 from app.show.participants import HUMAN_ID
 from app.show.pointclock import trim_to_budget
+from app.show.runmeta import run_metadata
 
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 MIN_PART_WORDS = 4
@@ -133,6 +134,7 @@ class HumanLedEngine(ShowEngine):
             effective={"point_timer": False, "auto_advance": False, "nudge_after_s": self.settings.MODE_A_NUDGE_AFTER_S},
             models={r: self.settings.model_for(r) for r in ("persona", "supervisor", "showrunner")},
             prompts={a.prompt.name: a.prompt.version for a in (self.persona_agent, self.supervisor, self.showrunner, self.summary)},
+            **run_metadata(self),
         )
         for warning in self.tts.warnings:  # mis. ELEVENLABS_API_KEY kosong → jatuh ke Edge
             await self._alert("tts", warning, "tts_warning")

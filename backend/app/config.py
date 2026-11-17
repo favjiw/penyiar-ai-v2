@@ -116,9 +116,13 @@ class Settings(BaseSettings):
     SUMMARY_EVERY_TURNS: int = 10  # ringkasan obrolan diperbarui tiap sekian giliran yang keluar dari jendela riwayat; 0 = mati
     HUMAN_HOST_NAME: str = ""  # mode A (Tahap 4); keputusan terbuka PRD §15.2 #2
 
-    # Simli (Avatar Video)
+    # Simli (avatar video realistis di /stage menggantikan karakter 2D; 2D tetap jadi cadangan otomatis)
     SIMLI_API_KEY: str = ""
-    SIMLI_FACE_ID: str = "bf13113a-355a-4d97-8b90-4edccd1da7b2"
+    SIMLI_FACE_ID: str = "bf13113a-355a-4d97-8b90-4edccd1da7b2"  # wajah bawaan bila wajah per persona kosong
+    SIMLI_FACE_ID_RAKA: str = ""  # wajah per persona; kosong = SIMLI_FACE_ID
+    SIMLI_FACE_ID_SALSA: str = ""
+    SIMLI_MAX_SESSION_S: int = 3600  # batas satu sambungan Simli; layar OBS menyambung ulang sendiri setelahnya
+    SIMLI_MAX_IDLE_S: int = 300  # Simli memutus sambungan yang sepi sekian detik; menyambung ulang otomatis
 
     # Uji: "llm" dan/atau "tts" untuk mensimulasikan galat
     FAIL_INJECT: str = ""
@@ -149,6 +153,11 @@ class Settings(BaseSettings):
         if unknown:
             raise ValueError(f"TTS_FALLBACK memuat provider tidak dikenal: {', '.join(unknown)}")
         return [n for n in names if n != "none"]
+
+    def simli_face_for(self, persona: str = "") -> str:
+        """Wajah Simli untuk satu persona (raka | salsa); jatuh ke SIMLI_FACE_ID bila belum diatur."""
+        per_persona = getattr(self, f"SIMLI_FACE_ID_{persona.upper()}", "") if persona else ""
+        return (per_persona or self.SIMLI_FACE_ID).strip().strip("'\"")
 
     def rpd_for_model(self, model: str) -> int:
         """Kuota harian sebuah model: yang paling ketat di antara peran yang memakainya (kuota Google per model)."""

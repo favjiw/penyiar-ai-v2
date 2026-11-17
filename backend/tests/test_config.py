@@ -12,3 +12,10 @@ def test_env_example_loads_as_is():
 def test_pilot_condition_default_and_override():
     assert Settings(_env_file=None).PILOT_CONDITION == "A"
     assert Settings(_env_file=None, PILOT_CONDITION="D").PILOT_CONDITION == "D"
+
+
+def test_simli_face_falls_back_to_default_face():
+    s = Settings(_env_file=None, SIMLI_FACE_ID="default-face", SIMLI_FACE_ID_RAKA="raka-face")
+    assert s.simli_face_for("raka") == "raka-face"
+    assert s.simli_face_for("salsa") == "default-face"
+    assert s.simli_face_for() == "default-face"

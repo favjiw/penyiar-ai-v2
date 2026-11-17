@@ -45,8 +45,10 @@ export interface LiveSession {
   audioReady: boolean
   unlockAudio: () => void
   send: (action: string, data?: Record<string, unknown>) => void
-  getAudioTrack: () => MediaStreamTrack | null
-  setLocalMuted: (muted: boolean) => void
+  /** Jalur audio khusus satu persona (untuk avatar Simli-nya); hanya berisi suara saat persona itu bicara, selain itu hening. */
+  getAudioTrack: (persona: string) => MediaStreamTrack | null
+  /** Bisukan keluaran lokal persona ini (dipakai bila avatar Simli-nya yang memutar suara); false = suara lokal menyala lagi. */
+  setLocalMuted: (persona: string, muted: boolean) => void
 }
 
 /** Satu hal yang diputar berurutan: filler, atau giliran AI yang bisa terdiri dari beberapa bagian kalimat. */
@@ -89,8 +91,9 @@ export function useLiveSession(role: Role): LiveSession {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const ctxRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
-  const gainRef = useRef<GainNode | null>(null)
-  const destRef = useRef<MediaStreamAudioDestinationNode | null>(null)
+  // Satu jalur keluaran per persona: suara lokal (gain) dan jalur untuk avatar Simli (dest). Hanya persona yang sedang bicara tersambung ke analyser.
+  const routesRef = useRef<Map<string, { gain: GainNode; dest: MediaStreamAudioDestinationNode; muted: boolean }>>(new Map())
+  const routedRef = useRef<string | null>(null)
   const samplesRef = useRef<Uint8Array | null>(null)
   const queueRef = useRef<PlayItem[]>([])
   const playingRef = useRef(false)
@@ -117,18 +120,10 @@ export function useLiveSession(role: Role): LiveSession {
         const ctx = new AudioContext()
         const analyser = ctx.createAnalyser()
         analyser.fftSize = 512
-        const gain = ctx.createGain()
-        gain.gain.value = 1.0
-        const dest = ctx.createMediaStreamDestination()
         const src = ctx.createMediaElementSource(a)
         src.connect(analyser)
-        analyser.connect(gain)
-        gain.connect(ctx.destination)
-        analyser.connect(dest)
         ctxRef.current = ctx
         analyserRef.current = analyser
-        gainRef.current = gain
-        destRef.current = dest
         samplesRef.current = new Uint8Array(analyser.fftSize)
       } catch {
         // Tanpa Web Audio audio tetap diputar lewat elemen; level dianggap nol (bar diam).
@@ -137,16 +132,55 @@ export function useLiveSession(role: Role): LiveSession {
     return a
   }, [])
 
-  const getAudioTrack = useCallback((): MediaStreamTrack | null => {
-    getAudio()
-    return destRef.current?.stream.getAudioTracks()[0] ?? null
-  }, [getAudio])
+  /** Jalur keluaran persona; dibuat saat pertama dibutuhkan. Null bila Web Audio tidak tersedia. */
+  const routeFor = useCallback(
+    (persona: string) => {
+      getAudio()
+      const ctx = ctxRef.current
+      if (!ctx) return null
+      let r = routesRef.current.get(persona)
+      if (!r) {
+        const gain = ctx.createGain()
+        gain.gain.value = 1.0
+        gain.connect(ctx.destination)
+        r = { gain, dest: ctx.createMediaStreamDestination(), muted: false }
+        routesRef.current.set(persona, r)
+      }
+      return r
+    },
+    [getAudio],
+  )
 
-  const setLocalMuted = useCallback((muted: boolean) => {
-    if (gainRef.current) {
-      gainRef.current.gain.value = muted ? 0.0 : 1.0
-    }
-  }, [])
+  /** Sambungkan analyser hanya ke jalur persona yang akan bicara (suara persona lain tidak boleh masuk ke avatar yang diam). */
+  const routeTo = useCallback(
+    (persona: string) => {
+      const analyser = analyserRef.current
+      const next = routeFor(persona)
+      if (!analyser || !next || routedRef.current === persona) return
+      const prev = routedRef.current ? routesRef.current.get(routedRef.current) : null
+      if (prev) {
+        analyser.disconnect(prev.gain)
+        analyser.disconnect(prev.dest)
+      }
+      analyser.connect(next.gain)
+      analyser.connect(next.dest)
+      routedRef.current = persona
+    },
+    [routeFor],
+  )
+
+  const getAudioTrack = useCallback((persona: string): MediaStreamTrack | null => routeFor(persona)?.dest.stream.getAudioTracks()[0] ?? null, [routeFor])
+
+  const setLocalMuted = useCallback(
+    (persona: string, muted: boolean) => {
+      const r = routeFor(persona)
+      if (r) {
+        r.muted = muted
+        r.gain.gain.value = muted ? 0.0 : 1.0
+      }
+    },
+    [routeFor],
+  )
 
   const level = useCallback((): number | null => {
     const analyser = analyserRef.current
@@ -197,6 +231,7 @@ export function useLiveSession(role: Role): LiveSession {
     if (url === undefined) return // tunggu audio_part
     if (url === null) return finish('error')
     const a = getAudio()
+    routeTo(item.persona)
     const gen = genRef.current
     const stale = () => gen !== genRef.current || queueRef.current[0] !== item
     playingRef.current = true
@@ -247,7 +282,7 @@ export function useLiveSession(role: Role): LiveSession {
           send('audio_state', { blocked: true, ready: false })
         } else finish('error')
       })
-  }, [send, getAudio])
+  }, [send, getAudio, routeTo])
 
   const enqueue = useCallback(
     (item: Omit<PlayItem, 'idx' | 'started'>) => {

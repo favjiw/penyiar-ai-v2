@@ -188,6 +188,15 @@ export function LivePanel({ live }: { live: LiveSession }) {
         </Button>
       ),
     })
+  // Avatar realistis (Simli) putus atau belum tersambung: layar OBS memakai karakter 2D sementara, siaran tetap jalan.
+  const avatar2d = Object.entries(output?.avatar ?? {}).filter(([, s]) => s === 'fallback').map(([p]) => personas.find((x) => x.id === p)?.name ?? p)
+  if (stageOpen && avatar2d.length)
+    derived.push({
+      id: 'avatar',
+      level: 'yellow',
+      title: 'Avatar realistis belum tersambung',
+      message: `${avatar2d.join(' dan ')} sementara tampil sebagai karakter 2D. Layar OBS mencoba menyambung ulang sendiri.`,
+    })
   if (isModeA && !prompterOpen)
     derived.push({
       id: 'prompter',

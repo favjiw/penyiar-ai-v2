@@ -2,11 +2,12 @@
  * Layar untuk OBS (`/stage`, PRD v2.7 FR-10): hanya karakter, tanpa teks atau komponen,
  * dan satu-satunya pemutar audio siaran. Mode B: dua panel bertumpuk (9:16).
  * Mode A: satu panel AI (kamera studio ditumpuk di OBS).
+ * Karakternya avatar Simli per panel; karakter 2D menjadi cadangan otomatis (Avatar.tsx).
  */
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useLiveSession } from '../live/useLiveSession'
 import { AvatarPanel, type AvatarPersona } from './Avatar'
-import { SimliAvatar } from './SimliAvatar'
+import type { AvatarState } from './useSimliStream'
 import './stage.css'
 
 const NAMES: Record<AvatarPersona, string> = { raka: 'Raka', salsa: 'Salsa' }
@@ -14,11 +15,8 @@ const isPersona = (x: unknown): x is AvatarPersona => x === 'raka' || x === 'sal
 
 export function StagePage() {
   const live = useLiveSession('stage')
-  const { snapshot: snap, speaking, level, audioReady, unlockAudio, output, getAudioTrack, setLocalMuted } = live
+  const { snapshot: snap, speaking, level, audioReady, unlockAudio, output, send, connected, getAudioTrack, setLocalMuted } = live
   const params = new URLSearchParams(window.location.search)
-
-  // Opsi ganti avatar: 'simli' (default untuk uji coba visual) atau '2d'
-  const [useSimli, setUseSimli] = useState(() => params.get('avatar') !== '2d')
 
   useEffect(() => {
     document.title = 'Layar untuk OBS · Penyiar AI HITS'
@@ -32,33 +30,31 @@ export function StagePage() {
   const onAir = snap.state === 'live' || snap.state === 'paused'
   const showArm = !onAir && !audioReady && output?.is_audio_owner === true
 
+  // Status avatar tiap panel dilaporkan ke server; konsol memberi peringatan kuning bila ada yang jatuh ke karakter 2D.
+  const [avatars, setAvatars] = useState<Record<string, AvatarState>>({})
+  const onAvatarState = useCallback((persona: string, state: AvatarState) => setAvatars((a) => (a[persona] === state ? a : { ...a, [persona]: state })), [])
+  const shown = personas.join(',')
+  useEffect(() => {
+    if (!connected) return // kirim ulang setiap kali sambungan WS (kembali) terbuka: server tidak menyimpannya antar sambungan
+    const active = Object.fromEntries(Object.entries(avatars).filter(([p]) => shown.split(',').includes(p)))
+    send('avatar_state', { personas: active })
+  }, [avatars, shown, send, connected])
+
   return (
     <div className={`stage stage--${mode === 'A' ? 'a' : 'b'}`}>
-      {useSimli && mode === 'A' ? (
-        <SimliAvatar
-          persona={soloAi}
-          name={NAMES[soloAi]}
-          audioReady={audioReady}
+      {personas.map((p) => (
+        <AvatarPanel
+          key={p}
+          persona={p}
+          name={NAMES[p]}
+          speaking={speaking === p}
+          getLevel={level}
           getAudioTrack={getAudioTrack}
           setLocalMuted={setLocalMuted}
-          onToggle2D={() => setUseSimli(false)}
+          audioReady={audioReady}
+          onAvatarState={onAvatarState}
         />
-      ) : (
-        personas.map((p) => (
-          <AvatarPanel key={p} persona={p} name={NAMES[p]} speaking={speaking === p} getLevel={level} />
-        ))
-      )}
-
-      {/* Tombol beralih ke Simli jika sedang di mode 2D */}
-      {!useSimli && mode === 'A' && !onAir && (
-        <button
-          type="button"
-          className="stage-mode-switch"
-          onClick={() => setUseSimli(true)}
-        >
-          Coba Visual Simli
-        </button>
-      )}
+      ))}
 
       {/* Satu-satunya elemen non-karakter, dan hanya SEBELUM live: browser butuh satu klik di
           jendela ini supaya suara AI boleh diputar. Saat on air tidak pernah tampil (tanpa teks);
