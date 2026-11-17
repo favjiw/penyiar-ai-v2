@@ -12,6 +12,7 @@ import type { LiveSession } from '../live/useLiveSession'
 import { useShowClock } from '../live/useShowClock'
 import { shout } from '../lib/materi'
 import { openStageWindow } from '../stage/openStageWindow'
+import { AccountChip } from '../auth/AccountChip'
 import { Alert, Button, fmtClock, IconCheck, IconInfo, IconMic, IconMicOff, IconMonitorOff, LevelBars, LiveBadge, Ring } from '../ui'
 import './live.css'
 
@@ -301,6 +302,7 @@ export function LivePanel({ live }: { live: LiveSession }) {
                 Akhiri siaran
               </Button>
             )}
+            <AccountChip />
           </div>
         </div>
       </header>

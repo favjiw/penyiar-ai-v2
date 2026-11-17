@@ -1,5 +1,5 @@
 from app.blocker.generator import BlockerGenerationError, BlockerGenerator, GenerationMeta
-from app.blocker.store import BlockerInvalid, BlockerLocked, BlockerNotFound, BlockerStore
+from app.blocker.store import BlockerInvalid, BlockerLocked, BlockerNotFound, BlockerStore, DbBlockerStore
 
 __all__ = [
     "BlockerGenerationError",
@@ -8,5 +8,6 @@ __all__ = [
     "BlockerLocked",
     "BlockerNotFound",
     "BlockerStore",
+    "DbBlockerStore",
     "GenerationMeta",
 ]

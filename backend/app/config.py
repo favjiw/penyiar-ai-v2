@@ -148,6 +148,17 @@ class Settings(BaseSettings):
     SESSIONS_DIR: str = ""  # kosong = folder `sessions` di samping LOG_DIR; isi per sesi: sessions/<session_id>/
     CACHE_DIR: str = str(BACKEND_ROOT / "cache")
 
+    # Database: pengguna, sesi login, dan materi. Contoh Postgres: postgresql+psycopg://user:sandi@host:5432/nama.
+    # Kosong = materi tetap file di DATA_DIR; bila AUTH_REQUIRED, dipakai SQLite <DATA_DIR>/app.db (pengembangan).
+    DATABASE_URL: str = ""
+
+    # Login aplikasi. Mati (bawaan) = tanpa login, untuk pengembangan lokal dan tes; hosting WAJIB menyalakannya.
+    AUTH_REQUIRED: bool = False
+    AUTH_SESSION_HOURS: int = Field(default=168, ge=1)  # lama sesi login; diperpanjang otomatis selama dipakai
+    AUTH_COOKIE_SECURE: bool = False  # true di belakang HTTPS (cookie hanya dikirim lewat HTTPS)
+    AUTH_MAX_FAILURES: int = Field(default=5, ge=1)  # gagal login beruntun (per pengguna) sebelum diblokir sementara
+    AUTH_LOCKOUT_MIN: int = Field(default=15, ge=1)
+
     # Variabel kosong (mis. `GEMINI_RPM_PERSONA=` di .env.example) berarti pakai default.
     model_config = {"env_file": str(REPO_ROOT / ".env"), "env_file_encoding": "utf-8", "extra": "ignore", "env_ignore_empty": True}
 
@@ -160,6 +171,18 @@ class Settings(BaseSettings):
     @property
     def sessions_path(self) -> Path:
         return Path(self.SESSIONS_DIR) if self.SESSIONS_DIR else Path(self.LOG_DIR).parent / "sessions"
+
+    @property
+    def database_url(self) -> str:
+        """URL database yang berlaku; kosong berarti tanpa database (materi disimpan sebagai file)."""
+        url = self.DATABASE_URL.strip()
+        if url.startswith("postgres://"):
+            url = "postgresql://" + url[len("postgres://"):]
+        if url.startswith("postgresql://"):  # tanpa driver eksplisit: pakai psycopg 3
+            url = "postgresql+psycopg://" + url[len("postgresql://"):]
+        if not url and self.AUTH_REQUIRED:
+            url = "sqlite:///" + (Path(self.DATA_DIR) / "app.db").as_posix()
+        return url
 
     def tts_fallbacks(self) -> list[str]:
         """Daftar cadangan TTS dari TTS_FALLBACK; 'none' atau kosong berarti tanpa cadangan."""

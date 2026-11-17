@@ -8,12 +8,18 @@ export class ApiError extends Error {
   }
 }
 
+/** Sesi login habis di tengah jalan (mis. dicabut admin): muat ulang, halaman login yang muncul. */
+function sessionExpired(path: string) {
+  if (!path.startsWith('/api/auth/')) window.location.reload()
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...init,
     headers: { 'Content-Type': 'application/json', ...init?.headers },
   })
   const body = await res.json().catch(() => ({}))
+  if (res.status === 401) sessionExpired(path)
   if (!res.ok) {
     // FastAPI: detail berupa string, atau daftar galat validasi (422)
     const detail = Array.isArray(body.detail)
@@ -62,7 +68,30 @@ export interface Readiness {
   estimated: boolean
 }
 
+export type Role = 'penyiar' | 'operator' | 'admin'
+
+export interface AuthUser {
+  id: number
+  username: string
+  display_name: string
+  role: Role
+  active: boolean
+}
+
+export interface UserRow extends AuthUser {
+  created_at: string
+  last_login_at: string | null
+}
+
 export const api = {
+  me: () => request<{ user: AuthUser; auth_required: boolean }>('/api/auth/me'),
+  login: (username: string, password: string) => post<{ user: AuthUser }>('/api/auth/login', { username, password }),
+  logout: () => post<{ ok: boolean }>('/api/auth/logout'),
+  changePassword: (current: string, next: string) => post<{ ok: boolean }>('/api/auth/password', { current, new: next }),
+  users: () => request<UserRow[]>('/api/users'),
+  createUser: (u: { username: string; password: string; role: Role; display_name: string }) => post<AuthUser>('/api/users', u),
+  updateUser: (id: number, patch: Partial<{ role: Role; active: boolean; display_name: string; password: string }>) =>
+    request<AuthUser>(`/api/users/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   readiness: (mode: 'A' | 'B', target_minutes: number) => request<Readiness>(`/api/readiness?mode=${mode}&target_minutes=${target_minutes}`),
   voices: () => request<VoiceCatalog>('/api/voices'),
   generate: (req: GenerateRequest) => post<GenerateResponse>('/api/blocker/generate', req),

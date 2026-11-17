@@ -9,6 +9,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
+import { useAuth } from '../auth/AuthContext'
 import { shout } from '../lib/materi'
 import { useLiveSession } from '../live/useLiveSession'
 import { useShowClock } from '../live/useShowClock'
@@ -20,6 +21,20 @@ import { speechSupported, usePushToTalk } from './usePushToTalk'
 const TOPIC_BAND_MS = 6000 // lama band "Pindah topik" tampil setelah topik berganti
 const AUTO_SEND_SILENCE_MS = 1200
 const MIC_ERROR_CODES = new Set(['audio-capture', 'not-allowed', 'service-not-allowed'])
+
+/** Tombol keluar kecil di layar tunggu (tanpa login: tidak tampil). Saat siaran berjalan prompter tanpa tombol apa pun. */
+function SignOutLink() {
+  const { authRequired, user, logout } = useAuth()
+  if (!authRequired) return null
+  return (
+    <p className="pr-wait__hint" style={{ fontSize: 20, marginTop: 24 }}>
+      Masuk sebagai {user.display_name}.
+      <button className="ui-btn ui-btn--link" onClick={() => void logout()}>
+        Keluar
+      </button>
+    </p>
+  )
+}
 
 type Band =
   | { kind: 'turn' }
@@ -165,6 +180,7 @@ export function PrompterPage() {
             : 'Layar ini otomatis berganti saat siaran dimulai dari konsol. Kamu tidak perlu menekan apa pun.'}
         </p>
         {!speechSupported && <p className="pr-wait__warn">Buka prompter di Google Chrome supaya mikrofon bisa mendengar suaramu.</p>}
+        <SignOutLink />
         <div className="pr-wait__mic" aria-live="polite">
           {mic.down ? <IconMicOff size={36} /> : <LevelBars level={mic.level} height={40} />}
           <span>

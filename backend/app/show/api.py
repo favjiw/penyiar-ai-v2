@@ -9,10 +9,11 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from app.auth import User, require_role, user_from_conn
 from app.blocker.store import BlockerInvalid
 from app.data.personas import load_personas
 from app.schemas import PrecheckRequest, PTTTurnRequest, ShowState, StartShowRequest, VoiceSampleRequest
@@ -47,7 +48,7 @@ def require_engine(request: Request) -> ShowEngine:
 
 
 @router.post("/api/show/start")
-async def start_show(req: StartShowRequest, request: Request):
+async def start_show(req: StartShowRequest, request: Request, _: User = Depends(require_role("operator"))):
     app = request.app
     running = current(request)
     if running is not None and running.state != ShowState.ENDED:
@@ -116,7 +117,7 @@ async def _readiness(app, mode: str, target_minutes: int) -> dict:
 
 
 @router.get("/api/readiness")
-async def readiness(request: Request, mode: str = "B", target_minutes: int = 60):
+async def readiness(request: Request, mode: str = "B", target_minutes: int = 60, _: User = Depends(require_role("operator"))):
     """Cek kesiapan tanpa memanaskan suara (header konsol): menit aman per layanan, PERKIRAAN."""
     if mode not in ("A", "B"):
         raise HTTPException(422, "mode harus A atau B")
@@ -124,13 +125,13 @@ async def readiness(request: Request, mode: str = "B", target_minutes: int = 60)
 
 
 @router.get("/api/show")
-async def show_state(request: Request):
+async def show_state(request: Request, _: User = Depends(require_role("penyiar"))):
     engine = current(request)
     return engine.snapshot() if engine else {"state": ShowState.IDLE.value}
 
 
 @router.post("/api/show/undo-topic")
-async def undo_topic(request: Request):
+async def undo_topic(request: Request, _: User = Depends(require_role("penyiar"))):
     """Batalkan pindah topik dari ucapan penyiar (mode A, PRD v2.7 §6.4); 409 bila sudah lewat atau tidak ada."""
     engine = require_engine(request)
     if not isinstance(engine, HumanLedEngine) or not await engine.undo_topic():
@@ -139,7 +140,9 @@ async def undo_topic(request: Request):
 
 
 @router.post("/api/show/{action}")
-async def control(action: str, request: Request):
+async def control(action: str, request: Request, user: User = Depends(require_role("penyiar"))):
+    if action != "next" and not user.can("operator"):  # penyiar hanya boleh pindah topik
+        raise HTTPException(403, "Peran Anda tidak boleh melakukan ini")
     engine = require_engine(request)
     handlers = {"pause": engine.pause, "resume": engine.resume, "next": engine.skip, "skip": engine.skip, "stop": engine.stop}
     if action not in handlers:
@@ -149,7 +152,7 @@ async def control(action: str, request: Request):
 
 
 @router.post("/api/ptt/turn")
-async def ptt_turn(req: PTTTurnRequest, request: Request):
+async def ptt_turn(req: PTTTurnRequest, request: Request, _: User = Depends(require_role("penyiar"))):
     """Transkrip final push-to-talk dari prompter (FR-7, STT di browser)."""
     engine = require_engine(request)
     if not isinstance(engine, HumanLedEngine):
@@ -160,7 +163,7 @@ async def ptt_turn(req: PTTTurnRequest, request: Request):
 
 
 @router.get("/api/voices")
-async def voices(request: Request):
+async def voices(request: Request, _: User = Depends(require_role("operator"))):
     """Daftar suara terkurasi + suara aktif per persona (untuk pilihan operator sebelum live)."""
     tts = request.app.state.tts
     return {
@@ -174,7 +177,7 @@ SAMPLE_TEXT = "Halo Sobat Hits, gue {name}. Yuk ngobrol santai bareng gue hari i
 
 
 @router.post("/api/voices/sample")
-async def voice_sample(req: VoiceSampleRequest, request: Request):
+async def voice_sample(req: VoiceSampleRequest, request: Request, _: User = Depends(require_role("operator"))):
     """Contoh suara untuk tombol "Dengar" sebelum live (PRD v2.7 FR-6). Tidak tersedia saat siaran berjalan."""
     running = current(request)
     if running is not None and running.state != ShowState.ENDED:
@@ -197,7 +200,7 @@ async def voice_sample(req: VoiceSampleRequest, request: Request):
 
 
 @router.post("/api/precheck")
-async def precheck(request: Request, req: Optional[PrecheckRequest] = None):
+async def precheck(request: Request, req: Optional[PrecheckRequest] = None, _: User = Depends(require_role("operator"))):
     """Cek pra-live (§5.1): model terisi, TTS dipanaskan (cold start suara library)."""
     app = request.app
     running = current(request)
@@ -226,7 +229,7 @@ async def precheck(request: Request, req: Optional[PrecheckRequest] = None):
 
 
 @router.get("/audio/{filename}")
-async def serve_audio(filename: str, request: Request):
+async def serve_audio(filename: str, request: Request, _: User = Depends(require_role("penyiar"))):
     path = audio_dir(request) / filename
     if not _SAFE_NAME.match(filename) or not path.exists():
         raise HTTPException(404, "Audio tidak ditemukan")
@@ -234,13 +237,13 @@ async def serve_audio(filename: str, request: Request):
 
 
 @router.get("/api/logs")
-async def list_logs(request: Request):
+async def list_logs(request: Request, _: User = Depends(require_role("operator"))):
     log_dir = Path(request.app.state.settings.LOG_DIR)
     return [{"session_id": f.stem, "size_bytes": f.stat().st_size} for f in sorted(log_dir.glob("show_*.jsonl"), reverse=True)]
 
 
 @router.get("/api/logs/{session_id}")
-async def get_log(session_id: str, request: Request):
+async def get_log(session_id: str, request: Request, _: User = Depends(require_role("operator"))):
     path = Path(request.app.state.settings.LOG_DIR) / f"{session_id}.jsonl"
     if not _SAFE_NAME.match(session_id) or not path.exists():
         raise HTTPException(404, "Log tidak ditemukan")
@@ -253,7 +256,7 @@ class SimliTokenRequest(BaseModel):
 
 
 @router.post("/api/simli/token")
-async def get_simli_token(req: SimliTokenRequest, request: Request):
+async def get_simli_token(req: SimliTokenRequest, request: Request, _: User = Depends(require_role("operator"))):
     """Token sesi Simli untuk satu panel karakter di /stage. Kunci API tetap di server; browser hanya menerima token."""
     settings = request.app.state.settings
     api_key = (settings.SIMLI_API_KEY or "").strip().strip("'\"")
@@ -285,8 +288,25 @@ async def get_simli_token(req: SimliTokenRequest, request: Request):
         raise HTTPException(502, f"Gagal menghubungi Simli API: {e}")
 
 
+def _ws_allowed(ws: WebSocket, role: str) -> bool:
+    """Login wajib (bila dinyalakan): konsol dan layar OBS untuk operator ke atas, prompter untuk semua peran.
+    Origin yang membawa cookie dari situs lain ditolak (WebSocket tidak terkena aturan CORS)."""
+    user = user_from_conn(ws)
+    if user is None:
+        return False
+    if not ws.app.state.settings.AUTH_REQUIRED:
+        return True
+    origin = ws.headers.get("origin")
+    if origin and origin.split("://", 1)[-1] != ws.headers.get("host", ""):
+        return False
+    return user.can("penyiar" if role == "prompter" else "operator")
+
+
 @router.websocket("/ws/session")
 async def ws_session(ws: WebSocket, role: str = "console"):
+    if not _ws_allowed(ws, role):
+        await ws.close(code=1008)  # sebelum accept: jabat tangan ditolak (403)
+        return
     manager: ConnectionManager = ws.app.state.ws
     previous_owner = manager.audio_owner()
     await manager.connect(ws, role)

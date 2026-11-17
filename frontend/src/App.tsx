@@ -1,5 +1,8 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { api } from './api'
+import { AccountChip } from './auth/AccountChip'
+import { AuthGate, useAuth } from './auth/AuthContext'
+import { UsersPage } from './auth/UsersPage'
 import { LivePanel } from './console/LivePanel'
 import { PrepPage } from './console/prep/PrepPage'
 import { ttsLabel, type TtsStatus } from './live/tts'
@@ -74,6 +77,7 @@ function Console() {
               </span>
             )}
             <TechDetails health={health} tts={tts} />
+            <AccountChip />
           </>
         }
       />
@@ -92,10 +96,18 @@ const DevGallery = import.meta.env.DEV ? lazy(() => import('./ui/DevGallery').th
 
 const stripSlash = (p: string) => (p.length > 1 ? p.replace(/\/+$/, '') : p)
 
-export function App() {
+function Routes() {
+  const { can } = useAuth()
   const path = stripSlash(window.location.pathname)
+  // Penyiar hanya memakai prompter: konsol dan layar OBS bukan untuk mereka.
+  if (path === '/' && !can('operator')) {
+    window.location.replace('/prompter')
+    return null
+  }
+  if (path === '/stage' && !can('operator')) return <NotFound />
   if (path === '/prompter') return <PrompterPage />
   if (path === '/stage') return <StagePage />
+  if (path === '/pengguna') return <UsersPage />
   if (DevGallery && path === '/_ui')
     return (
       <Suspense fallback={null}>
@@ -104,4 +116,12 @@ export function App() {
     )
   if (path === '/') return <Console />
   return <NotFound />
+}
+
+export function App() {
+  return (
+    <AuthGate>
+      <Routes />
+    </AuthGate>
+  )
 }

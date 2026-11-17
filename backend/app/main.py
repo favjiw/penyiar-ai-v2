@@ -10,11 +10,15 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from sqlalchemy import insert
+
+from app.auth import AuthService, require_role, user_from_conn
+from app.auth import router as auth_router
 from app.blocker import (
     BlockerGenerationError,
     BlockerGenerator,
@@ -22,9 +26,11 @@ from app.blocker import (
     BlockerLocked,
     BlockerNotFound,
     BlockerStore,
+    DbBlockerStore,
 )
 from app.blocker.store import now_iso
 from app.config import REPO_ROOT, Settings, get_settings
+from app.db import Database, generation_log
 from app.llm import create_llm_client
 from app.llm.quota import QuotaCounter
 from app.schemas import Blocker, GenerateBlockerRequest
@@ -47,7 +53,15 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI):
         app.state.quota = QuotaCounter(settings.quota_path, settings.rpd_for_model)
         llm = create_llm_client(settings, quota=app.state.quota)
-        store = BlockerStore(settings.DATA_DIR)
+        # Database (Postgres di hosting): pengguna, sesi login, materi. Tanpa URL: materi file, tanpa login.
+        db = Database(settings.database_url) if settings.database_url else None
+        if db is not None:
+            db.create_all()
+        app.state.db = db
+        app.state.auth = AuthService(db, settings) if db is not None else None
+        if settings.AUTH_REQUIRED and app.state.auth is None:
+            raise RuntimeError("AUTH_REQUIRED=true membutuhkan database")
+        store = DbBlockerStore(db) if db is not None else BlockerStore(settings.DATA_DIR)
         app.state.settings = settings
         app.state.llm = llm
         app.state.store = store
@@ -56,13 +70,19 @@ def build_app(settings: Settings | None = None) -> FastAPI:
         app.state.ws = ConnectionManager()
         app.state.engine = None
         Path(settings.LOG_DIR).mkdir(parents=True, exist_ok=True)
-        logger.info("Siap: LLM_MODE=%s TTS_MODE=%s", settings.LLM_MODE, settings.TTS_MODE)
+        logger.info(
+            "Siap: LLM_MODE=%s TTS_MODE=%s database=%s login=%s", settings.LLM_MODE, settings.TTS_MODE,
+            db.dialect if db is not None else "file", "wajib" if settings.AUTH_REQUIRED else "MATI (hanya untuk pengembangan)",
+        )
         yield
         if app.state.engine is not None:
             await app.state.engine.stop()
+        if db is not None:
+            db.dispose()
 
     app = FastAPI(title="Penyiar AI v2", lifespan=lifespan)
     app.include_router(show_router)
+    app.include_router(auth_router)
 
     @app.exception_handler(BlockerNotFound)
     async def _not_found(_: Request, e: BlockerNotFound):
@@ -96,8 +116,10 @@ def build_app(settings: Settings | None = None) -> FastAPI:
             f.write(json.dumps(line, ensure_ascii=False) + "\n")
 
     @app.get("/api/health")
-    async def health(request: Request):
+    def health(request: Request):
         s: Settings = request.app.state.settings
+        if user_from_conn(request) is None:  # cek kesehatan Docker tanpa login: tanpa rincian model dan kuota
+            return {"status": "ok"}
         llm = request.app.state.llm
         limiters = getattr(llm, "limiters", None)
         return {
@@ -111,33 +133,33 @@ def build_app(settings: Settings | None = None) -> FastAPI:
         }
 
     @app.post("/api/blocker/generate")
-    async def generate(req: GenerateBlockerRequest, request: Request):
+    async def generate(req: GenerateBlockerRequest, request: Request, _=Depends(require_role("operator"))):
         blockers, meta = await request.app.state.generator.generate(req)
         log_generation(request.app, "generate", req.tema, meta, blockers)
         return {"variants": blockers, "latency_ms": meta.latency_ms, "attempts": meta.attempts, "model": meta.model}
 
     @app.get("/api/blockers")
-    async def list_blockers(request: Request, generation_id: str | None = None, locked: bool | None = None):
+    async def list_blockers(request: Request, generation_id: str | None = None, locked: bool | None = None, _=Depends(require_role("operator"))):
         return request.app.state.store.list(generation_id=generation_id, locked=locked)
 
     @app.get("/api/blocker/{blocker_id}")
-    async def get_blocker(blocker_id: str, request: Request) -> Blocker:
+    async def get_blocker(blocker_id: str, request: Request, _=Depends(require_role("operator"))) -> Blocker:
         return request.app.state.store.get(blocker_id)
 
     @app.put("/api/blocker/{blocker_id}")
-    async def update_blocker(blocker_id: str, edited: Blocker, request: Request) -> Blocker:
+    async def update_blocker(blocker_id: str, edited: Blocker, request: Request, _=Depends(require_role("operator"))) -> Blocker:
         return request.app.state.store.update(blocker_id, edited)
 
     @app.post("/api/blocker/{blocker_id}/lock")
-    async def lock_blocker(blocker_id: str, request: Request) -> Blocker:
+    async def lock_blocker(blocker_id: str, request: Request, _=Depends(require_role("operator"))) -> Blocker:
         return request.app.state.store.lock(blocker_id)
 
     @app.post("/api/blocker/{blocker_id}/version")
-    async def new_version(blocker_id: str, request: Request) -> Blocker:
+    async def new_version(blocker_id: str, request: Request, _=Depends(require_role("operator"))) -> Blocker:
         return request.app.state.store.new_version(blocker_id)
 
     @app.post("/api/blocker/{blocker_id}/regenerate")
-    async def regenerate(blocker_id: str, body: RegenerateRequest, request: Request):
+    async def regenerate(blocker_id: str, body: RegenerateRequest, request: Request, _=Depends(require_role("operator"))):
         store: BlockerStore = request.app.state.store
         if store.get(blocker_id).locked:
             raise HTTPException(409, "Blocker terkunci tidak dibuat ulang; buat versi baru")
