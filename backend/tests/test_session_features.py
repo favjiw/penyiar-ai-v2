@@ -338,3 +338,22 @@ async def test_voice_switch_while_ai_busy_is_applied_and_answer_queued(tmp_path)
     engine._playback_done.set()
     await settle(engine)
     assert [d for t, d in events if t == "turn"][-1]["topic_id"] == "t2"  # jawaban antrean di topik baru
+
+
+async def test_session_start_records_effective_condition_and_hashes(tmp_path):
+    """Sesi bisa dibedakan dan diulang dari log: kondisi dan mode Supervisor yang berlaku, temperature, kode, hash prompt dan persona."""
+    import json
+
+    engine, _ = make_a(tmp_path, PILOT_CONDITION="D", SUPERVISOR_MODE="off")  # kondisi D memaksa Supervisor penuh
+    engine.start()
+    await settle(engine)
+    start = next(e for e in map(json.loads, open(engine.log.path, encoding="utf-8")) if e["type"] == "session_start")
+    assert start["pilot_condition"] == "D"
+    assert start["config"]["SUPERVISOR_MODE"] == "off"  # nilai .env
+    assert start["supervisor_mode_effective"] == "full"  # yang benar-benar berlaku
+    assert start["persona_temperature"] == engine.settings.PERSONA_TEMPERATURE
+    assert set(start["code"]) == {"sha", "dirty"}
+    assert set(start["prompt_hashes"]) >= {"persona", "supervisor", "showrunner"}
+    assert all(len(h) == 12 for h in start["prompt_hashes"].values())
+    assert set(start["persona_hashes"]) == {p.id for p in engine.personas}
+    await engine.stop()

@@ -52,6 +52,7 @@ from app.schemas import (
 from app.session_log import SessionLogger
 from app.show.pointclock import PointClock, trim_to_budget
 from app.show.participants import Participant, build_participants
+from app.show.runmeta import run_metadata
 from app.show.turnlog import TurnLog, topic_index
 from app.tts import FailoverTTS, TTSError
 
@@ -986,6 +987,7 @@ class ShowEngine:
                 "SUMMARY_EVERY_TURNS", "POINT_TIME_LIMIT_S", "POINT_WRAP_S", "POINT_MIN_TURNS", "TTS_WORDS_PER_SEC")},
             models={r: self.settings.model_for(r) for r in ("persona", "supervisor", "showrunner")},
             prompts={a.prompt.name: a.prompt.version for a in (self.persona_agent, self.supervisor, self.showrunner)},
+            **run_metadata(self),
         )
         for warning in self.tts.warnings:  # mis. ELEVENLABS_API_KEY kosong → jatuh ke Edge
             await self._alert("tts", warning, "tts_warning")

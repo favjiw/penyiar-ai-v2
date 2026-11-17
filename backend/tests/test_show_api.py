@@ -228,3 +228,51 @@ def test_readiness_endpoint_reports_minutes_per_service(client):
     assert client.get("/api/readiness", params={"mode": "X"}).status_code == 422
     pre = client.post("/api/precheck", json={"mode": "B", "target_minutes": 45}).json()
     assert pre["readiness"]["target_minutes"] == 45
+
+
+def test_simli_token_uses_the_face_of_each_persona(client, monkeypatch):
+    import httpx
+
+    settings = client.app.state.settings
+    settings.SIMLI_API_KEY = "dummy-simli-key"
+    settings.SIMLI_FACE_ID_RAKA, settings.SIMLI_FACE_ID_SALSA = "face-raka", ""
+    seen = []
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def post(self, url, headers=None, json=None):
+            seen.append(json)
+            return httpx.Response(200, json={"session_token": "tok"})
+
+    monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
+    assert client.post("/api/simli/token", json={"persona": "raka"}).status_code == 200
+    assert client.post("/api/simli/token", json={"persona": "salsa"}).status_code == 200  # wajah kosong → SIMLI_FACE_ID
+    assert seen[0]["faceId"] == "face-raka"
+    assert seen[1]["faceId"] == settings.SIMLI_FACE_ID
+    # Sambungan tidak lagi dibatasi 5 menit uji coba; batasnya dari konfigurasi.
+    assert seen[0]["maxSessionLength"] == settings.SIMLI_MAX_SESSION_S >= 3600
+
+
+def test_stage_avatar_state_reaches_console(client):
+    with client.websocket_connect("/ws/session?role=console") as console:
+        console.receive_json()
+        assert _output_status(console)["avatar"] is None
+        with client.websocket_connect("/ws/session?role=stage") as stage:
+            stage.receive_json()
+            _output_status(console)
+            stage.send_json({"action": "avatar_state", "data": {"personas": {"raka": "simli", "salsa": "ngawur"}}})
+            # Nilai tak dikenal dianggap fallback (karakter 2D), bukan dipercaya begitu saja.
+            assert _output_status(console)["avatar"] == {"raka": "simli", "salsa": "fallback"}
+        for _ in range(5):
+            st = _output_status(console)
+            if st["clients"]["stage"] == 0:
+                break
+        assert st["avatar"] is None  # stage pergi: status avatar ikut hilang

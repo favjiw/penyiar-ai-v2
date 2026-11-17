@@ -248,16 +248,18 @@ async def get_log(session_id: str, request: Request):
 
 
 class SimliTokenRequest(BaseModel):
+    persona: Optional[str] = None  # raka | salsa: wajah diambil dari SIMLI_FACE_ID_<PERSONA>
     face_id: Optional[str] = None
 
 
 @router.post("/api/simli/token")
 async def get_simli_token(req: SimliTokenRequest, request: Request):
+    """Token sesi Simli untuk satu panel karakter di /stage. Kunci API tetap di server; browser hanya menerima token."""
     settings = request.app.state.settings
     api_key = (settings.SIMLI_API_KEY or "").strip().strip("'\"")
     if not api_key:
         raise HTTPException(400, "SIMLI_API_KEY belum dikonfigurasi di .env")
-    face_id = (req.face_id or settings.SIMLI_FACE_ID or "bf13113a-355a-4d97-8b90-4edccd1da7b2").strip().strip("'\"")
+    face_id = (req.face_id or settings.simli_face_for(req.persona or "")).strip().strip("'\"")
     import httpx
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -270,13 +272,13 @@ async def get_simli_token(req: SimliTokenRequest, request: Request):
                 json={
                     "faceId": face_id,
                     "handleSilence": True,
-                    "maxSessionLength": 300,  # 5 menit safety cap
-                    "maxIdleTime": 60,
+                    "maxSessionLength": settings.SIMLI_MAX_SESSION_S,
+                    "maxIdleTime": settings.SIMLI_MAX_IDLE_S,
                 },
             )
             if res.status_code != 200:
-                logger.error("Simli token error %d: %s (api_key len: %d, prefix: %s...)", res.status_code, res.text, len(api_key), api_key[:4] if len(api_key) >= 4 else "***")
-                raise HTTPException(res.status_code, f"Simli API error: {res.text}")
+                logger.error("Simli token error %d: %s", res.status_code, res.text[:300])
+                raise HTTPException(res.status_code, f"Simli API error: {res.text[:300]}")
             return res.json()
     except httpx.HTTPError as e:
         logger.error("Simli connection error: %s", e)
@@ -319,6 +321,12 @@ async def ws_session(ws: WebSocket, role: str = "console"):
                 state = {"down": bool(data.get("down")), "reason": str(data.get("reason", ""))[:20]}
                 if manager.mic.get(ws) != state:
                     manager.mic[ws] = state
+                    await manager.broadcast_output_status()
+            elif action == "avatar_state" and manager.clients.get(ws) == "stage":
+                # Stage melaporkan avatar tiap persona: simli (video realistis) atau fallback (karakter 2D); konsol memberi peringatan kuning.
+                state = {str(p)[:20]: (s if s in ("simli", "connecting") else "fallback") for p, s in list((data.get("personas") or {}).items())[:4]}
+                if manager.avatar.get(ws) != state:
+                    manager.avatar[ws] = state
                     await manager.broadcast_output_status()
             elif action == "level" and ws is manager.audio_owner():
                 # Level audio dari stage (pemilik audio) diteruskan ke konsol/prompter (indikator bicara).

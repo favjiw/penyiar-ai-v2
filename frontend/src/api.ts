@@ -86,5 +86,5 @@ export const api = {
       { voices, mode, target_minutes },
     ),
   health: () => request<{ llm_mode: string; tts_mode: string; models: Record<string, string>; tts?: TtsStatus }>('/api/health'),
-  simliToken: (face_id?: string) => post<{ session_token: string }>('/api/simli/token', { face_id }),
+  simliToken: (persona: string) => post<{ session_token: string }>('/api/simli/token', { persona }),
 }
