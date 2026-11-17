@@ -5,7 +5,7 @@ from app.data.personas import load_personas
 from app.tts import FailoverTTS, MockTTSProvider, TTSError, VoiceBook
 from app.tts.provider import EdgeTTSProvider
 from app.tts.catalog import find_voice, load_voice_catalog
-from tests.test_api import client  # noqa: F401  (fixture)
+from tests.test_api import chosen_variant, client  # noqa: F401  (fixture)
 from tests.test_show_api import locked_blocker
 
 
@@ -58,7 +58,7 @@ def test_voices_endpoint_lists_catalog(client):
 
 
 def test_start_with_unknown_voice_is_422_and_does_not_lock(client):
-    v = client.post("/api/blocker/generate", json={"tema": "Kopi", "jumlah_topik": 1, "jumlah_varian": 2}).json()["variants"][0]
+    v = chosen_variant(client)
     r = client.post("/api/show/start", json={"blocker_id": v["id"], "voices": {"raka": "suara-ngarang"}})
     assert r.status_code == 422 and client.get(f"/api/blocker/{v['id']}").json()["locked"] is False
 

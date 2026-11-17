@@ -113,6 +113,20 @@ class BlockerStore:
             items = [b for b in items if b.locked == locked]
         return sorted(items, key=lambda b: b.created_at, reverse=True)
 
+    def create_draft(self, blocker: Blocker) -> Blocker:
+        """Simpan varian hasil generate sebagai draf (pilihan operator). Id yang sudah ada dan masih draf ditimpa
+        (simpan ulang); yang sudah terkunci ditolak. Isi dinormalkan; status kunci dan asal tidak dipercaya dari klien."""
+        try:
+            current = self.get(blocker.id)
+        except BlockerNotFound:
+            current = None
+        if current is not None and current.locked:
+            raise BlockerLocked("Materi ini sudah dikunci (pernah dipakai live); buat versi baru untuk mengubah")
+        draft = blocker.model_copy(deep=True, update={"locked": False})
+        if current is not None:
+            draft.created_at, draft.parent_id, draft.versi = current.created_at, current.parent_id, current.versi
+        return self.save(normalize(draft))
+
     def update(self, blocker_id: str, edited: Blocker) -> Blocker:
         """Simpan editan isi; metadata (id, versi, status kunci, asal) tetap dari server."""
         current = self.get(blocker_id)

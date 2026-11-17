@@ -13,14 +13,13 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
-import tempfile
 import time
 from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.blocker import BlockerGenerationError, BlockerGenerator, BlockerStore  # noqa: E402
+from app.blocker import BlockerGenerationError, BlockerGenerator  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.llm import create_llm_client  # noqa: E402
 from app.schemas import Blocker, GenerateBlockerRequest  # noqa: E402
@@ -48,7 +47,7 @@ async def main() -> None:
 
     settings = get_settings()
     model = settings.model_for("blocker")
-    gen = BlockerGenerator(create_llm_client(settings), model, BlockerStore(tempfile.mkdtemp()))
+    gen = BlockerGenerator(create_llm_client(settings), model)
 
     rows, details = [], []
     for tema in args.tema:

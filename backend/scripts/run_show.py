@@ -50,10 +50,10 @@ async def main() -> None:
     if args.blocker:
         blocker = store.get(args.blocker)
     elif args.tema:
-        variants, meta = await BlockerGenerator(llm, settings.model_for("blocker"), store).generate(
+        variants, meta = await BlockerGenerator(llm, settings.model_for("blocker")).generate(
             GenerateBlockerRequest(tema=args.tema, jumlah_topik=args.topik, jumlah_varian=2)
         )
-        blocker = store.lock(variants[0].id)
+        blocker = store.lock(store.create_draft(variants[0]).id)  # generate tidak menyimpan; skrip ini memilih varian pertama
         print(f"Blocker dibuat dan dikunci: {blocker.id} ({blocker.variant_label}) dalam {meta.latency_ms / 1000:.1f} s")
     else:
         ap.error("isi --blocker atau --tema")

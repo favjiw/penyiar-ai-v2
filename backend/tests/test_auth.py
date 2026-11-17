@@ -138,9 +138,11 @@ def test_blocker_flow_persists_in_database(client):
     variants = client.post("/api/blocker/generate", json={"tema": "Kopi", "jumlah_topik": 2}).json()["variants"]
     assert len(variants) == 3
     first = variants[0]
+    assert client.get("/api/blockers").json() == []  # belum ada yang disimpan
+    assert client.post("/api/blockers", json=first).status_code == 201  # yang dipilih operator
     assert client.get(f"/api/blocker/{first['id']}").json()["tema"] == "Kopi"
     assert client.post(f"/api/blocker/{first['id']}/lock").json()["locked"] is True
-    assert len(client.get("/api/blockers", params={"generation_id": first["generation_id"]}).json()) == 3
+    assert [b["id"] for b in client.get("/api/blockers").json()] == [first["id"]]
     assert not (Path(client.app.state.settings.DATA_DIR) / "blockers").exists()  # materi ada di database, bukan file
     with client.app.state.db.engine.connect() as conn:  # catatan pembuatan materi juga di database, bukan file
         rows = conn.execute(generation_log.select()).all()

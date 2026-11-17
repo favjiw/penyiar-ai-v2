@@ -12,7 +12,7 @@ import secrets
 import time
 from dataclasses import dataclass, field
 
-from app.blocker.store import BlockerStore, new_blocker_id, normalize, now_iso
+from app.blocker.store import new_blocker_id, normalize, now_iso
 from app.llm import LLMClient, LLMError, register_mock
 from app.prompts import load_prompt
 from app.schemas import (
@@ -133,8 +133,11 @@ def build_prompt(req: GenerateBlockerRequest, hindari: list[str] | None = None, 
 
 
 class BlockerGenerator:
-    def __init__(self, llm: LLMClient, model: str, store: BlockerStore, temperature: float = 0.9):
-        self._llm, self._model, self._store = llm, model, store
+    """Membuat varian materi dengan LLM. Hasilnya TIDAK disimpan: operator memilih mana yang disimpan
+    (`POST /api/blockers`), supaya penyimpanan tidak penuh varian yang tidak dipakai."""
+
+    def __init__(self, llm: LLMClient, model: str, temperature: float = 0.9):
+        self._llm, self._model = llm, model
         self._temperature = temperature
         self.prompt = load_prompt("blocker")
 
@@ -173,12 +176,11 @@ class BlockerGenerator:
         except LLMError as e:
             raise BlockerGenerationError(str(e)) from e
         generation_id = f"gen_{secrets.token_hex(4)}"
-        blockers = [self._store.save(to_blocker(v, req, generation_id)) for v in drafts.variants[: req.jumlah_varian]]
+        blockers = [to_blocker(v, req, generation_id) for v in drafts.variants[: req.jumlah_varian]]
         return blockers, meta
 
-    async def regenerate_variant(self, blocker_id: str, hindari: list[str]) -> tuple[Blocker, GenerationMeta]:
-        """Buat ulang satu varian draf dengan tema dan jumlah topik yang sama."""
-        old = self._store.get(blocker_id)
+    async def regenerate_variant(self, old: Blocker, hindari: list[str]) -> tuple[Blocker, GenerationMeta]:
+        """Buat ulang satu varian dengan tema dan jumlah topik yang sama; varian baru belum disimpan."""
         req = GenerateBlockerRequest(tema=old.tema, catatan=old.catatan, jumlah_topik=len(old.topics), jumlah_varian=2)
         if old.durasi_menit:
             # Pertahankan menit dan durasi asal tanpa menghitung ulang jumlah topik dari durasi.
@@ -190,7 +192,7 @@ class BlockerGenerator:
             raise BlockerGenerationError(str(e)) from e
         labels = {a.strip().lower() for a in avoid}
         pick = next((v for v in drafts.variants if v.variant_label.strip().lower() not in labels), drafts.variants[0])
-        return self._store.save(to_blocker(pick, req, old.generation_id or "")), meta
+        return to_blocker(pick, req, old.generation_id or ""), meta
 
 
 # ── Mock (LLM_MODE=mock) ─────────────────────────────────────────────────────

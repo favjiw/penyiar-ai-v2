@@ -1,15 +1,15 @@
 from fastapi.testclient import TestClient
 
-from tests.test_api import client  # noqa: F401  (fixture)
+from tests.test_api import chosen_variant, client  # noqa: F401  (fixture)
 
 
 def locked_blocker(client):
-    v = client.post("/api/blocker/generate", json={"tema": "Kopi", "jumlah_topik": 1, "jumlah_varian": 2}).json()["variants"][0]
+    v = chosen_variant(client)
     return client.post(f"/api/blocker/{v['id']}/lock").json()
 
 
 def test_start_locks_a_draft_blocker_automatically(client):
-    v = client.post("/api/blocker/generate", json={"tema": "Kopi", "jumlah_topik": 1, "jumlah_varian": 2}).json()["variants"][0]
+    v = chosen_variant(client)
     assert not v["locked"]
     assert client.post("/api/show/start", json={"blocker_id": v["id"]}).status_code == 200
     assert client.get(f"/api/blocker/{v['id']}").json()["locked"] is True
@@ -18,7 +18,7 @@ def test_start_locks_a_draft_blocker_automatically(client):
 
 
 def test_start_rejects_draft_that_cannot_be_locked(client):
-    v = client.post("/api/blocker/generate", json={"tema": "Kopi", "jumlah_topik": 1, "jumlah_varian": 2}).json()["variants"][0]
+    v = chosen_variant(client)
     v["topics"].append({**v["topics"][0], "poin": v["topics"][0]["poin"][:1]})  # topik manual baru, baru satu poin
     assert client.put(f"/api/blocker/{v['id']}", json=v).status_code == 200
     r = client.post("/api/show/start", json={"blocker_id": v["id"]})
@@ -156,7 +156,7 @@ def test_mode_c_is_rejected(client):
 
 
 def test_invalid_ai_persona_does_not_lock_the_draft(client):
-    v = client.post("/api/blocker/generate", json={"tema": "Kopi", "jumlah_topik": 1, "jumlah_varian": 2}).json()["variants"][0]
+    v = chosen_variant(client)
     r = client.post("/api/show/start", json={"blocker_id": v["id"], "mode": "A", "ai_persona": "tidak-ada"})
     assert r.status_code == 422 and client.get(f"/api/blocker/{v['id']}").json()["locked"] is False
 

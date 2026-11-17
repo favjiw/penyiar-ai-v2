@@ -1,4 +1,4 @@
-# PRD Penyiar AI Co-Host Live TikTok HITS (v2.11)
+# PRD Penyiar AI Co-Host Live TikTok HITS (v2.12)
 
 | | |
 |---|---|
@@ -61,7 +61,7 @@ Supervisor dan Showrunner **dipertahankan**. Hook Supervisor default nonaktif (p
 | # | Arahan [P] | Dampak |
 |---|---|---|
 | R1 | Hapus mode 1 manusia + 2 AI | Hanya Mode A (manusia + 1 AI) dan Mode B (AI + AI). Mode C dicabut (§3, FR-2). |
-| R2 | Alur tema/topik tanpa langkah edit wajib | Hasil generate tersimpan sebagai draf yang langsung bisa dipakai; edit opsional; topik manual boleh ditambah; blocking terkunci otomatis saat live dimulai (FR-1). |
+| R2 | Alur tema/topik tanpa langkah edit wajib | Varian yang dipilih operator tersimpan sebagai draf yang langsung bisa dipakai (hasil generate sendiri tidak tersimpan, v2.12); edit opsional; topik manual boleh ditambah; blocking terkunci otomatis saat live dimulai (FR-1). |
 | R3 | Pilihan suara AI sebelum live | Daftar suara terkurasi di `backend/app/data/voices.json`; operator memilih suara tiap penyiar AI di halaman sebelum live (FR-6). |
 | R4 | Satu obrolan dibatasi 60 detik (dapat diatur, uji 90) untuk kedua penyiar, ditegakkan otomatis, AI tidak boleh terpotong | "Satu obrolan" = satu poin blocker [F, 2 Nov 2026]. Batas waktu per poin dengan penutupan natural (FR-2, FR-4). |
 
@@ -288,7 +288,7 @@ Sejak v2.7 role `stage` kembali dipakai (FR-10): hanya klien `stage` yang memuta
 
 ### 6.4 API REST (minimal) [C]
 - `POST /api/blocker/generate {tema, catatan?, durasi_menit?, jumlah_topik?, jumlah_varian 2..3}` → daftar varian (v2.7: `durasi_menit` default 60 menentukan jumlah topik, FR-1).
-- `PUT /api/blocker/{id}` simpan editan; `POST /api/blocker/{id}/lock`.
+- `POST /api/blockers` simpan varian hasil generate yang dipilih (v2.12; generate tidak menyimpan); `POST /api/blocker/regenerate {blocker, hindari}` buat ulang satu varian tanpa menyimpan; `PUT /api/blocker/{id}` simpan editan; `POST /api/blocker/{id}/lock`.
 - `POST /api/show/start {blocker_id, mode: A|B, ai_persona?, human_name?, voices?}` (mode A: `ai_persona`; `voices` = `{persona: id suara}` dari daftar terkurasi; draf blocker dikunci otomatis, 422 bila tidak lolos aturan kunci); `POST /api/show/next`; `POST /api/show/pause|resume|stop`.
 - `GET /api/voices` (daftar suara terkurasi + suara aktif); `POST /api/precheck {voices?}` (cek pra-live, memanaskan suara terpilih). v2.7: mengembalikan per layanan `{kind: llm|tts|stt, percent_left, minutes_left}`, `minutes_safe` (minimum), `target_minutes`, `fallbacks`.
 - `POST /api/show/undo-topic` (v2.7, mode A): batalkan pindah topik terakhir yang dipicu ucapan.
@@ -326,7 +326,7 @@ Format setiap FR: deskripsi → aturan → kriteria terima (KT).
   - editor inline (ubah teks, tambah/hapus poin, geser urutan, hapus topik);
   - tombol "buat ulang varian ini";
   - tombol kunci: syaratnya 3-5 poin per topik dan field wajib terisi (Opening hook, Closing rangkuman dan ajakan, sudut pandang, pertanyaan, transisi); blocker terkunci disalin ke `sessions/<session_id>/blocker.json` saat sesi dimulai.
-  - Setiap varian hasil generate tersimpan sebagai draf yang langsung bisa dipakai tanpa edit [P, R2]. Mulai live mengunci draf otomatis (tidak lolos aturan kunci → 422 dengan alasan; poin bertanda `perlu_cek` meminta konfirmasi operator). Edit tetap tersedia dan opsional; topik manual boleh ditambah (~~maks. 3 topik~~ maks. 8 topik sejak v2.7). Setelah terkunci, perubahan hanya lewat versi baru.
+  - **Hasil generate tidak tersimpan otomatis [F, 17 Nov 2026]:** varian hanya tampil di layar ("Belum disimpan"); operator memilih yang disimpan lewat "Simpan" atau "Simpan & pakai" (`POST /api/blockers`, aman diulang; klien tidak bisa menyimpan sebagai terkunci). "Lihat & ubah" lalu mengedit juga menyimpan. "Buat ulang" hanya untuk varian yang belum disimpan dan hasilnya juga belum disimpan (`POST /api/blocker/regenerate` dengan isi varian). Varian yang tidak dipilih hilang saat halaman dimuat ulang atau materi baru dibuat. Varian yang dipilih tersimpan sebagai draf yang langsung bisa dipakai tanpa edit [P, R2]. Mulai live mengunci draf otomatis (tidak lolos aturan kunci → 422 dengan alasan; poin bertanda `perlu_cek` meminta konfirmasi operator). Edit tetap tersedia dan opsional; topik manual boleh ditambah (~~maks. 3 topik~~ maks. 8 topik sejak v2.7). Setelah terkunci, perubahan hanya lewat versi baru.
   - **Editor materi [F, 8 Nov 2026]:** tiga kolom (susunan materi dengan status per bagian + menit, editor bagian aktif, pratinjau prompter); simpan otomatis, tanpa tombol kunci (kunci saat mulai live); maks. 8 topik. Rincian di `docs/design/HANDOFF.md` §1.
 
   Blocker yang sudah dikunci tidak bisa diubah. Untuk perubahan, buat versi baru.
@@ -960,6 +960,7 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 - **v2.9 (17 Nov 2026) [F]:** KP dibekukan tanpa Supervisor (FR-5 keluar dari cakupan KP, tetap untuk riset; §2.2, FR-5); avatar Simli menggantikan karakter 2D di `/stage` untuk kedua mode, 2D jadi cadangan otomatis (§2.2, §2.3, §8, FR-10, §16).
 - **v2.10 (17 Nov 2026) [F]:** hosting di VPS dengan database Postgres direncanakan; satu image Docker, CI GitHub Actions, HTTPS via Caddy, login sementara (§16 tahap 11, `deploy/README.md`); model suara ElevenLabs v4 dengan voice settings, gain per penyiar, dan pilihan tampilan karakter realistis atau kartun 2D (FR-6, FR-10).
 - **v2.11 (17 Nov 2026) [F]:** login aplikasi dan Postgres (§6.4, §8, §16 tahap 11): pengguna dengan peran `penyiar`/`operator`/`admin`, sesi cookie, REST + WebSocket terlindungi, halaman `/pengguna` dan CLI pengelolaan; materi dan catatan pembuatan materi di Postgres; basic auth Caddy dicabut; cadangan harian.
+- **v2.12 (17 Nov 2026) [F]:** hasil generate materi tidak lagi tersimpan otomatis; operator memilih varian yang disimpan (FR-1, §6.4, §1.3.2 R2).
 
 ---
 
