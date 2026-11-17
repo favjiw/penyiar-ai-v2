@@ -10,6 +10,7 @@ KEEP_DAYS="${KEEP_DAYS:-14}"
 STAMP="$(date +%F_%H%M)"
 umask 077
 mkdir -p "$DEST"
+chmod 700 "$DEST"
 
 docker compose exec -T db pg_dump -U penyiar -d penyiar --format=custom > "$DEST/db-$STAMP.dump.tmp"
 mv "$DEST/db-$STAMP.dump.tmp" "$DEST/db-$STAMP.dump"
