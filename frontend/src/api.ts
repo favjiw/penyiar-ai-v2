@@ -86,7 +86,7 @@ export interface UserRow extends AuthUser {
 export interface AdminField {
   key: string
   label: string
-  kind: 'text' | 'secret' | 'number' | 'choice' | 'face'
+  kind: 'text' | 'secret' | 'number' | 'bool' | 'choice' | 'face'
   help: string
   choices: string[]
   source: 'admin' | 'env'
@@ -121,6 +121,43 @@ export interface AdminFace {
 
 export type TestService = 'gemini' | 'compat' | 'elevenlabs' | 'simli'
 
+export interface AdminPersona {
+  id: string
+  name: string
+  gender: 'male' | 'female'
+  voices: Record<string, string>
+  speaking_style: string
+  catchphrases: string[]
+  topic_limits: string[]
+  background_facts: string[]
+  do_not: string[]
+  opinions: string[]
+  filler_bank: string
+}
+
+export interface AdminPromptRow {
+  name: string
+  version: string
+  active: boolean
+  created_at: string
+  created_by: string | null
+  placeholders: string[]
+}
+
+export interface AdminSnippet {
+  key: string
+  text: string
+  placeholders: string[]
+  updated_at: string
+  updated_by: string | null
+}
+
+export interface AdminSupervisor {
+  banned: { word: string; category: string }[]
+  fallbacks: { id: number; persona: string; kind: string; text: string }[]
+  kinds: string[]
+}
+
 export const adminApi = {
   config: () => request<AdminConfig>('/api/admin/config'),
   /** null = hapus timpaan (kembali ke .env); kunci rahasia "" = biarkan. */
@@ -134,6 +171,20 @@ export const adminApi = {
   faces: () => request<AdminFace[]>('/api/admin/faces'),
   addFace: (f: { id: string; name: string; notes?: string }) => post<AdminFace>('/api/admin/faces', f),
   deleteFace: (id: string) => request<{ ok: boolean }>(`/api/admin/faces/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  personas: () => request<AdminPersona[]>('/api/admin/personas'),
+  savePersona: (p: AdminPersona) => request<AdminPersona>(`/api/admin/personas/${p.id}`, { method: 'PUT', body: JSON.stringify(p) }),
+  prompts: () => request<AdminPromptRow[]>('/api/admin/prompts'),
+  promptBody: (name: string, version: string) => request<{ body: string }>(`/api/admin/prompts/${name}/${encodeURIComponent(version)}`),
+  addPromptVersion: (name: string, version: string, body: string, activate: boolean) =>
+    post<{ ok: boolean }>(`/api/admin/prompts/${name}`, { version, body, activate }),
+  activatePrompt: (name: string, version: string) => post<{ ok: boolean }>(`/api/admin/prompts/${name}/${encodeURIComponent(version)}/activate`),
+  snippets: () => request<AdminSnippet[]>('/api/admin/snippets'),
+  saveSnippet: (key: string, text: string) => request<{ ok: boolean }>(`/api/admin/snippets/${encodeURIComponent(key)}`, { method: 'PUT', body: JSON.stringify({ text }) }),
+  supervisor: () => request<AdminSupervisor>('/api/admin/supervisor'),
+  addBanned: (word: string, category: string) => post<{ ok: boolean }>('/api/admin/supervisor/banned', { word, category }),
+  deleteBanned: (word: string) => request<{ ok: boolean }>(`/api/admin/supervisor/banned/${encodeURIComponent(word)}`, { method: 'DELETE' }),
+  addFallback: (persona: string, kind: string, text: string) => post<{ ok: boolean }>('/api/admin/supervisor/fallbacks', { persona, kind, text }),
+  deleteFallback: (id: number) => request<{ ok: boolean }>(`/api/admin/supervisor/fallbacks/${id}`, { method: 'DELETE' }),
 }
 
 export const api = {

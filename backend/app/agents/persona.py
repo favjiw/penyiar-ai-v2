@@ -9,6 +9,8 @@ yang belum tercakup), arahan Showrunner, dan memori koreksi Supervisor.
 
 from __future__ import annotations
 
+from app.tuning import tuning
+
 import random
 import re
 import time
@@ -36,12 +38,6 @@ def detect_interrogative(text: str) -> bool:
         return False
     return any(re.search(p, txt) for p in _INTERROGATIVE_PATTERNS)
 
-CATCHPHRASE_PROBABILITY = 1.0 / 6.0
-CATCHPHRASE_COOLDOWN_TURNS = 6
-HISTORY_TURNS = 12
-ANTI_REPETITION_WINDOW = 6
-TRIGRAM_REPEAT_LIMIT = 3
-TRIGRAM_HISTORY_WINDOW = 10
 
 @dataclass
 class HistoryEntry:
@@ -110,19 +106,19 @@ def repetition_triggered(text: str, history: list[HistoryEntry]) -> bool:
     if len(toks) < 3:
         return False
     opener, closer = " ".join(toks[:3]), " ".join(toks[-3:])
-    for entry in history[-ANTI_REPETITION_WINDOW:]:
+    for entry in history[-tuning.ANTI_REPETITION_WINDOW:]:
         e = _tokens(entry.text)
         if len(e) >= 3 and (opener == " ".join(e[:3]) or closer == " ".join(e[-3:])):
             return True
     counts: dict[str, int] = {}
-    for entry in history[-TRIGRAM_HISTORY_WINDOW:]:
+    for entry in history[-tuning.TRIGRAM_HISTORY_WINDOW:]:
         for tg in _trigrams(entry.text):
             counts[tg] = counts.get(tg, 0) + 1
-    return any(counts.get(tg, 0) + 1 >= TRIGRAM_REPEAT_LIMIT for tg in _trigrams(text))
+    return any(counts.get(tg, 0) + 1 >= tuning.TRIGRAM_REPEAT_LIMIT for tg in _trigrams(text))
 
 
 def anti_repetition_guidance(history: list[HistoryEntry]) -> str:
-    recent = history[-ANTI_REPETITION_WINDOW:]
+    recent = history[-tuning.ANTI_REPETITION_WINDOW:]
     openers, closers = [], []
     for entry in recent:
         toks = _tokens(entry.text)
@@ -132,11 +128,11 @@ def anti_repetition_guidance(history: list[HistoryEntry]) -> str:
     forbidden = [x for x in set(openers) if openers.count(x) >= 2] + [x for x in set(closers) if closers.count(x) >= 2]
     if not forbidden:
         return ""
-    return "Jangan membuka atau menutup giliran dengan: " + ", ".join(f'"{f}"' for f in forbidden[:6]) + "."
+    return content.text("turn.anti_repetition", phrases=", ".join(f'"{f}"' for f in forbidden[:6]))
 
 
 def _bullets(items: list[str]) -> str:
-    return "\n".join(f"- {x}" for x in items) or "- (tidak ada)"
+    return "\n".join(f"- {x}" for x in items) or content.snippet("turn.no_items")
 
 
 class PersonaAgent:
@@ -174,26 +170,26 @@ class PersonaAgent:
     def _sample_length(self, ctx: TurnContext) -> str:
         length = self._base_length(ctx)
         if ctx.max_words:
-            length += f"; TOTAL tidak lebih dari {ctx.max_words} kata dan selesaikan semua kalimat dengan utuh"
+            length += content.text("length.max_words", max_words=ctx.max_words)
         return length
 
     def _base_length(self, ctx: TurnContext) -> str:
         if ctx.close_point:
-            return "1 sampai 2 kalimat pendek untuk menutup"
+            return content.snippet("length.close_point")
         if ctx.mode == "A":
-            return "1 sampai 3 kalimat pendek; beri ruang penyiar manusia memandu"
+            return content.snippet("length.mode_a")
         roll = self._rng.random()
         if roll < 0.4:
-            return "satu kalimat pendek (sekitar 8 sampai 15 kata)"
+            return content.snippet("length.short")
         if roll < 0.8:
-            return "sedang (sekitar 20 sampai 35 kata)"
-        return "panjang (maksimal sekitar 60 kata)"
+            return content.snippet("length.medium")
+        return content.snippet("length.long")
 
     def _sample_catchphrase(self, persona: PersonaCard) -> Optional[str]:
         if not persona.catchphrases:
             return None
-        last = self._catchphrase_turn.get(persona.id, -CATCHPHRASE_COOLDOWN_TURNS)
-        if self._turn - last < CATCHPHRASE_COOLDOWN_TURNS or self._rng.random() >= CATCHPHRASE_PROBABILITY:
+        last = self._catchphrase_turn.get(persona.id, -tuning.CATCHPHRASE_COOLDOWN_TURNS)
+        if self._turn - last < tuning.CATCHPHRASE_COOLDOWN_TURNS or self._rng.random() >= tuning.CATCHPHRASE_PROBABILITY:
             return None
         self._catchphrase_turn[persona.id] = self._turn
         return self._rng.choice(persona.catchphrases)
@@ -209,83 +205,72 @@ class PersonaAgent:
         catchphrase: Optional[str],
         correction: Optional[CorrectionMemory],
     ) -> str:
+        t = content.text
         b = ctx.blocker
-        parts = [f"TEMA SIARAN: {b.tema} ({b.variant_label})", "Rundown: " + " → ".join(["Opening", *[t.judul for t in b.topics], "Closing"])]
+        parts = [
+            t("turn.tema", tema=b.tema, variant=b.variant_label),
+            t("turn.rundown", rundown=" → ".join(["Opening", *[x.judul for x in b.topics], "Closing"])),
+        ]
         if ctx.topics_done:
-            parts.append("Topik yang sudah lewat (jangan dibahas lagi): " + "; ".join(ctx.topics_done))
+            parts.append(t("turn.topics_done", topics="; ".join(ctx.topics_done)))
 
         if ctx.segment == "opening":
-            parts.append(f"SEGMEN: Opening. Hook: {b.opening.hook}\nYang dilakukan di pembukaan:\n{_bullets(b.opening.poin)}")
+            parts.append(t("turn.opening", hook=b.opening.hook, points=_bullets(b.opening.poin)))
             if ctx.turn_in_segment == 0:
                 parts.append(content.snippet("opening_ai_disclosure"))
         elif ctx.segment == "topic" and ctx.topic:
-            t = ctx.topic
-            parts.append(f"SEGMEN: Topik \"{t.judul}\" (sudut pandang: {t.sudut_pandang})")
+            tp = ctx.topic
+            parts.append(t("turn.topic_header", judul=tp.judul, sudut=tp.sudut_pandang))
             if ctx.point:
-                parts.append(
-                    f"FOKUS OBROLAN SEKARANG (poin {ctx.point_no} dari {ctx.point_total}): {ctx.point}\n"
-                    "Bahas poin ini saja; jangan loncat ke poin lain."
-                )
+                parts.append(t("turn.point_focus", no=ctx.point_no, total=ctx.point_total, point=ctx.point))
             else:
-                parts.append("Poin yang belum dibahas:\n" + _bullets(ctx.uncovered_points))
-            parts.append(f"Pertanyaan untuk penonton (lempar sesekali, jangan tiap giliran): {t.pertanyaan_penonton}")
+                parts.append(t("turn.uncovered", points=_bullets(ctx.uncovered_points)))
+            parts.append(t("turn.audience_question", pertanyaan=tp.pertanyaan_penonton))
         else:
-            parts.append(f"SEGMEN: Closing. Rangkuman: {b.closing.rangkuman}. Ajakan ke penonton: {b.closing.ajakan}")
+            parts.append(t("turn.closing", rangkuman=b.closing.rangkuman, ajakan=b.closing.ajakan))
 
         if ctx.others:
-            parts.append("Peserta siaran lainnya: " + "; ".join(f"{name} ({role})" for name, role in ctx.others) + ".")
+            parts.append(t("turn.others", others="; ".join(f"{name} ({role})" for name, role in ctx.others)))
         if ctx.mode == "A":
-            parts.append(f"{ctx.human_name} penyiar manusia yang memandu siaran. Jawab singkat, beri ruang dia memandu.")
+            parts.append(t("turn.human_host", human=ctx.human_name))
         elif not ctx.others:
-            parts.append(f"Lawan bicaramu: {ctx.partner_name}.")
+            parts.append(t("turn.partner", partner=ctx.partner_name))
 
         if ctx.pilot_condition == "B":
-            parts.append(
-                "Jika lawan bicara bertanya, prioritaskan menjawab pertanyaan tersebut secara tuntas sebelum "
-                "mengaitkan kembali ke rundown atau melempar topik ke penonton."
-            )
+            parts.append(content.snippet("turn.pilot_b"))
 
         if ctx.summary:
-            parts.append("Ringkasan obrolan sebelumnya (sebelum giliran-giliran di bawah ini): " + ctx.summary)
+            parts.append(t("turn.summary", summary=ctx.summary))
         if ctx.history:
-            parts.append("Obrolan terakhir:\n" + "\n".join(f"{h.name}: {h.text}" for h in ctx.history[-HISTORY_TURNS:]))
+            parts.append(t("turn.history", history="\n".join(f"{h.name}: {h.text}" for h in ctx.history[-tuning.HISTORY_TURNS:])))
 
+        who = ctx.human_name or ctx.partner_name
         instructions: list[str] = []
         if ctx.transition_to is not None:
-            instructions.append(
-                f"Giliran ini menutup topik sekarang dan mengantar ke topik berikutnya: \"{ctx.transition_to.judul}\". "
-                f"Bahan jembatan (jangan dibaca mentah, pakai kata-katamu): {ctx.topic.transisi if ctx.topic else ''}"
-            )
+            instructions.append(t("turn.transition", next=ctx.transition_to.judul, bridge=ctx.topic.transisi if ctx.topic else ""))
         elif ctx.to_closing:
-            instructions.append("Giliran ini menutup topik terakhir dan mengantar ke penutup siaran.")
+            instructions.append(content.snippet("turn.to_closing"))
         elif ctx.close_point and ctx.next_point:
-            instructions.append(
-                "Waktu obrolan poin ini hampir habis. Giliran ini menutup obrolan secara natural (rangkum singkat, jangan menggantung) "
-                f"dan mengantar ke poin berikutnya: \"{ctx.next_point}\". Jangan membuka hal baru di poin ini."
-            )
+            instructions.append(t("turn.close_point", next_point=ctx.next_point))
         elif ctx.closing_final:
-            instructions.append("Ini giliran terakhir siaran: tutup dengan rapi, pamit ke penonton, jangan buka topik baru.")
+            instructions.append(content.snippet("turn.closing_final"))
         if ctx.nudge_to:
-            instructions.append(
-                f"Waktu topik ini sudah lewat. Jawab dulu ucapan {ctx.human_name or ctx.partner_name} sepenuhnya, lalu di AKHIR giliran "
-                f"beri kode halus satu kalimat bahwa mungkin seru lanjut ke \"{ctx.nudge_to}\" (tawarkan, jangan memutuskan; "
-                f"{ctx.human_name or ctx.partner_name} yang memindah topik). Jangan mulai membahas topik itu."
-            )
+            instructions.append(t("turn.nudge", who=who, nudge_to=ctx.nudge_to))
         if ctx.steer_hint and ctx.segment == "topic" and ctx.transition_to is None:
-            instructions.append(f"Arahan produser: {ctx.steer_hint}")
+            instructions.append(t("turn.steer", hint=ctx.steer_hint))
         if act:
-            instructions.append(f"Tugas giliran ini: {content.snippet('dialog_act.' + act)}.")
+            instructions.append(t("turn.act", act=content.snippet("dialog_act." + act)))
         instructions += style_extras(ctx.turn_in_segment, closing=ctx.segment == "closing")
-        instructions.append(f"Panjang giliran: {length}.")
+        instructions.append(t("turn.length", length=length))
         if anti := anti_repetition_guidance(ctx.history):
             instructions.append(anti)
         if catchphrase:
-            instructions.append(f'Boleh memakai catchphrase ini kali ini saja: "{catchphrase}"')
+            instructions.append(t("turn.catchphrase", phrase=catchphrase))
         if correction:
             fix = [correction.persona_reminder, *correction.facts_to_enforce]
-            instructions.append("KOREKSI dari produser untuk giliran ini (wajib dipatuhi):\n" + _bullets([f for f in fix if f]))
+            instructions.append(t("turn.correction", items=_bullets([f for f in fix if f])))
         parts.append("\n".join(instructions))
-        parts.append(f"Sekarang giliran {persona.name} bicara. Balas dalam JSON.")
+        parts.append(t("turn.your_turn", name=persona.name))
         return "\n\n".join(parts)
 
     async def generate(self, persona: PersonaCard, ctx: TurnContext, correction: Optional[CorrectionMemory] = None) -> PersonaResult:

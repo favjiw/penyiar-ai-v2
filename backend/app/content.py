@@ -214,6 +214,13 @@ class ContentStore:
         except KeyError:
             raise KeyError(f"Potongan teks {key} tidak ada") from None
 
+    def text(self, key: str, **values: object) -> str:
+        """Potongan teks `key` dengan {placeholder} diisi (kurung kurawal lain dibiarkan)."""
+        out = self.snippet(key)
+        for name, value in values.items():
+            out = out.replace("{" + name + "}", str(value))
+        return out
+
     def snippets_with_prefix(self, prefix: str) -> dict[str, str]:
         full = SNIPPET_PREFIX + prefix
         return {k[len(full):]: v for k, v in self.snippets().items() if k.startswith(full)}
@@ -244,6 +251,117 @@ class ContentStore:
             return bank
 
         return self._cached("fallbacks", build)
+
+    # ── pengelolaan oleh admin ───────────────────────────────────────────────
+    def placeholders(self, text: str) -> set[str]:
+        return set(re.findall(r"\{(\w+)\}", text))
+
+    def prompt_body(self, name: str, version: str) -> str:
+        from app.db import prompts
+
+        self._need_db()
+        with self._db.engine.connect() as conn:
+            body = conn.execute(select(prompts.c.body).where(prompts.c.name == name, prompts.c.version == version)).scalar_one_or_none()
+        if body is None:
+            raise KeyError(f"{name} {version} tidak ada")
+        return body
+
+    def check_prompt_placeholders(self, name: str, body: str) -> None:
+        """Isi baru harus memuat tepat placeholder yang diisi kode (mis. {name}); kalau hilang, bagian itu tidak terisi
+        saat siaran, kalau tambahan, tidak pernah terisi."""
+        want = self.placeholders(self.prompt(name).text)
+        got = self.placeholders(body)
+        if want - got:
+            raise ValueError("Placeholder hilang: " + ", ".join("{" + p + "}" for p in sorted(want - got)))
+        if got - want:
+            raise ValueError("Placeholder tidak dikenal kode: " + ", ".join("{" + p + "}" for p in sorted(got - want)))
+
+    def all_snippets(self) -> list[dict]:
+        from app.db import prompts
+
+        self._need_db()
+        with self._db.engine.connect() as conn:
+            rows = conn.execute(select(prompts).where(prompts.c.name.like(SNIPPET_PREFIX + "%"), prompts.c.active.is_(True)).order_by(prompts.c.name)).all()
+        return [{"key": r.name[len(SNIPPET_PREFIX):], "text": r.body, "placeholders": sorted(self.placeholders(r.body)), "updated_at": r.created_at, "updated_by": r.created_by} for r in rows]
+
+    def set_snippet(self, key: str, text: str, by: str) -> None:
+        """Ubah teks sebuah potongan (kunci harus sudah ada; yang diisi kode tidak boleh kehilangan placeholdernya)."""
+        from app.blocker.store import now_iso
+        from app.db import prompts
+
+        self._need_db()
+        name = SNIPPET_PREFIX + key
+        with self._db.engine.begin() as conn:
+            row = conn.execute(select(prompts).where(prompts.c.name == name, prompts.c.active.is_(True))).first()
+            if row is None:
+                raise KeyError(key)
+            if not text.strip():
+                raise ValueError("Teks tidak boleh kosong")
+            if self.placeholders(row.body) - self.placeholders(text):
+                raise ValueError("Placeholder hilang: " + ", ".join("{" + p + "}" for p in sorted(self.placeholders(row.body) - self.placeholders(text))))
+            conn.execute(update(prompts).where(prompts.c.name == name, prompts.c.version == row.version).values(body=text, created_at=now_iso(), created_by=by[:64]))
+        self.invalidate()
+
+    def list_banned(self) -> list[dict]:
+        from app.db import supervisor_banned_words as t
+
+        self._need_db()
+        with self._db.engine.connect() as conn:
+            return [{"word": r.word, "category": r.category} for r in conn.execute(select(t).order_by(t.c.category, t.c.word))]
+
+    def add_banned(self, word: str, category: str) -> None:
+        from app.db import supervisor_banned_words as t
+
+        self._need_db()
+        word, category = word.strip().lower(), category.strip().lower()
+        if not word or not category:
+            raise ValueError("Kata dan kategori wajib diisi")
+        with self._db.engine.begin() as conn:
+            if conn.execute(select(t.c.word).where(t.c.word == word)).first():
+                raise ValueError(f"'{word}' sudah ada di daftar")
+            conn.execute(insert(t).values(word=word, category=category[:40]))
+        self.invalidate()
+
+    def remove_banned(self, word: str) -> None:
+        from app.db import supervisor_banned_words as t
+
+        self._need_db()
+        with self._db.engine.begin() as conn:
+            if conn.execute(delete(t).where(t.c.word == word.strip().lower())).rowcount == 0:
+                raise KeyError(word)
+        self.invalidate()
+
+    FALLBACK_KINDS = ("opening", "topic", "closing")
+
+    def list_fallbacks(self) -> list[dict]:
+        from app.db import supervisor_fallbacks as t
+
+        self._need_db()
+        with self._db.engine.connect() as conn:
+            return [{"id": r.id, "persona": r.persona, "kind": r.kind, "text": r.text} for r in conn.execute(select(t).order_by(t.c.persona, t.c.kind, t.c.id))]
+
+    def add_fallback(self, persona: str, kind: str, text: str) -> None:
+        from app.db import supervisor_fallbacks as t
+
+        self._need_db()
+        if persona not in self.personas():
+            raise ValueError(f"Persona {persona} tidak dikenal")
+        if kind not in self.FALLBACK_KINDS:
+            raise ValueError("Jenis harus opening, topic, atau closing")
+        if not text.strip():
+            raise ValueError("Kalimat tidak boleh kosong")
+        with self._db.engine.begin() as conn:
+            conn.execute(insert(t).values(persona=persona, kind=kind, text=text.strip()[:500]))
+        self.invalidate()
+
+    def remove_fallback(self, fallback_id: int) -> None:
+        from app.db import supervisor_fallbacks as t
+
+        self._need_db()
+        with self._db.engine.begin() as conn:
+            if conn.execute(delete(t).where(t.c.id == fallback_id)).rowcount == 0:
+                raise KeyError(fallback_id)
+        self.invalidate()
 
     def _need_db(self) -> None:
         if self._db is None:

@@ -8,9 +8,10 @@ repo lama tanpa rekap lagu (PRD §12: musik tidak lagi diputar di TikTok).
 
 from __future__ import annotations
 
+from app.tuning import tuning
+
 from app.content import content
 
-GREETING_EVERY_TURNS = 5  # "Sobat Hits" sesekali, bukan di setiap giliran
 
 
 def style_extras(turn_idx: int, closing: bool) -> list[str]:
@@ -20,6 +21,6 @@ def style_extras(turn_idx: int, closing: bool) -> list[str]:
         extras.append(content.snippet("closing_style_hint"))
     elif turn_idx == 0:
         extras.append(content.snippet("opening_hint"))
-    elif turn_idx % GREETING_EVERY_TURNS == 2:
+    elif turn_idx % tuning.GREETING_EVERY_TURNS == 2:
         extras.append(content.snippet("greeting_hint"))
     return extras

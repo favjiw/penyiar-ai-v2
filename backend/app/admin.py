@@ -15,7 +15,9 @@ from pydantic import BaseModel, Field
 
 from app.auth import User, require_role
 from app.config import Settings
+from app.content import content
 from app.faces import Face, FaceCatalog, FaceError
+from app.schemas import PersonaCard
 from app.runtime_config import ConfigError, RuntimeConfig, apply_if_idle, show_is_live
 from app.tts.catalog import VoiceError, VoiceOption, catalog
 
@@ -260,4 +262,143 @@ def delete_face(face_id: str, request: Request, _: User = admin):
         _faces(request).remove(face_id)
     except KeyError:
         raise HTTPException(404, "Wajah tidak ditemukan") from None
+    return {"ok": True}
+
+
+# ── Persona ──────────────────────────────────────────────────────────────────
+@router.get("/personas")
+def list_personas(_: User = admin):
+    return list(content.personas().values())
+
+
+@router.put("/personas/{persona_id}")
+def put_persona(persona_id: str, card: PersonaCard, _: User = admin):
+    """Ubah kartu persona. Yang berubah dipakai siaran berikutnya (hash persona dicatat di log sesi)."""
+    if persona_id not in content.personas():
+        raise HTTPException(404, "Persona tidak ditemukan")
+    if card.id != persona_id:
+        raise HTTPException(422, "ID persona tidak boleh diubah")
+    if not card.name.strip():
+        raise HTTPException(422, "Nama wajib diisi")
+    cleaned = card.model_copy(update={k: [x.strip() for x in getattr(card, k) if x.strip()] for k in ("catchphrases", "topic_limits", "background_facts", "do_not", "opinions")})
+    content.save_persona(persona_id, cleaned)
+    return cleaned
+
+
+# ── Prompt berversi ──────────────────────────────────────────────────────────
+class PromptVersion(BaseModel):
+    version: str = Field(min_length=2, max_length=80, pattern=r"^[A-Za-z0-9._-]+$")
+    body: str = Field(min_length=10)
+    activate: bool = True
+
+
+@router.get("/prompts")
+def list_prompts(_: User = admin):
+    rows = content.list_prompts()
+    for r in rows:
+        r["placeholders"] = sorted(content.placeholders(content.prompt_body(r["name"], r["version"])))
+    return rows
+
+
+@router.get("/prompts/{name}/{version}")
+def get_prompt(name: str, version: str, _: User = admin):
+    try:
+        return {"name": name, "version": version, "body": content.prompt_body(name, version)}
+    except KeyError:
+        raise HTTPException(404, "Prompt tidak ditemukan") from None
+
+
+@router.post("/prompts/{name}", status_code=201)
+def add_prompt_version(name: str, body: PromptVersion, user: User = admin):
+    """Versi baru; riwayat lama tetap. Diaktifkan langsung bila `activate` (berlaku di siaran berikutnya)."""
+    if not any(r["name"] == name for r in content.list_prompts()):
+        raise HTTPException(404, "Prompt tidak ditemukan")
+    try:
+        content.check_prompt_placeholders(name, body.body)
+        content.add_prompt_version(name, body.version, body.body, by=user.username, activate=body.activate)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    return {"ok": True}
+
+
+@router.post("/prompts/{name}/{version}/activate")
+def activate_prompt(name: str, version: str, _: User = admin):
+    try:
+        content.activate_prompt(name, version)
+    except KeyError:
+        raise HTTPException(404, "Prompt tidak ditemukan") from None
+    return {"ok": True}
+
+
+# ── Potongan teks prompt ─────────────────────────────────────────────────────
+class SnippetUpdate(BaseModel):
+    text: str
+
+
+@router.get("/snippets")
+def list_snippets(_: User = admin):
+    return content.all_snippets()
+
+
+@router.put("/snippets/{key}")
+def put_snippet(key: str, body: SnippetUpdate, user: User = admin):
+    try:
+        content.set_snippet(key, body.text, by=user.username)
+    except KeyError:
+        raise HTTPException(404, "Potongan teks tidak ditemukan") from None
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    return {"ok": True}
+
+
+# ── Supervisor: kata terlarang dan kalimat aman ──────────────────────────────
+class BannedWord(BaseModel):
+    word: str
+    category: str
+
+
+class FallbackLine(BaseModel):
+    persona: str
+    kind: str
+    text: str
+
+
+@router.get("/supervisor")
+def get_supervisor(_: User = admin):
+    return {"banned": content.list_banned(), "fallbacks": content.list_fallbacks(), "kinds": list(content.FALLBACK_KINDS)}
+
+
+@router.post("/supervisor/banned", status_code=201)
+def add_banned(body: BannedWord, _: User = admin):
+    try:
+        content.add_banned(body.word, body.category)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    return {"ok": True}
+
+
+@router.delete("/supervisor/banned/{word}")
+def remove_banned(word: str, _: User = admin):
+    try:
+        content.remove_banned(word)
+    except KeyError:
+        raise HTTPException(404, "Kata tidak ditemukan") from None
+    return {"ok": True}
+
+
+@router.post("/supervisor/fallbacks", status_code=201)
+def add_fallback(body: FallbackLine, _: User = admin):
+    try:
+        content.add_fallback(body.persona, body.kind, body.text)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    return {"ok": True}
+
+
+@router.delete("/supervisor/fallbacks/{fallback_id}")
+def remove_fallback(fallback_id: int, _: User = admin):
+    try:
+        content.remove_fallback(fallback_id)
+    except KeyError:
+        raise HTTPException(404, "Kalimat tidak ditemukan") from None
     return {"ok": True}

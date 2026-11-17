@@ -177,3 +177,105 @@ def test_faces_seeded_from_env_chosen_per_persona_and_protected_while_used(clien
     assert put(client, SIMLI_FACE_ID_RAKA="face-baru-0001").status_code == 200
     assert client.app.state.settings.simli_face_for("raka") == "face-baru-0001"  # dipakai /api/simli/token
     assert client.delete("/api/admin/faces/face-raka-0001").status_code == 200
+
+
+# ── konten: persona, prompt, teks, Supervisor ────────────────────────────────
+def test_content_endpoints_are_admin_only(client):
+    paths = ["/api/admin/personas", "/api/admin/prompts", "/api/admin/snippets", "/api/admin/supervisor"]
+    as_user(client, "opa")
+    assert all(client.get(p).status_code == 403 for p in paths)
+    as_user(client, "admin")
+    assert all(client.get(p).status_code == 200 for p in paths)
+
+
+def test_persona_edits_reach_the_next_show_prompt(client):
+    from app.agents.persona import PersonaAgent
+    from app.data.personas import load_personas
+    import random
+
+    as_user(client, "admin")
+    cards = {c["id"]: c for c in client.get("/api/admin/personas").json()}
+    assert set(cards) == {"raka", "salsa"}
+    raka = {**cards["raka"], "speaking_style": "gaya baru dari admin", "catchphrases": ["  ", "ciee dong"]}
+    r = client.put("/api/admin/personas/raka", json=raka)
+    assert r.status_code == 200 and r.json()["catchphrases"] == ["ciee dong"]  # baris kosong dibuang
+    assert load_personas()["raka"].speaking_style == "gaya baru dari admin"
+    assert "gaya baru dari admin" in PersonaAgent(None, "m", random.Random(1)).system_prompt(load_personas()["raka"])
+    assert client.put("/api/admin/personas/raka", json={**raka, "id": "salsa"}).status_code == 422
+    assert client.put("/api/admin/personas/lain", json={**raka, "id": "lain"}).status_code == 404
+    assert client.put("/api/admin/personas/raka", json={**raka, "gender": "x"}).status_code == 422
+
+
+def test_prompt_versions_validate_placeholders_and_switch_active(client):
+    from app.prompts import load_prompt
+
+    as_user(client, "admin")
+    rows = client.get("/api/admin/prompts").json()
+    persona_rows = [r for r in rows if r["name"] == "persona"]
+    assert len(persona_rows) == 1 and persona_rows[0]["active"] and "name" in persona_rows[0]["placeholders"]
+    old_version = persona_rows[0]["version"]
+    body = client.get(f"/api/admin/prompts/persona/{old_version}").json()["body"]
+
+    r = client.post("/api/admin/prompts/persona", json={"version": "persona-v100", "body": "Tanpa placeholder apa pun, terlalu pendek untuk dipakai."})
+    assert r.status_code == 422 and "Placeholder hilang" in r.json()["detail"]
+    assert client.post("/api/admin/prompts/persona", json={"version": "persona-v100", "body": body + "\n{tidak_dikenal}"}).status_code == 422
+    assert client.post("/api/admin/prompts/persona", json={"version": "persona-v100", "body": body + "\nTambahan baris dari admin."}).status_code == 201
+    assert load_prompt("persona").version == "persona-v100" and load_prompt("persona").text.endswith("Tambahan baris dari admin.")
+    assert client.post("/api/admin/prompts/persona", json={"version": "persona-v100", "body": body}).status_code == 422  # versi tidak boleh ditimpa
+    assert client.post("/api/admin/prompts/tidak-ada", json={"version": "v1", "body": "x" * 20}).status_code == 404
+    assert client.post(f"/api/admin/prompts/persona/{old_version}/activate").status_code == 200
+    assert load_prompt("persona").version == old_version  # riwayat tetap, bisa kembali
+
+
+def test_snippets_are_editable_and_keep_their_placeholders(client):
+    from app.content import content
+
+    as_user(client, "admin")
+    snippets = {s["key"]: s for s in client.get("/api/admin/snippets").json()}
+    assert {"turn.tema", "style_guide", "dialog_act.anecdote", "sup.persona", "fallback_last_resort"} <= set(snippets)
+    assert set(snippets["turn.tema"]["placeholders"]) == {"tema", "variant"}
+    assert client.put("/api/admin/snippets/turn.tema", json={"text": "TOPIK: {tema}"}).status_code == 422  # {variant} hilang
+    assert client.put("/api/admin/snippets/turn.tema", json={"text": "  "}).status_code == 422
+    assert client.put("/api/admin/snippets/turn.tema", json={"text": "JUDUL SIARAN: {tema} / {variant}"}).status_code == 200
+    assert content.text("turn.tema", tema="Kopi", variant="v1") == "JUDUL SIARAN: Kopi / v1"
+    assert client.put("/api/admin/snippets/tidak.ada", json={"text": "x"}).status_code == 404
+
+
+def test_supervisor_words_and_fallback_lines_are_managed(client):
+    from app.agents.supervisor import banned_words, fallback_bank
+
+    as_user(client, "admin")
+    sup = client.get("/api/admin/supervisor").json()
+    assert {"bangsat", "kasar_berat"} <= {(b["word"], b["category"])[i] for b in sup["banned"] for i in (0, 1)}
+    assert client.post("/api/admin/supervisor/banned", json={"word": "  KataBaru ", "category": "uji"}).status_code == 201
+    assert "katabaru" in banned_words()
+    assert client.post("/api/admin/supervisor/banned", json={"word": "katabaru", "category": "uji"}).status_code == 422
+    assert client.delete("/api/admin/supervisor/banned/katabaru").status_code == 200
+    assert client.delete("/api/admin/supervisor/banned/katabaru").status_code == 404
+    assert "katabaru" not in banned_words()
+
+    assert client.post("/api/admin/supervisor/fallbacks", json={"persona": "lain", "kind": "topic", "text": "x"}).status_code == 422
+    assert client.post("/api/admin/supervisor/fallbacks", json={"persona": "raka", "kind": "salah", "text": "x"}).status_code == 422
+    assert client.post("/api/admin/supervisor/fallbacks", json={"persona": "raka", "kind": "topic", "text": "Kalimat aman baru."}).status_code == 201
+    assert "Kalimat aman baru." in fallback_bank()["raka"]["topic"]
+    line = next(f for f in client.get("/api/admin/supervisor").json()["fallbacks"] if f["text"] == "Kalimat aman baru.")
+    assert client.delete(f"/api/admin/supervisor/fallbacks/{line['id']}").status_code == 200
+    assert client.delete(f"/api/admin/supervisor/fallbacks/{line['id']}").status_code == 404
+
+
+# ── parameter perilaku ───────────────────────────────────────────────────────
+def test_behavior_parameters_are_editable_and_validated_together(client):
+    from app.tuning import tuning
+
+    as_user(client, "admin")
+    keys = {f["key"] for g in client.get("/api/admin/config").json()["groups"] for f in g["fields"]}
+    assert {"POINT_TIME_LIMIT_S", "HISTORY_TURNS", "CATCHPHRASE_PROBABILITY", "SUPERVISOR_MODE", "VOICE_TOPIC_SWITCH", "GEMINI_RPD_DEFAULT"} <= keys
+    assert put(client, HISTORY_TURNS="5", CATCHPHRASE_PROBABILITY="0.5").status_code == 200
+    assert tuning.HISTORY_TURNS == 5 and tuning.CATCHPHRASE_PROBABILITY == 0.5  # kode membaca nilai yang berlaku
+    assert put(client, CATCHPHRASE_PROBABILITY="2").status_code == 422  # di luar 0..1
+    assert put(client, VOICE_TOPIC_SWITCH="mungkin").status_code == 422  # bool hanya true/false
+    assert put(client, VOICE_TOPIC_SWITCH="false").status_code == 200 and client.app.state.settings.VOICE_TOPIC_SWITCH is False
+    # aturan antar-setelan: batas penutupan harus lebih kecil dari batas waktu poin
+    r = put(client, POINT_WRAP_S="200")
+    assert r.status_code == 422 and "POINT_WRAP_S" in r.json()["detail"]
+    assert client.app.state.settings.POINT_WRAP_S != 200

@@ -40,6 +40,7 @@ from app.schemas import Blocker, GenerateBlockerRequest, ShowState
 from app.secretbox import SecretBox
 from app.show.api import router as show_router
 from app.tts import create_tts
+from app.tuning import tuning
 from app.tts.catalog import catalog as voice_catalog
 from app.ws import ConnectionManager
 
@@ -68,6 +69,7 @@ def build_app(settings: Settings | None = None) -> FastAPI:
         # Konten (persona, prompt, kata terlarang) dan katalog suara dibaca dari database; data awal diisi sekali dari backend/seed.
         content.configure(db)
         voice_catalog.configure(db)
+        tuning.configure(settings)
         # Setelan dari halaman admin menimpa .env; diterapkan SEBELUM klien LLM/TTS dibuat.
         app.state.runtime_config = RuntimeConfig(db, settings, SecretBox(settings.SECRETS_KEY))
         app.state.faces = FaceCatalog(db)
@@ -89,6 +91,7 @@ def build_app(settings: Settings | None = None) -> FastAPI:
         # Kembali ke seed supaya modul-modul ini tidak menunjuk database aplikasi yang sudah berhenti (penting untuk tes).
         content.configure(None)
         voice_catalog.configure(None)
+        tuning.configure(None)
 
     app = FastAPI(title="Penyiar AI v2", lifespan=lifespan)
     app.include_router(show_router)

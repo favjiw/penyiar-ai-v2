@@ -25,6 +25,7 @@ from typing import Optional
 
 from app.agents.persona import HistoryEntry
 from app.llm import LLMClient, LLMError, register_mock
+from app.content import content
 from app.prompts import load_prompt
 from app.schemas import BlockerTopic, ShowrunnerDecision, ShowrunnerJudgement, ShowrunnerPolicy
 
@@ -85,18 +86,23 @@ class Showrunner:
         return progress.turns > 0 and (progress.turns % self.every_k == 0 or progress.turns == low)
 
     def judgement_prompt(self, p: TopicProgress, target_hint: str = "") -> str:
+        t = content.text
+        points = "\n".join(
+            t("sr.point_line", id=pt.id, text=pt.text, covered=content.snippet("sr.point_covered") if pt.id in p.covered else "")
+            for pt in p.topic.poin
+        )
         lines = [
-            f'TOPIK AKTIF: "{p.topic.judul}" (sudut pandang: {p.topic.sudut_pandang})' + (" — topik terakhir" if p.is_last else ""),
-            "POIN:\n" + "\n".join(f"- {pt.id}: {pt.text}" + (" (sudah tercakup)" if pt.id in p.covered else "") for pt in p.topic.poin),
-            f"GILIRAN DI TOPIK INI: {p.turns} (minimal {self.min_turns} sebelum boleh pindah); durasi audio ±{p.audio_s:.0f} detik.",
+            t("sr.topic", judul=p.topic.judul, sudut=p.topic.sudut_pandang, last=content.snippet("sr.last_topic") if p.is_last else ""),
+            t("sr.points", points=points),
+            t("sr.turns", turns=p.turns, min_turns=self.min_turns, audio=f"{p.audio_s:.0f}"),
         ]
         if target_hint:
-            lines.append(f"Petunjuk lunak durasi (bukan aturan): {target_hint}")
+            lines.append(t("sr.target_hint", hint=target_hint))
         if p.budget_s is not None:
-            lines.append(f"JATAH WAKTU TOPIK: ±{p.budget_s:.0f} detik; sudah berjalan ±{p.elapsed_s:.0f} detik.")
+            lines.append(t("sr.budget", budget=f"{p.budget_s:.0f}", elapsed=f"{p.elapsed_s:.0f}"))
         if p.angles:
-            lines.append("Sudut tambahan yang sudah dipakai (jangan diulang):\n" + "\n".join(f"- {a}" for a in p.angles))
-        lines.append("OBROLAN SEJAK TOPIK DIMULAI:\n" + "\n".join(f"{h.name}: {h.text}" for h in p.history[-24:]))
+            lines.append(t("sr.angles", angles="\n".join(f"- {a}" for a in p.angles)))
+        lines.append(t("sr.history", history="\n".join(f"{h.name}: {h.text}" for h in p.history[-24:])))
         return "\n\n".join(lines)
 
     def _fixed(self, p: TopicProgress, turn: int, reason: str = "") -> ShowrunnerDecision:

@@ -122,6 +122,26 @@ class Settings(BaseSettings):
     SUMMARY_EVERY_TURNS: int = 10  # ringkasan obrolan diperbarui tiap sekian giliran yang keluar dari jendela riwayat; 0 = mati
     HUMAN_HOST_NAME: str = ""  # mode A (Tahap 4); keputusan terbuka PRD §15.2 #2
 
+    # Parameter perilaku (dulu konstanta di kode); dibaca lewat app/tuning.py dan bisa diubah di halaman admin.
+    CATCHPHRASE_PROBABILITY: float = Field(default=1.0 / 6.0, ge=0, le=1)  # peluang catchphrase per giliran (setelah jeda)
+    CATCHPHRASE_COOLDOWN_TURNS: int = Field(default=6, ge=0)
+    HISTORY_TURNS: int = Field(default=12, ge=2, le=60)  # riwayat obrolan yang dimasukkan ke prompt penyiar
+    ANTI_REPETITION_WINDOW: int = Field(default=6, ge=1)  # giliran terakhir yang dicek untuk pembuka berulang
+    TRIGRAM_REPEAT_LIMIT: int = Field(default=3, ge=2)
+    TRIGRAM_HISTORY_WINDOW: int = Field(default=10, ge=1)
+    GREETING_EVERY_TURNS: int = Field(default=5, ge=2)  # "Sobat Hits" sesekali, bukan di setiap giliran
+    SUPERVISOR_MAX_WORDS: int = Field(default=90, ge=10)  # ucapan lebih panjang dianggap terlalu panjang
+    SUPERVISOR_REPEAT_WINDOW: int = Field(default=8, ge=1)
+    SUMMARY_MAX_CHARS: int = Field(default=1000, ge=200)
+    PLAYBACK_GRACE_SEC: float = Field(default=5.0, ge=0)  # tunggu laporan selesai-putar sebesar durasi audio + ini
+    OPENING_CLOSING_MAX_TURNS: int = Field(default=24, ge=2)  # batas atas giliran Opening/Closing berbasis waktu
+    OPENING_CLOSING_TARGET_S: int = Field(default=180, ge=30)  # Opening ±3 menit, Closing ±3 menit
+    POINT_TRIM_FACTOR: float = Field(default=1.3, ge=1)  # teks dirapikan bila lebih dari sekian kali anggaran kata
+    VOICE_SWITCH_TRANSITION_OVERLAP: float = Field(default=0.6, ge=0, le=1)  # deteksi pindah topik dari ucapan (intent.py)
+    VOICE_SWITCH_TRANSITION_MIN_WORDS: int = Field(default=3, ge=1)
+    VOICE_SWITCH_TITLE_OVERLAP: float = Field(default=0.7, ge=0, le=1)
+    VOICE_SWITCH_TITLE_MIN_WORDS: int = Field(default=2, ge=1)
+
     # Penyeimbang volume antarpenyiar, dalam dB, diterapkan di layar OBS (suara lokal dan jalur Simli). 0 = tanpa perubahan.
     # Provider dan model suara punya kenyaringan berbeda; ukur dari rekaman OBS lalu samakan (sekitar -17 dB rata-rata).
     VOICE_GAIN_DB_RAKA: float = Field(default=0.0, ge=-12, le=9)

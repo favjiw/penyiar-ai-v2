@@ -72,6 +72,8 @@ Admin mengelola di `/admin` (tab Otak AI, Suara, Avatar Simli) tanpa menyentuh `
 - Kunci API disimpan **terenkripsi** (Fernet) dengan `SECRETS_KEY` di `/opt/penyiar/.env`. **Simpan cadangan `SECRETS_KEY` terpisah dari cadangan database**: tanpanya kunci tersimpan tidak terbaca (aplikasi kembali ke `.env`). Buat: `docker compose exec app python -m app.cli gen-secrets-key`.
 - Perubahan berlaku tanpa restart. Saat ada siaran live/jeda, perubahan **tersimpan dan menunggu** sampai siaran selesai (berlaku saat halaman admin dibuka, atau saat siaran berikutnya dimulai).
 - Suara baru ElevenLabs harus sudah ada di akun (My Voices); ID diperiksa saat ditambahkan.
+- Tab **Alur siaran**, **Penyiar AI**, **Supervisor**, dan **Kuota** mengatur parameter perilaku (batas waktu poin, riwayat prompt, peluang catchphrase, mode Supervisor, dst.). Aturan antar-setelan divalidasi bersama (mis. batas penutupan poin harus lebih kecil dari batas waktu poin).
+- Tab **Penyiar AI** menyunting kartu persona; **Prompt & teks** menyunting prompt berversi dan potongan teks penyusun prompt; **Supervisor** mengelola kata terlarang dan kalimat aman. Perubahan dipakai giliran/siaran berikutnya.
 
 ## Data dan cadangan
 - **Postgres** (volume `penyiar_pg-data`) menyimpan SEMUA data aplikasi: pengguna, sesi login, materi, setelan admin, daftar suara dan wajah, persona, prompt berversi, kata terlarang dan kalimat aman Supervisor, kuota harian, serta log siaran dan log giliran riset. Data awal (persona, prompt, dll.) dibaca dari `backend/seed/` sekali saat pertama jalan.

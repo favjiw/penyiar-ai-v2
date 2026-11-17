@@ -13,11 +13,12 @@ ujung (`trim_to_budget`), tidak pernah memotong di tengah kalimat.
 
 from __future__ import annotations
 
+from app.tuning import tuning
+
 import re
 from dataclasses import dataclass
 
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
-TRIM_FACTOR = 1.3  # teks baru dirapikan bila lebih dari 1,3x anggaran kata
 
 
 @dataclass
@@ -61,9 +62,9 @@ def trim_to_budget(text: str, max_words: int, keep_last: bool = False) -> str:
     Biasanya dari ujung. `keep_last` (giliran penutup poin): kalimat terakhir adalah jembatan ke poin berikutnya,
     jadi yang dibuang kalimat sebelumnya.
     """
-    if max_words <= 0 or count_words(text) <= max_words * TRIM_FACTOR:
+    if max_words <= 0 or count_words(text) <= max_words * tuning.POINT_TRIM_FACTOR:
         return text
     sentences = [s for s in _SENTENCE_END.split(text.strip()) if s]
-    while len(sentences) > 1 and count_words(" ".join(sentences)) > max_words * TRIM_FACTOR:
+    while len(sentences) > 1 and count_words(" ".join(sentences)) > max_words * tuning.POINT_TRIM_FACTOR:
         sentences.pop(-2 if keep_last else -1)
     return " ".join(sentences)
