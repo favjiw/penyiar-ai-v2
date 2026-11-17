@@ -22,6 +22,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.blocker import BlockerGenerator, BlockerStore  # noqa: E402
+from app.db import database_for  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.data.personas import load_personas  # noqa: E402
 from app.llm import create_llm_client  # noqa: E402
@@ -45,7 +46,7 @@ async def main() -> None:
         os.environ["TTS_MODE"] = "mock"
     settings = get_settings()
     llm = create_llm_client(settings)
-    store = BlockerStore(settings.DATA_DIR)
+    store = BlockerStore(database_for(settings))
 
     if args.blocker:
         blocker = store.get(args.blocker)
@@ -73,7 +74,7 @@ async def main() -> None:
     engine = ShowEngine(
         settings, llm, tts, blocker, load_personas(), emit, Path(settings.CACHE_DIR) / "audio", seed=args.seed, time_scale=args.time_scale
     )
-    print(f"Sesi {engine.session_id}: {blocker.tema} · {blocker.variant_label} · log {engine.log.path}", flush=True)
+    print(f"Sesi {engine.session_id}: {blocker.tema} · {blocker.variant_label} · log di database", flush=True)
     if settings.TTS_MODE == "live":
         try:
             print("Pemanasan TTS:", await tts.warm_up(list(load_personas())), flush=True)
@@ -85,7 +86,7 @@ async def main() -> None:
         await asyncio.sleep(0.5)
         if deadline and time.monotonic() > deadline:
             await engine.stop()
-    print(f"Selesai: {engine.turn_no} giliran, {(time.monotonic() - engine.started_at) / 60:.1f} menit. Log: {engine.log.path}")
+    print(f"Selesai: {engine.turn_no} giliran, {(time.monotonic() - engine.started_at) / 60:.1f} menit. Log di database (ekspor: python -m app.cli export-session {engine.session_id})")
 
 
 if __name__ == "__main__":

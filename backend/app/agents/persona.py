@@ -17,6 +17,7 @@ from typing import Optional
 
 from app.agents.hits_style import style_extras
 from app.llm import LLMClient, register_mock
+from app.content import content
 from app.prompts import load_prompt
 from app.schemas import Blocker, BlockerTopic, CorrectionMemory, Emotion, PersonaCard, PersonaOutput, Segment
 
@@ -41,18 +42,6 @@ HISTORY_TURNS = 12
 ANTI_REPETITION_WINDOW = 6
 TRIGRAM_REPEAT_LIMIT = 3
 TRIGRAM_HISTORY_WINDOW = 10
-
-DIALOG_ACT_HINTS = {
-    "anecdote": "ceritakan pengalaman atau anekdot spesifik milikmu yang nyambung ke poin ini",
-    "opinion_diff": "sampaikan pendapat yang agak beda dari lawan bicara beserta alasannya",
-    "new_angle": "tambahkan satu sudut atau detail baru ke obrolan",
-    "personal_question": "tanyakan hal personal yang ringan ke lawan bicara",
-    "tease": "goda lawan bicara secara ringan dan ramah",
-    "short_react": "beri reaksi singkat satu kalimat",
-    "audience": "lempar pertanyaan ke penonton supaya mereka ikut membayangkan atau menjawab dalam hati",
-}
-OPENING_AI_DISCLOSURE = "Di pembukaan ini sebutkan dengan santai bahwa kalian berdua penyiar AI HITS."
-
 
 @dataclass
 class HistoryEntry:
@@ -175,7 +164,7 @@ class PersonaAgent:
     def _sample_act(self, ctx: TurnContext) -> Optional[str]:
         if ctx.segment != "topic" or ctx.transition_to or ctx.to_closing or ctx.close_point or ctx.force_no_dialog_act:
             return None
-        choices = [a for a in DIALOG_ACT_HINTS if a != self._last_act]
+        choices = [a for a in content.snippets_with_prefix("dialog_act.") if a != self._last_act]
         if ctx.mode == "A":
             choices = [a for a in choices if a != "audience"]  # penyiar manusia yang memandu penonton
         act = self._rng.choice(choices)
@@ -228,7 +217,7 @@ class PersonaAgent:
         if ctx.segment == "opening":
             parts.append(f"SEGMEN: Opening. Hook: {b.opening.hook}\nYang dilakukan di pembukaan:\n{_bullets(b.opening.poin)}")
             if ctx.turn_in_segment == 0:
-                parts.append(OPENING_AI_DISCLOSURE)
+                parts.append(content.snippet("opening_ai_disclosure"))
         elif ctx.segment == "topic" and ctx.topic:
             t = ctx.topic
             parts.append(f"SEGMEN: Topik \"{t.judul}\" (sudut pandang: {t.sudut_pandang})")
@@ -285,7 +274,7 @@ class PersonaAgent:
         if ctx.steer_hint and ctx.segment == "topic" and ctx.transition_to is None:
             instructions.append(f"Arahan produser: {ctx.steer_hint}")
         if act:
-            instructions.append(f"Tugas giliran ini: {DIALOG_ACT_HINTS[act]}.")
+            instructions.append(f"Tugas giliran ini: {content.snippet('dialog_act.' + act)}.")
         instructions += style_extras(ctx.turn_in_segment, closing=ctx.segment == "closing")
         instructions.append(f"Panjang giliran: {length}.")
         if anti := anti_repetition_guidance(ctx.history):

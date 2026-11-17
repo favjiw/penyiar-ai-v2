@@ -1,5 +1,7 @@
 import pytest
 
+from tests.dbutil import make_db
+
 from app.blocker import BlockerInvalid, BlockerStore
 from app.schemas import BlockerPoint
 from tests.test_persona import make_blocker
@@ -7,7 +9,7 @@ from tests.test_persona import make_blocker
 
 @pytest.fixture
 def draft(tmp_path):
-    store = BlockerStore(tmp_path)
+    store = BlockerStore(make_db(tmp_path))
     b = make_blocker(2)
     b.locked = False
     return store, store.save(b)

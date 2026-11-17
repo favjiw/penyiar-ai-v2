@@ -16,7 +16,7 @@ PASSWORD = "sandi-uji-panjang"
 
 def make_settings(tmp_path, **kw):
     return Settings(
-        LLM_MODE="mock", TTS_MODE="mock", DATA_DIR=str(tmp_path / "data"), LOG_DIR=str(tmp_path / "logs"),
+        LLM_MODE="mock", TTS_MODE="mock", DATA_DIR=str(tmp_path / "data"),
         CACHE_DIR=str(tmp_path / "cache"), AUTH_REQUIRED=True, _env_file=None, **kw,
     )
 
@@ -147,7 +147,6 @@ def test_blocker_flow_persists_in_database(client):
     with client.app.state.db.engine.connect() as conn:  # catatan pembuatan materi juga di database, bukan file
         rows = conn.execute(generation_log.select()).all()
     assert len(rows) == 1 and rows[0].data["tema"] == "Kopi" and len(rows[0].data["blocker_ids"]) == 3
-    assert not (Path(client.app.state.settings.LOG_DIR) / "blocker_generations.jsonl").exists()
 
 
 # ── WebSocket ────────────────────────────────────────────────────────────────
@@ -224,15 +223,14 @@ def test_change_own_password(client):
 
 
 # ── mode pengembangan ────────────────────────────────────────────────────────
-def test_auth_off_keeps_everything_open_and_uses_files(tmp_path):
-    s = Settings(LLM_MODE="mock", TTS_MODE="mock", DATA_DIR=str(tmp_path / "data"), LOG_DIR=str(tmp_path / "logs"),
-                 CACHE_DIR=str(tmp_path / "cache"), _env_file=None)
+def test_auth_off_keeps_everything_open_but_still_uses_the_database(tmp_path):
+    s = Settings(LLM_MODE="mock", TTS_MODE="mock", DATA_DIR=str(tmp_path / "data"), CACHE_DIR=str(tmp_path / "cache"), _env_file=None)
     with TestClient(build_app(s)) as c:
-        assert c.app.state.db is None
+        assert c.app.state.db.dialect == "sqlite" and (tmp_path / "data" / "app.db").exists()  # bukan berkas materi/log
         assert c.get("/api/blockers").status_code == 200
         me = c.get("/api/auth/me").json()
         assert me["auth_required"] is False and me["user"]["role"] == "admin"
-        assert c.get("/api/users").status_code == 404  # tanpa login tidak ada pengguna untuk dikelola
+        assert c.get("/api/users").status_code == 200  # akun tetap ada walau gerbang login mati
 
 
 def test_health_tells_deploy_whether_a_show_is_live(client):

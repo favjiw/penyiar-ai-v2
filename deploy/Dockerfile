@@ -19,8 +19,6 @@ ENV PYTHONUNBUFFERED=1 \
     GIT_SHA=${GIT_SHA} \
     FRONTEND_DIST=/srv/frontend \
     DATA_DIR=/data/data \
-    LOG_DIR=/data/logs \
-    SESSIONS_DIR=/data/sessions \
     CACHE_DIR=/data/cache
 
 WORKDIR /srv/backend
@@ -28,9 +26,10 @@ COPY backend/requirements.txt ./
 RUN pip install -r requirements.txt
 
 COPY backend/app ./app
+COPY backend/seed ./seed
 COPY --from=frontend /build/dist /srv/frontend
 
-# Data runtime hidup di volume /data, bukan di image. Pengguna non-root.
+# Data aplikasi ada di Postgres; volume /data hanya cache audio (dan berkas lama yang menunggu diimpor). Pengguna non-root.
 RUN useradd --system --uid 10001 --home-dir /srv appuser \
     && mkdir -p /data && chown -R appuser /data
 USER appuser

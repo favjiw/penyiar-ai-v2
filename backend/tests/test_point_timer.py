@@ -3,7 +3,6 @@
 import asyncio
 
 from app.agents.persona import HistoryEntry
-from app.session_log import read_log
 from app.show.pointclock import PointClock, trim_to_budget
 from tests.test_engine import make_engine, wait_end
 from tests.test_mode_a import make, settle
@@ -43,7 +42,7 @@ async def test_mode_b_walks_through_every_point_and_closes_each_on_time(tmp_path
     engine, events = make_engine(tmp_path, **TIMER)
     engine.start()
     await wait_end(engine, timeout=20)
-    log = list(read_log(engine.log.path))
+    log = engine.log.events()
     ends = [l for l in log if l["type"] == "point_end"]
     starts = [l for l in log if l["type"] == "point_start"]
     assert [e["point_id"] for e in ends] == ["t1p1", "t1p2", "t1p3", "t2p1", "t2p2", "t2p3"] and len(starts) == 6
@@ -60,7 +59,7 @@ async def test_mode_b_timer_off_keeps_topic_level_behaviour(tmp_path):
     engine, _ = make_engine(tmp_path, POINT_TIME_LIMIT_S=0)
     engine.start()
     await wait_end(engine)
-    log = list(read_log(engine.log.path))
+    log = engine.log.events()
     assert not [l for l in log if l["type"] in ("point_start", "point_end")]
     assert engine.snapshot()["point_clock"] == {"active": False}
 
@@ -100,7 +99,7 @@ async def test_showrunner_may_close_a_point_early_but_timer_is_the_upper_bound(t
     engine, _ = make_engine(tmp_path, POINT_TIME_LIMIT_S=600, POINT_WRAP_S=15, POINT_MIN_TURNS=3, SHOWRUNNER_POLICY="llm", SHOWRUNNER_EVERY_K=3)
     engine.start()
     await wait_end(engine, timeout=30)
-    ends = [l for l in read_log(engine.log.path) if l["type"] == "point_end"]
+    ends = [l for l in engine.log.events() if l["type"] == "point_end"]
     assert ends and {e["reason"] for e in ends} == {"early"}
     assert all(e["turns"] >= 3 and e["committed_s"] < 600 for e in ends)
 
@@ -110,7 +109,7 @@ async def test_advancing_the_segment_ends_the_open_point_with_reason_skip(tmp_pa
     engine.plan.segment = "topic"
     engine._commit_point(5)
     engine._advance_segment("skip")
-    ends = [l for l in read_log(engine.log.path) if l["type"] == "point_end"]
+    ends = [l for l in engine.log.events() if l["type"] == "point_end"]
     assert ends[0]["reason"] == "skip" and engine.plan.point_idx == 0 and engine.point_clock.committed_s == 0
 
 
@@ -170,7 +169,7 @@ async def test_pipeline_depth_two_still_walks_all_points(tmp_path):
     engine, _ = make_engine(tmp_path, PIPELINE_DEPTH=2, **TIMER)
     engine.start()
     await wait_end(engine, timeout=30)
-    ends = [l for l in read_log(engine.log.path) if l["type"] == "point_end"]
+    ends = [l for l in engine.log.events() if l["type"] == "point_end"]
     assert [e["point_id"] for e in ends] == ["t1p1", "t1p2", "t1p3", "t2p1", "t2p2", "t2p3"]
 
 
@@ -207,7 +206,7 @@ async def test_mode_a_never_advances_by_itself_even_far_past_time(tmp_path):
     snap = engine.snapshot()
     assert snap["segment"] == "topic" and snap["topic"]["id"] == "t1"
     assert snap["point_clock"] == {"active": False}
-    log = list(read_log(engine.log.path))
+    log = engine.log.events()
     assert not [l for l in log if l["type"] in ("point_start", "point_end")]
     start = next(l for l in log if l["type"] == "session_start")
     assert start["effective"]["auto_advance"] is False
@@ -226,7 +225,7 @@ async def test_mode_b_opening_and_closing_follow_minutes_for_duration_materials(
     engine.blocker.durasi_menit = 60
     engine.start()
     await wait_end(engine, timeout=30)
-    turns = [l for l in read_log(engine.log.path) if l["type"] == "turn"]
+    turns = [l for l in engine.log.events() if l["type"] == "turn"]
     opening = [t for t in turns if t["segment"] == "opening"]
     closing = [t for t in turns if t["segment"] == "closing"]
     assert len(opening) > 2 and len(closing) > 2
@@ -234,4 +233,4 @@ async def test_mode_b_opening_and_closing_follow_minutes_for_duration_materials(
     old, _ = make_engine(tmp_path / "lama", **TIMER)  # materi lama tanpa durasi: tetap 2 giliran
     old.start()
     await wait_end(old, timeout=30)
-    assert sum(1 for l in read_log(old.log.path) if l["type"] == "turn" and l["segment"] == "opening") == 2
+    assert sum(1 for l in old.log.events() if l["type"] == "turn" and l["segment"] == "opening") == 2

@@ -49,7 +49,8 @@ from app.schemas import (
     SupervisorVerdict,
     TurnRecord,
 )
-from app.session_log import SessionLogger
+from app.db import Database, database_for
+from app.session_log import SessionLogger, save_session_blocker
 from app.show.pointclock import PointClock, trim_to_budget
 from app.show.participants import Participant, build_participants
 from app.show.runmeta import run_metadata
@@ -125,6 +126,7 @@ class ShowEngine:
         time_scale: float = 1.0,
         ai_ids: Optional[Sequence[str]] = None,
         human_name: str = "",
+        db: Optional[Database] = None,
     ):
         if mode == "A" and type(self) is ShowEngine:
             raise ValueError("Mode A memakai HumanLedEngine (app/show/mode_a.py)")
@@ -161,8 +163,9 @@ class ShowEngine:
             settings.FIXED_TURNS_PER_TOPIC,
             tuple(p.id for p in self.personas),
         )
-        self.log = SessionLogger(self.session_id, settings.LOG_DIR)
-        self.turn_log = TurnLog(settings.sessions_path / self.session_id)
+        self.db = db or database_for(settings)
+        self.log = SessionLogger(self.session_id, self.db)
+        self.turn_log = TurnLog(self.session_id, self.db)
         self.summary = ConversationSummary(llm, settings.model_for("showrunner"), settings.SUMMARY_EVERY_TURNS)
 
         self.state = ShowState.IDLE
@@ -333,16 +336,11 @@ class ShowEngine:
 
     # ── Kontrol operator ─────────────────────────────────────────────────────
 
-    @property
-    def session_dir(self) -> Path:
-        return self.settings.sessions_path / self.session_id
-
     def save_session_blocker(self) -> None:
-        """Salin blocker terkunci ke sessions/<session_id>/blocker.json (bahan riset: apa yang dibaca AI dan penyiar)."""
+        """Salin blocker terkunci ke database (bahan riset: apa yang dibaca AI dan penyiar)."""
         try:
-            self.session_dir.mkdir(parents=True, exist_ok=True)
-            (self.session_dir / "blocker.json").write_text(self.blocker.model_dump_json(indent=2), encoding="utf-8")
-        except OSError as e:
+            save_session_blocker(self.db, self.session_id, self.blocker)
+        except Exception as e:  # noqa: BLE001
             self.log.event("error", stage="session_blocker", message=str(e)[:300])
 
     def start(self) -> None:
@@ -754,7 +752,7 @@ class ShowEngine:
         user_query: str = "", draft_text: str = "", supervisor_intervened: bool = False, supervisor_verdict: Optional[dict[str, Any]] = None,
         timing_breakdown: Optional[dict[str, Any]] = None, nudge: bool = False,
     ) -> None:
-        """Satu baris `sessions/<id>/turns.jsonl` (lihat turnlog.py untuk arti tiap medan)."""
+        """Satu baris log giliran riset (tabel session_turns; lihat turnlog.py untuk arti tiap medan)."""
         if not is_human:
             self._check_tts_quota()
         try:
@@ -776,7 +774,7 @@ class ShowEngine:
                     "tts_first_chunk_ms": tts_ms,
                 },
             )
-        except OSError as e:
+        except Exception as e:  # noqa: BLE001 - log riset tidak boleh menjatuhkan siaran
             self.log.event("error", stage="turn_log", message=str(e)[:300])
 
     async def _after_turn(self, ctx: TurnContext, prepared: PreparedTurn, verdict: SupervisorVerdict) -> None:

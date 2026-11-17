@@ -20,6 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.blocker import BlockerStore  # noqa: E402
+from app.db import database_for  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.data.personas import load_personas  # noqa: E402
 from app.llm import create_llm_client  # noqa: E402
@@ -55,7 +56,7 @@ async def main() -> None:
 
     personas = load_personas()
     engine = HumanLedEngine(
-        settings, create_llm_client(settings), create_tts(settings), BlockerStore(settings.DATA_DIR).get(args.blocker),
+        settings, create_llm_client(settings), create_tts(settings), BlockerStore(database_for(settings)).get(args.blocker),
         emit=emit, audio_dir=Path(settings.CACHE_DIR) / "audio", personas=personas, human_name=args.host, time_scale=0.0, ai_persona=args.ai,
     )
     engine.start()
@@ -84,8 +85,7 @@ async def main() -> None:
 
     print(f"\nFiller: p50 {p(filler_ms, .5):.0f} ms, maks {max(filler_ms):.0f} ms (target ≤800 ms + STT)")
     print(f"Jawaban: p50 {statistics.median(answer_ms) / 1000:.2f} s, p95 {p(answer_ms, .95) / 1000:.2f} s (target p50 ≤4 s, p95 ≤7 s, termasuk STT)")
-    print(f"Log: {engine.log.path}")
-    print(f"Giliran: {engine.turn_log.path}")
+    print(f"Log di database (sesi {engine.session_id}); ekspor: python -m app.cli export-session {engine.session_id}")
 
 
 if __name__ == "__main__":

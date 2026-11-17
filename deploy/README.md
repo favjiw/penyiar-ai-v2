@@ -74,8 +74,10 @@ Admin mengelola di `/admin` (tab Otak AI, Suara, Avatar Simli) tanpa menyentuh `
 - Suara baru ElevenLabs harus sudah ada di akun (My Voices); ID diperiksa saat ditambahkan.
 
 ## Data dan cadangan
-- **Postgres** (volume `penyiar_pg-data`): pengguna, sesi login, materi, catatan pembuatan materi.
-- **Volume `penyiar_app-data`**: log siaran (`logs/*.jsonl`), log giliran riset (`sessions/<id>/turns.jsonl`), kuota harian, cache audio. Ini file tambah-saja untuk riset; sengaja tidak di database.
+- **Postgres** (volume `penyiar_pg-data`) menyimpan SEMUA data aplikasi: pengguna, sesi login, materi, setelan admin, daftar suara dan wajah, persona, prompt berversi, kata terlarang dan kalimat aman Supervisor, kuota harian, serta log siaran dan log giliran riset. Data awal (persona, prompt, dll.) dibaca dari `backend/seed/` sekali saat pertama jalan.
+- **Volume `penyiar_app-data`** hanya cache audio (boleh hilang). Berkas lama (`logs/`, `sessions/`, `data/`) dari sebelum v2.15 diimpor sekali: `docker compose exec app python -m app.cli import-files --data-dir /data/data --log-dir /data/logs --sessions-dir /data/sessions` (aman diulang).
+- **Log untuk riset**: `docker compose exec app python -m app.cli export-session <id> --out /data/export` menulis `<id>.jsonl`, `turns.jsonl`, `blocker.json` (dibaca `scripts/report.py` dan `scripts/evaluate_pilot.py`).
+- **Prompt**: `python -m app.cli prompts list | add <nama> <versi> --file <berkas> | activate <nama> <versi>`. Versi lama tetap tersimpan.
 - **Cadangan harian**: `backup.sh` membuat `db-<waktu>.dump` (pg_dump) dan `app-data-<waktu>.tgz` (tanpa cache audio) di `/opt/penyiar/backups`, menyimpan 14 hari. Pasang sekali:
 
   ```bash

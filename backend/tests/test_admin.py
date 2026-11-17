@@ -13,7 +13,7 @@ SECRETS_KEY = generate_key()
 
 def make_settings(tmp_path, **kw):
     return Settings(
-        LLM_MODE="mock", TTS_MODE="mock", DATA_DIR=str(tmp_path / "data"), LOG_DIR=str(tmp_path / "logs"),
+        LLM_MODE="mock", TTS_MODE="mock", DATA_DIR=str(tmp_path / "data"),
         CACHE_DIR=str(tmp_path / "cache"), AUTH_REQUIRED=True, SECRETS_KEY=SECRETS_KEY,
         SIMLI_FACE_ID_RAKA="face-raka-0001", SIMLI_FACE_ID_SALSA="face-salsa-0001", _env_file=None, **kw,
     )

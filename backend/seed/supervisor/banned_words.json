@@ -1,0 +1,6 @@
+{
+  "_catatan": "Data awal kata terlarang untuk aturan cepat Supervisor (FR-5). Dicocokkan sebagai kata utuh, tanpa beda huruf besar. Kata ambigu (mis. 'anjing' sebagai hewan) sengaja tidak dimasukkan; itu tugas pemeriksaan LLM di mode full. Hanya dibaca saat pertama jalan; sesudahnya sumbernya tabel supervisor_banned_words di database.",
+  "kasar_berat": ["bangsat", "bajingan", "jancok", "jancuk"],
+  "seksual": ["kontol", "memek", "ngentot", "pelacur", "lonte"],
+  "politik_praktis": ["capres", "cawapres", "pilpres", "pemilu", "kampanye", "partai politik"]
+}

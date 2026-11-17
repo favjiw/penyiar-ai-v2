@@ -16,21 +16,19 @@ macet; batas waktu di jalur buat ulang berujung ke kalimat aman.
 from __future__ import annotations
 
 import asyncio
-import json
 import random
 import re
 import time
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
 from app.agents.persona import HistoryEntry, PersonaResult, TurnContext
 from app.llm import LLMClient, LLMError, LLMQuotaExhausted, register_mock
+from app.content import content
 from app.prompts import load_prompt
 from app.schemas import CorrectionMemory, Emotion, LedgerEntry, PersonaCard, SupervisorJudgement, SupervisorMode, SupervisorVerdict
 
-DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "supervisor"
 MAX_WORDS = 90
 REPEAT_WINDOW = 8
 
@@ -40,15 +38,12 @@ _STAGE = re.compile(r"\((?:[^()]{0,30})\)|\[(?:[^\[\]]{0,30})\]")
 _MARKDOWN = re.compile(r"[*#`_~>|]|^\s*[-•]\s+", flags=re.MULTILINE)
 
 
-@lru_cache
 def banned_words() -> tuple[str, ...]:
-    lines = (DATA_DIR / "banned_words.txt").read_text(encoding="utf-8").splitlines()
-    return tuple(l.strip().lower() for l in lines if l.strip() and not l.startswith("#"))
+    return content.banned_words()
 
 
-@lru_cache
 def fallback_bank() -> dict[str, dict[str, list[str]]]:
-    return json.loads((DATA_DIR / "fallback.json").read_text(encoding="utf-8"))
+    return content.fallback_bank()
 
 
 def sanitize(text: str) -> tuple[str, list[str]]:

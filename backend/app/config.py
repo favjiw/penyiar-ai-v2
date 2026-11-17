@@ -44,7 +44,6 @@ class Settings(BaseSettings):
     GEMINI_RPD_PERSONA: int = 0
     GEMINI_RPD_SUPERVISOR: int = 0
     GEMINI_RPD_SHOWRUNNER: int = 0
-    QUOTA_FILE: str = ""  # kosong = <DATA_DIR>/quota.json
     # Laju bawaan untuk perkiraan menit aman bila log sesi belum cukup (diganti otomatis dari log).
     AI_TURNS_PER_MIN_A: float = 4.0
     AI_TURNS_PER_MIN_B: float = 7.0
@@ -142,14 +141,12 @@ class Settings(BaseSettings):
     # Hosting: folder hasil build frontend yang disajikan backend (kosong = frontend/dist di repo, bila ada).
     FRONTEND_DIST: str = ""
 
-    # Penyimpanan
+    # Penyimpanan: data aplikasi ada di database; DATA_DIR hanya tempat SQLite lokal, CACHE_DIR cache audio (berkas biner).
     DATA_DIR: str = str(BACKEND_ROOT / "data")
-    LOG_DIR: str = str(BACKEND_ROOT / "logs")
-    SESSIONS_DIR: str = ""  # kosong = folder `sessions` di samping LOG_DIR; isi per sesi: sessions/<session_id>/
     CACHE_DIR: str = str(BACKEND_ROOT / "cache")
 
     # Database: pengguna, sesi login, dan materi. Contoh Postgres: postgresql+psycopg://user:sandi@host:5432/nama.
-    # Kosong = materi tetap file di DATA_DIR; bila AUTH_REQUIRED, dipakai SQLite <DATA_DIR>/app.db (pengembangan).
+    # Kosong = SQLite <DATA_DIR>/app.db (pengembangan lokal, tes).
     DATABASE_URL: str = ""
     # Kunci induk (Fernet) untuk mengenkripsi kunci API yang disimpan lewat halaman admin. Buat: python -m app.cli gen-secrets-key
     SECRETS_KEY: str = ""
@@ -171,18 +168,14 @@ class Settings(BaseSettings):
         return self
 
     @property
-    def sessions_path(self) -> Path:
-        return Path(self.SESSIONS_DIR) if self.SESSIONS_DIR else Path(self.LOG_DIR).parent / "sessions"
-
-    @property
     def database_url(self) -> str:
-        """URL database yang berlaku; kosong berarti tanpa database (materi disimpan sebagai file)."""
+        """URL database yang berlaku (Postgres di hosting, SQLite lokal bila DATABASE_URL kosong)."""
         url = self.DATABASE_URL.strip()
         if url.startswith("postgres://"):
             url = "postgresql://" + url[len("postgres://"):]
         if url.startswith("postgresql://"):  # tanpa driver eksplisit: pakai psycopg 3
             url = "postgresql+psycopg://" + url[len("postgresql://"):]
-        if not url and self.AUTH_REQUIRED:
+        if not url:  # pengembangan lokal dan tes: SQLite di DATA_DIR; hosting mengisi DATABASE_URL (Postgres)
             url = "sqlite:///" + (Path(self.DATA_DIR) / "app.db").as_posix()
         return url
 
@@ -220,10 +213,6 @@ class Settings(BaseSettings):
         limits = [getattr(self, f"GEMINI_RPD_{r.upper()}", 0) or self.GEMINI_RPD_DEFAULT
                   for r in ("blocker", "persona", "supervisor", "showrunner") if self.model_for(r) == model]
         return min(limits) if limits else self.GEMINI_RPD_DEFAULT
-
-    @property
-    def quota_path(self) -> Path:
-        return Path(self.QUOTA_FILE) if self.QUOTA_FILE else Path(self.DATA_DIR) / "quota.json"
 
     def rpm_for(self, role: str) -> int:
         """RPM untuk satu peran (blocker, persona, ...); 0 berarti pakai default."""

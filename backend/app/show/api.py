@@ -17,10 +17,11 @@ from app.auth import User, require_role, user_from_conn
 from app.blocker.store import BlockerInvalid
 from app.data.personas import load_personas
 from app.schemas import PrecheckRequest, PTTTurnRequest, ShowState, StartShowRequest, VoiceSampleRequest
-from app.session_log import read_log
+from app.session_log import list_sessions, read_events
 from app.show.engine import ShowEngine
 from app.show.mode_a import HumanLedEngine
 from app.show.participants import DEFAULT_AI_IDS
+from app.content import content
 from app.runtime_config import apply_if_idle
 from app.tts.base import TTSError
 from app.show.readiness import build_readiness, rates_from_logs
@@ -78,11 +79,11 @@ async def start_show(req: StartShowRequest, request: Request, _: User = Depends(
         human_name = req.human_name or app.state.settings.HUMAN_HOST_NAME
         engine: ShowEngine = HumanLedEngine(
             app.state.settings, app.state.llm, app.state.tts, blocker, emit=ws.broadcast, audio_dir=audio_dir(request),
-            personas=personas, human_name=human_name, ai_persona=req.ai_persona, **common,
+            personas=personas, human_name=human_name, ai_persona=req.ai_persona, db=app.state.db, **common,
         )
     else:
         engine = ShowEngine(
-            app.state.settings, app.state.llm, app.state.tts, blocker, personas, ws.broadcast, audio_dir(request), mode="B", **common
+            app.state.settings, app.state.llm, app.state.tts, blocker, personas, ws.broadcast, audio_dir(request), mode="B", db=app.state.db, **common
         )
     engine.tts_budget = budget  # peringatan "kuota suara tinggal ±N menit" saat live
     app.state.engine = engine
@@ -96,7 +97,7 @@ START_CREDITS_TIMEOUT_S = 2.5  # Mulai tidak boleh tertahan lama oleh ElevenLabs
 async def _tts_budget(app, mode: str, fresh: bool = False) -> dict:
     """Sisa kredit suara saat mulai + laju per menit; sisa None bila tidak diketahui (tanpa peringatan)."""
     s = app.state.settings
-    rates = rates_from_logs(s.LOG_DIR, mode, s.AI_TURNS_PER_MIN_A if mode == "A" else s.AI_TURNS_PER_MIN_B, s.TTS_CREDITS_PER_MIN)
+    rates = rates_from_logs(app.state.db, mode, s.AI_TURNS_PER_MIN_A if mode == "A" else s.AI_TURNS_PER_MIN_B, s.TTS_CREDITS_PER_MIN)
     left, note = (None, "")
     used_at = app.state.tts.credits_used
     if app.state.tts.primary.name == "elevenlabs":
@@ -176,9 +177,6 @@ async def voices(request: Request, _: User = Depends(require_role("operator"))):
     }
 
 
-SAMPLE_TEXT = "Halo Sobat Hits, gue {name}. Yuk ngobrol santai bareng gue hari ini!"
-
-
 @router.post("/api/voices/sample")
 async def voice_sample(req: VoiceSampleRequest, request: Request, _: User = Depends(require_role("operator"))):
     """Contoh suara untuk tombol "Dengar" sebelum live (PRD v2.7 FR-6). Tidak tersedia saat siaran berjalan."""
@@ -191,7 +189,7 @@ async def voice_sample(req: VoiceSampleRequest, request: Request, _: User = Depe
     tts = request.app.state.tts
     try:
         tts.set_voices({req.persona: req.voice_id} if req.voice_id else {}, list(DEFAULT_AI_IDS))
-        result = await tts.synthesize(SAMPLE_TEXT.format(name=personas[req.persona].name), req.persona)
+        result = await tts.synthesize(content.snippet("voice_sample").format(name=personas[req.persona].name), req.persona)
     except TTSError as e:
         raise HTTPException(422, str(e)[:300])
     name = f"sample_{req.persona}_{hashlib.sha1(result.voice.encode()).hexdigest()[:10]}.{result.ext}"
@@ -242,16 +240,15 @@ async def serve_audio(filename: str, request: Request, _: User = Depends(require
 
 @router.get("/api/logs")
 async def list_logs(request: Request, _: User = Depends(require_role("operator"))):
-    log_dir = Path(request.app.state.settings.LOG_DIR)
-    return [{"session_id": f.stem, "size_bytes": f.stat().st_size} for f in sorted(log_dir.glob("show_*.jsonl"), reverse=True)]
+    return list_sessions(request.app.state.db)
 
 
 @router.get("/api/logs/{session_id}")
 async def get_log(session_id: str, request: Request, _: User = Depends(require_role("operator"))):
-    path = Path(request.app.state.settings.LOG_DIR) / f"{session_id}.jsonl"
-    if not _SAFE_NAME.match(session_id) or not path.exists():
+    events = read_events(request.app.state.db, session_id) if _SAFE_NAME.match(session_id) else []
+    if not events:
         raise HTTPException(404, "Log tidak ditemukan")
-    return list(read_log(path))
+    return events
 
 
 class SimliTokenRequest(BaseModel):
