@@ -33,7 +33,7 @@ from app.config import REPO_ROOT, Settings, get_settings
 from app.db import Database, generation_log
 from app.llm import create_llm_client
 from app.llm.quota import QuotaCounter
-from app.schemas import Blocker, GenerateBlockerRequest
+from app.schemas import Blocker, GenerateBlockerRequest, ShowState
 from app.show.api import router as show_router
 from app.tts import create_tts
 from app.ws import ConnectionManager
@@ -123,8 +123,11 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/health")
     def health(request: Request):
         s: Settings = request.app.state.settings
-        if user_from_conn(request) is None:  # cek kesehatan Docker tanpa login: tanpa rincian model dan kuota
-            return {"status": "ok"}
+        if user_from_conn(request) is None:
+            # Cek kesehatan Docker dan deploy otomatis tanpa login: tanpa rincian model/kuota. `live` supaya
+            # deploy tidak memulai ulang aplikasi di tengah siaran (restart = siaran berhenti).
+            engine = request.app.state.engine
+            return {"status": "ok", "live": engine is not None and engine.state in (ShowState.LIVE, ShowState.PAUSED)}
         llm = request.app.state.llm
         limiters = getattr(llm, "limiters", None)
         return {

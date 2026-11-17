@@ -11,8 +11,25 @@ Aplikasi menyimpan status siaran di memori **satu proses**: satu siaran sekaligu
 
 ## Alur rilis
 1. Push ke GitHub. Workflow `build-image` menjalankan tes (backend + frontend) lalu membangun image dan mengirimnya ke `ghcr.io/<pemilik>/penyiar-ai-v2` dengan tag `sha-<7 huruf>` (dan `latest` dari `main`, atau tag git `v*`/`kp-*`).
-2. Di VPS: `cd /opt/penyiar && ./deploy.sh sha-xxxxxxx` (tanpa argumen memakai `IMAGE_TAG` di `.env`).
-3. **Rollback**: jalankan `./deploy.sh` dengan tag lama.
+2. **Push/merge ke `main` otomatis deploy ke VPS** (job `deploy`): GitHub masuk lewat SSH dengan kunci khusus, VPS menjalankan `deploy-hook.sh`, yang menarik image `sha-<7 huruf>` commit itu. Branch lain hanya menguji dan membangun image.
+   - **Ditunda bila ada siaran live atau jeda** (restart = siaran berhenti): job gagal dengan pesan jelas; jalankan ulang job `deploy` (Re-run) setelah siaran selesai. Pengecekan lewat `GET /api/health` (`"live":true`).
+   - **Rollback otomatis** ke versi sebelumnya bila versi baru tidak sehat dalam 60 detik; job tetap ditandai gagal.
+   - Berkas selain image tidak ikut: perubahan `docker-compose.yml`, `backup.sh`, `deploy-hook.sh`, dan Caddyfile disalin manual ke VPS (lihat bawah).
+3. Manual di VPS: `cd /opt/penyiar && ./deploy.sh sha-xxxxxxx` (tanpa argumen memakai `IMAGE_TAG` di `.env`). **Rollback** manual: jalankan dengan tag lama.
+
+### Pemasangan deploy otomatis (sekali; sudah dilakukan untuk VPS ini)
+Kunci khusus tanpa sandi, dibatasi di VPS hanya untuk menjalankan `deploy-hook.sh` (tidak bisa membuka shell atau meneruskan port):
+
+```bash
+ssh-keygen -t ed25519 -N "" -C github-actions-deploy -f deploy_key
+# di VPS: salin deploy/deploy-hook.sh ke /opt/penyiar (chmod 755), lalu tambahkan ke ~/.ssh/authorized_keys:
+#   command="/opt/penyiar/deploy-hook.sh",restrict ssh-ed25519 AAAA... github-actions-deploy
+gh secret set VPS_SSH_KEY < deploy_key          # lalu hapus deploy_key dan deploy_key.pub dari laptop
+ssh-keyscan -t ed25519 <ip-vps> | gh secret set VPS_KNOWN_HOSTS
+gh secret set VPS_HOST --body <ip-vps>;  gh secret set VPS_USER --body ubuntu
+```
+
+Hook hanya menerima argumen `sha-<7 hex>` (opsional ` force` untuk melewati pengecekan siaran). Mencabut akses: hapus baris `github-actions-deploy` dari `authorized_keys` dan secret `VPS_SSH_KEY`.
 
 ## Pemasangan awal (sekali)
 Prasyarat di VPS: Docker + Compose, Caddy, firewall hanya 22/80/443.

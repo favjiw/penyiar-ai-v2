@@ -52,7 +52,7 @@ def test_password_hash_roundtrip():
 
 # ── gerbang login ────────────────────────────────────────────────────────────
 def test_everything_but_login_and_minimal_health_needs_login(client):
-    assert client.get("/api/health").json() == {"status": "ok"}  # cek Docker tanpa rincian
+    assert client.get("/api/health").json() == {"status": "ok", "live": False}  # cek Docker/deploy tanpa rincian
     for method, path in [("get", "/api/blockers"), ("get", "/api/show"), ("get", "/api/voices"), ("get", "/api/logs"),
                          ("get", "/api/auth/me"), ("get", "/api/users"), ("get", "/audio/x.mp3"),
                          ("post", "/api/ptt/turn"), ("post", "/api/blocker/generate"), ("post", "/api/simli/token")]:
@@ -233,3 +233,17 @@ def test_auth_off_keeps_everything_open_and_uses_files(tmp_path):
         me = c.get("/api/auth/me").json()
         assert me["auth_required"] is False and me["user"]["role"] == "admin"
         assert c.get("/api/users").status_code == 404  # tanpa login tidak ada pengguna untuk dikelola
+
+
+def test_health_tells_deploy_whether_a_show_is_live(client):
+    anon = TestClient(client.app)
+    assert anon.get("/api/health").json()["live"] is False
+    as_user(client, "opa")
+    v = client.post("/api/blocker/generate", json={"tema": "Kopi", "jumlah_topik": 1, "jumlah_varian": 2}).json()["variants"][0]
+    client.post("/api/blockers", json=v)
+    assert client.post("/api/show/start", json={"blocker_id": v["id"], "mode": "B"}).status_code == 200
+    assert anon.get("/api/health").json() == {"status": "ok", "live": True}  # deploy otomatis harus menunda
+    client.post("/api/show/pause")
+    assert anon.get("/api/health").json()["live"] is True  # jeda tetap siaran yang berjalan
+    client.post("/api/show/stop")
+    assert anon.get("/api/health").json()["live"] is False

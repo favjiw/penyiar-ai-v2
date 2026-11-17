@@ -1,4 +1,4 @@
-# PRD Penyiar AI Co-Host Live TikTok HITS (v2.12)
+# PRD Penyiar AI Co-Host Live TikTok HITS (v2.13)
 
 | | |
 |---|---|
@@ -960,6 +960,7 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 - **v2.9 (17 Nov 2026) [F]:** KP dibekukan tanpa Supervisor (FR-5 keluar dari cakupan KP, tetap untuk riset; §2.2, FR-5); avatar Simli menggantikan karakter 2D di `/stage` untuk kedua mode, 2D jadi cadangan otomatis (§2.2, §2.3, §8, FR-10, §16).
 - **v2.10 (17 Nov 2026) [F]:** hosting di VPS dengan database Postgres direncanakan; satu image Docker, CI GitHub Actions, HTTPS via Caddy, login sementara (§16 tahap 11, `deploy/README.md`); model suara ElevenLabs v4 dengan voice settings, gain per penyiar, dan pilihan tampilan karakter realistis atau kartun 2D (FR-6, FR-10).
 - **v2.11 (17 Nov 2026) [F]:** login aplikasi dan Postgres (§6.4, §8, §16 tahap 11): pengguna dengan peran `penyiar`/`operator`/`admin`, sesi cookie, REST + WebSocket terlindungi, halaman `/pengguna` dan CLI pengelolaan; materi dan catatan pembuatan materi di Postgres; basic auth Caddy dicabut; cadangan harian.
+- **v2.13 (17 Nov 2026) [F]:** deploy otomatis: push ke `main` men-deploy image ke VPS lewat kunci SSH khusus yang dibatasi ke `deploy-hook.sh`; ditunda saat ada siaran live (`/api/health` memuat `live`), rollback otomatis bila tidak sehat (§16 tahap 11, `deploy/README.md`).
 - **v2.12 (17 Nov 2026) [F]:** hasil generate materi tidak lagi tersimpan otomatis; operator memilih varian yang disimpan (FR-1, §6.4, §1.3.2 R2).
 
 ---
