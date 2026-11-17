@@ -95,8 +95,19 @@ export const api = {
   readiness: (mode: 'A' | 'B', target_minutes: number) => request<Readiness>(`/api/readiness?mode=${mode}&target_minutes=${target_minutes}`),
   voices: () => request<VoiceCatalog>('/api/voices'),
   generate: (req: GenerateRequest) => post<GenerateResponse>('/api/blocker/generate', req),
-  regenerate: (id: string, hindari: string[]) => post<RegenerateResponse>(`/api/blocker/${id}/regenerate`, { hindari }),
-  save: (b: Blocker) => request<Blocker>(`/api/blocker/${b.id}`, { method: 'PUT', body: JSON.stringify(b) }),
+  /** Buat ulang satu varian (boleh belum disimpan); hasilnya juga belum disimpan. */
+  regenerate: (blocker: Blocker, hindari: string[]) => post<RegenerateResponse>('/api/blocker/regenerate', { blocker, hindari }),
+  /** Simpan varian hasil generate yang dipilih operator (generate sendiri tidak menyimpan). Aman diulang. */
+  create: (b: Blocker) => post<Blocker>('/api/blockers', b),
+  /** Simpan editan; materi yang belum pernah disimpan dibuat dulu (mengedit = memilih untuk disimpan). */
+  save: async (b: Blocker): Promise<Blocker> => {
+    try {
+      return await request<Blocker>(`/api/blocker/${b.id}`, { method: 'PUT', body: JSON.stringify(b) })
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) return post<Blocker>('/api/blockers', b)
+      throw e
+    }
+  },
   lock: (id: string) => post<Blocker>(`/api/blocker/${id}/lock`),
   newVersion: (id: string) => post<Blocker>(`/api/blocker/${id}/version`),
   list: () => request<Blocker[]>('/api/blockers'),

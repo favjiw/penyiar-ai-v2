@@ -66,9 +66,9 @@ def patch_clock(clock: FakeClock) -> None:
 
 async def make_blocker(tmp: Path, durasi: int):
     store = BlockerStore(tmp / "data")
-    gen = BlockerGenerator(MockLLMClient(delay_sec=0), "mock", store)
+    gen = BlockerGenerator(MockLLMClient(delay_sec=0), "mock")
     blockers, _ = await gen.generate(GenerateBlockerRequest(tema="Zodiak", durasi_menit=durasi, jumlah_varian=2))
-    return store.lock(blockers[0].id)
+    return store.lock(store.create_draft(blockers[0]).id)
 
 
 def settings(tmp: Path, **kw) -> Settings:

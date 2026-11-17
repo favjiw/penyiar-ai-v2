@@ -33,7 +33,7 @@ export function PrepPage({ live, headerExtras }: { live: LiveSession; headerExtr
   const [variants, setVariants] = useState<Blocker[]>([])
   const [editing, setEditing] = useState<Blocker | null>(null)
   const [showSaved, setShowSaved] = useState(false)
-  const [busy, setBusy] = useState<null | 'generate' | `regen:${string}`>(null)
+  const [busy, setBusy] = useState<null | 'generate' | `regen:${string}` | `save:${string}`>(null)
   const [elapsed, setElapsed] = useState(0)
   const [error, setError] = useState<{ message: string; issues: string[] } | null>(null)
   const [lastGen, setLastGen] = useState<{ n: number; topics: number; durasi: number } | null>(null)
@@ -71,10 +71,10 @@ export function PrepPage({ live, headerExtras }: { live: LiveSession; headerExtr
     const tick = window.setInterval(() => setElapsed((Date.now() - started) / 1000), 200)
     try {
       const res = await api.generate({ tema: t, catatan: (opts?.catatan ?? catatan).trim(), durasi_menit: durasi, jumlah_varian: 3 })
+      // Hasil generate belum tersimpan: operator memilih yang disimpan ("Simpan" atau "Simpan & pakai").
       setVariants(res.variants)
-      setSelectedId(res.variants[0]?.id ?? '')
+      setSelectedId('')
       setLastGen({ n: res.variants.length, topics: res.variants[0]?.topics.length ?? topicsForDuration(durasi), durasi })
-      await refresh()
     } catch (e) {
       const err = e instanceof ApiError ? e : new ApiError(String(e), 0)
       setError({ message: err.message, issues: err.issues })
@@ -90,11 +90,26 @@ export function PrepPage({ live, headerExtras }: { live: LiveSession; headerExtr
     setError(null)
     try {
       const res = await api.regenerate(
-        v.id,
+        v,
         variants.filter((x) => x.id !== v.id).map((x) => x.variant_label),
       )
       setVariants((vs) => vs.map((x) => (x.id === v.id ? res.variant : x)))
-      if (selectedId === v.id) setSelectedId(res.variant.id)
+    } catch (e) {
+      setError({ message: e instanceof ApiError ? e.message : String(e), issues: [] })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  /** Simpan varian yang dipilih (tidak ada yang tersimpan otomatis); `use` = sekaligus dipakai untuk siaran. */
+  const saveVariant = async (v: Blocker, use: boolean) => {
+    if (busy) return
+    setBusy(`save:${v.id}`)
+    setError(null)
+    try {
+      const saved = await api.create(v)
+      setVariants((vs) => vs.map((x) => (x.id === v.id ? saved : x)))
+      if (use) setSelectedId(saved.id)
       await refresh()
     } catch (e) {
       setError({ message: e instanceof ApiError ? e.message : String(e), issues: [] })
@@ -103,12 +118,23 @@ export function PrepPage({ live, headerExtras }: { live: LiveSession; headerExtr
     }
   }
 
-  const afterEdit = (latest: Blocker, use: boolean) => {
+  const afterEdit = async (latest: Blocker, use: boolean) => {
     const oldId = editing?.id // bisa beda dari latest.id bila editor membuat versi baru
-    setVariants((vs) => (vs.some((x) => x.id === oldId) ? vs.map((x) => (x.id === oldId ? latest : x)) : [latest]))
-    if (use || selectedId === oldId) setSelectedId(latest.id)
     setEditing(null)
-    void refresh()
+    // Editan sudah menyimpan materinya. "Pakai materi ini" pada varian yang belum diedit harus menyimpannya dulu.
+    const list = await refresh()
+    let final = latest
+    if (use && list && !list.some((b) => b.id === latest.id)) {
+      try {
+        final = await api.create(latest)
+        await refresh()
+      } catch (e) {
+        setError({ message: e instanceof ApiError ? e.message : String(e), issues: [] })
+        return
+      }
+    }
+    setVariants((vs) => (vs.some((x) => x.id === oldId) ? vs.map((x) => (x.id === oldId ? final : x)) : [final]))
+    if (use || selectedId === oldId) setSelectedId(final.id)
   }
 
   const useSaved = (b: Blocker) => {
@@ -118,7 +144,7 @@ export function PrepPage({ live, headerExtras }: { live: LiveSession; headerExtr
   }
 
   if (editing) {
-    return <MateriEditor initial={editing} targetMinutes={editing.durasi_menit ?? durasi} onClose={(b) => afterEdit(b, false)} onUse={(b) => afterEdit(b, true)} />
+    return <MateriEditor initial={editing} targetMinutes={editing.durasi_menit ?? durasi} onClose={(b) => void afterEdit(b, false)} onUse={(b) => void afterEdit(b, true)} />
   }
 
   const temaVariants = variants.length ? variants[0].tema : ''
@@ -238,19 +264,26 @@ export function PrepPage({ live, headerExtras }: { live: LiveSession; headerExtr
           {variants.length === 0 ? (
             <p className="prep-empty">Ketik tema lalu tekan “Buat materi”. Tiga pilihan materi akan muncul di sini.</p>
           ) : (
-            <div className="prep-cards">
-              {variants.map((v) => (
-                <MateriCard
-                  key={v.id}
-                  materi={v}
-                  selected={v.id === selectedId}
-                  busy={busy === `regen:${v.id}`}
-                  onUse={() => setSelectedId(v.id)}
-                  onEdit={() => setEditing(v)}
-                  onRegenerate={() => void regenerate(v)}
-                />
-              ))}
-            </div>
+            <>
+              {variants.some((v) => !all.some((b) => b.id === v.id)) && (
+                <p className="prep-hint">Materi yang belum disimpan hilang kalau halaman dimuat ulang atau kamu membuat materi baru. Pilih “Simpan” untuk menyimpannya.</p>
+              )}
+              <div className="prep-cards">
+                {variants.map((v) => (
+                  <MateriCard
+                    key={v.id}
+                    materi={v}
+                    selected={v.id === selectedId}
+                    saved={all.some((b) => b.id === v.id)}
+                    busy={busy === `regen:${v.id}` || busy === `save:${v.id}`}
+                    onUse={() => (all.some((b) => b.id === v.id) ? setSelectedId(v.id) : void saveVariant(v, true))}
+                    onSave={() => void saveVariant(v, false)}
+                    onEdit={() => setEditing(v)}
+                    onRegenerate={() => void regenerate(v)}
+                  />
+                ))}
+              </div>
+            </>
           )}
         </section>
       </div>

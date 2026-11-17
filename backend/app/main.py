@@ -43,6 +43,7 @@ logger = logging.getLogger("app")
 
 
 class RegenerateRequest(BaseModel):
+    blocker: Blocker = Field(description="varian yang dibuat ulang (boleh belum disimpan)")
     hindari: list[str] = Field(default_factory=list, description="variant_label varian lain yang sedang tampil")
 
 
@@ -65,7 +66,7 @@ def build_app(settings: Settings | None = None) -> FastAPI:
         app.state.settings = settings
         app.state.llm = llm
         app.state.store = store
-        app.state.generator = BlockerGenerator(llm, settings.model_for("blocker"), store)
+        app.state.generator = BlockerGenerator(llm, settings.model_for("blocker"))
         app.state.tts = create_tts(settings)
         app.state.ws = ConnectionManager()
         app.state.engine = None
@@ -146,6 +147,11 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     async def list_blockers(request: Request, generation_id: str | None = None, locked: bool | None = None, _=Depends(require_role("operator"))):
         return request.app.state.store.list(generation_id=generation_id, locked=locked)
 
+    @app.post("/api/blockers", status_code=201)
+    async def save_chosen(blocker: Blocker, request: Request, _=Depends(require_role("operator"))) -> Blocker:
+        """Simpan varian hasil generate yang dipilih operator. Aman diulang; yang sudah terkunci tidak ditimpa."""
+        return request.app.state.store.create_draft(blocker)
+
     @app.get("/api/blocker/{blocker_id}")
     async def get_blocker(blocker_id: str, request: Request, _=Depends(require_role("operator"))) -> Blocker:
         return request.app.state.store.get(blocker_id)
@@ -162,12 +168,11 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     async def new_version(blocker_id: str, request: Request, _=Depends(require_role("operator"))) -> Blocker:
         return request.app.state.store.new_version(blocker_id)
 
-    @app.post("/api/blocker/{blocker_id}/regenerate")
-    async def regenerate(blocker_id: str, body: RegenerateRequest, request: Request, _=Depends(require_role("operator"))):
-        store: BlockerStore = request.app.state.store
-        if store.get(blocker_id).locked:
+    @app.post("/api/blocker/regenerate")
+    async def regenerate(body: RegenerateRequest, request: Request, _=Depends(require_role("operator"))):
+        if body.blocker.locked:
             raise HTTPException(409, "Blocker terkunci tidak dibuat ulang; buat versi baru")
-        blocker, meta = await request.app.state.generator.regenerate_variant(blocker_id, body.hindari)
+        blocker, meta = await request.app.state.generator.regenerate_variant(body.blocker, body.hindari)
         log_generation(request.app, "regenerate", blocker.tema, meta, [blocker])
         return {"variant": blocker, "latency_ms": meta.latency_ms, "attempts": meta.attempts, "model": meta.model}
 
