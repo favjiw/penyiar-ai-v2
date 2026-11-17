@@ -177,6 +177,40 @@ def test_prompter_mic_state_reaches_console(client):
         assert st["mic"] is None  # prompter pergi: status mic ikut hilang
 
 
+def test_simli_token_requires_api_key(client):
+    r = client.post("/api/simli/token", json={})
+    assert r.status_code == 400
+    assert "SIMLI_API_KEY" in r.json()["detail"]
+
+
+def test_simli_token_proxies_to_simli(client, monkeypatch):
+    import httpx
+
+    client.app.state.settings.SIMLI_API_KEY = "dummy-simli-key"
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def post(self, url, headers=None, json=None):
+            assert url == "https://api.simli.ai/compose/token"
+            assert headers["x-simli-api-key"] == "dummy-simli-key"
+            assert json["faceId"] == "bf13113a-355a-4d97-8b90-4edccd1da7b2"
+            return httpx.Response(200, json={"session_token": "test-simli-session-token-xyz"})
+
+    monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
+    r = client.post("/api/simli/token", json={})
+    assert r.status_code == 200
+    assert r.json()["session_token"] == "test-simli-session-token-xyz"
+
+
+
 def test_undo_topic_endpoint(client):
     blocker = locked_blocker(client)
     client.post("/api/show/start", json={"blocker_id": blocker["id"], "mode": "B"})

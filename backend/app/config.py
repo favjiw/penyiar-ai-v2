@@ -116,6 +116,10 @@ class Settings(BaseSettings):
     SUMMARY_EVERY_TURNS: int = 10  # ringkasan obrolan diperbarui tiap sekian giliran yang keluar dari jendela riwayat; 0 = mati
     HUMAN_HOST_NAME: str = ""  # mode A (Tahap 4); keputusan terbuka PRD §15.2 #2
 
+    # Simli (Avatar Video)
+    SIMLI_API_KEY: str = ""
+    SIMLI_FACE_ID: str = "bf13113a-355a-4d97-8b90-4edccd1da7b2"
+
     # Uji: "llm" dan/atau "tts" untuk mensimulasikan galat
     FAIL_INJECT: str = ""
 
