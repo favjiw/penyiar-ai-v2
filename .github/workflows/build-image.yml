@@ -1,7 +1,8 @@
 name: build-image
 
-# Uji, lalu bangun image dan kirim ke GHCR. Deploy ke VPS dijalankan terpisah (deploy/deploy.sh),
-# jadi tidak ada kunci SSH di GitHub. Bisa dijalankan manual dari branch mana pun (workflow_dispatch).
+# Uji, bangun image dan kirim ke GHCR; push ke main lalu otomatis deploy ke VPS (job `deploy`).
+# Deploy memakai kunci SSH khusus yang di VPS hanya boleh menjalankan deploy/deploy-hook.sh (lihat deploy/README.md).
+# Branch lain hanya menguji dan membangun image; deploy manual: ./deploy.sh sha-xxxxxxx di VPS.
 on:
   push:
     branches: [main, "feat/**", "deploy/**"]
@@ -81,3 +82,28 @@ jobs:
           build-args: GIT_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Hanya push ke main. Satu deploy pada satu waktu; deploy yang sedang jalan tidak dibatalkan.
+  deploy:
+    needs: image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - name: Deploy ke VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          echo "$VPS_SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          echo "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          # Tag image = 7 huruf pertama SHA commit, sama dengan tag dari docker/metadata-action di job image.
+          # Perintah di sisi server ditentukan authorized_keys (deploy-hook.sh); argumen ini hanya tag-nya.
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            "$VPS_USER@$VPS_HOST" "sha-${GITHUB_SHA::7}"
