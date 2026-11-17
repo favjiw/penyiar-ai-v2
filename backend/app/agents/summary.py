@@ -8,6 +8,8 @@ dimasukkan secara ekstraktif (kalimat pembuka tiap giliran) supaya konteks tidak
 
 from __future__ import annotations
 
+from app.tuning import tuning
+
 import asyncio
 import logging
 import re
@@ -15,12 +17,12 @@ from typing import Optional
 
 from pydantic import BaseModel
 
-from app.agents.persona import HISTORY_TURNS, HistoryEntry
+from app.agents.persona import HistoryEntry
 from app.llm import LLMClient, register_mock
+from app.content import content
 from app.prompts import load_prompt
 
 logger = logging.getLogger(__name__)
-MAX_CHARS = 1000
 SNIPPET_WORDS = 14
 
 
@@ -33,14 +35,19 @@ def _extract(entries: list[HistoryEntry]) -> str:
 
 
 class ConversationSummary:
-    def __init__(self, llm: LLMClient, model: str, every: int, window: int = HISTORY_TURNS):
-        self._llm, self._model, self._every, self._window = llm, model, every, window
+    def __init__(self, llm: LLMClient, model: str, every: int, window: int | None = None):
+        self._llm, self._model, self._every = llm, model, every
+        self._fixed_window = window  # None = ikut HISTORY_TURNS yang berlaku (setelan admin)
         self.prompt = load_prompt("summary")
         self.text = ""
         self.upto = 0  # jumlah entri riwayat yang sudah masuk ringkasan
         self.updates = 0
         self.failures = 0
         self._task: Optional[asyncio.Task] = None
+
+    @property
+    def _window(self) -> int:
+        return self._fixed_window if self._fixed_window is not None else tuning.HISTORY_TURNS
 
     @property
     def enabled(self) -> bool:
@@ -58,7 +65,7 @@ class ConversationSummary:
         self._task = asyncio.create_task(self._update(chunk, cut))
 
     async def _update(self, chunk: list[HistoryEntry], cut: int) -> None:
-        prompt = f"RINGKASAN SEBELUMNYA: {self.text or '(belum ada)'}\n\nGILIRAN BARU:\n" + "\n".join(f"{e.name}: {e.text}" for e in chunk)
+        prompt = content.text("sum.prompt", previous=self.text or content.snippet("sum.none"), turns="\n".join(f"{e.name}: {e.text}" for e in chunk))
         try:
             resp = await self._llm.generate(
                 prompt, model=self._model, system_instruction=self.prompt.text, response_schema=SummaryOutput, temperature=0.3
@@ -66,12 +73,12 @@ class ConversationSummary:
             new = SummaryOutput.model_validate(resp.parsed).summary.strip()
             if not new:
                 raise ValueError("ringkasan kosong")
-            self.text = new[-MAX_CHARS:]
+            self.text = new[-tuning.SUMMARY_MAX_CHARS:]
             self.updates += 1
         except Exception as e:  # kuota, jaringan, atau JSON rusak: jangan kehilangan konteks, jangan menghentikan siaran
             self.failures += 1
             logger.warning("Ringkasan obrolan gagal (%s); memakai kutipan ekstraktif", e)
-            self.text = f"{self.text} {_extract(chunk)}".strip()[-MAX_CHARS:]
+            self.text = f"{self.text} {_extract(chunk)}".strip()[-tuning.SUMMARY_MAX_CHARS:]
         self.upto = cut
 
     def cancel(self) -> None:

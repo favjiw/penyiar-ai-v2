@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 
 from app.blocker.store import new_blocker_id, normalize, now_iso
 from app.llm import LLMClient, LLMError, register_mock
+from app.content import content
 from app.prompts import load_prompt
 from app.schemas import (
     Blocker,
@@ -113,22 +114,16 @@ def to_blocker(variant: DraftVariant, req: GenerateBlockerRequest, generation_id
 
 
 def build_prompt(req: GenerateBlockerRequest, hindari: list[str] | None = None, issues: list[str] | None = None) -> str:
-    lines = [
-        f"TEMA: {req.tema.strip()}",
-        f"JUMLAH_TOPIK: {req.jumlah_topik}",
-        f"JUMLAH_VARIAN: {req.jumlah_varian}",
-    ]
+    t = content.text
+    lines = [t("gen.tema", tema=req.tema.strip()), t("gen.topik", n=req.jumlah_topik), t("gen.varian", n=req.jumlah_varian)]
     if req.durasi_menit:
-        lines.append(
-            f"DURASI SIARAN: {req.durasi_menit} menit (±{minutes_per_topic(req.durasi_menit, req.jumlah_topik)} menit per topik); "
-            "topik harus cukup kaya untuk diobrolin selama itu."
-        )
+        lines.append(t("gen.durasi", menit=req.durasi_menit, per_topik=minutes_per_topic(req.durasi_menit, req.jumlah_topik)))
     if req.catatan.strip():
-        lines.append(f"CATATAN PRODUSER (sasaran penonton, nuansa, hal yang dihindari): {req.catatan.strip()}")
+        lines.append(t("gen.catatan", catatan=req.catatan.strip()))
     if hindari:
-        lines.append("Varian yang sudah ada (pakai sudut pandang yang berbeda dari ini): " + "; ".join(hindari))
+        lines.append(t("gen.hindari", labels="; ".join(hindari)))
     if issues:
-        lines.append("Jawaban sebelumnya ditolak karena: " + "; ".join(issues) + ". Perbaiki.")
+        lines.append(t("gen.issues", issues="; ".join(issues)))
     return "\n".join(lines)
 
 

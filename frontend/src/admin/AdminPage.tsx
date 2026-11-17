@@ -7,15 +7,20 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { adminApi, api, ApiError, type AdminConfig, type AdminFace, type AdminField, type AdminVoice, type TestService } from '../api'
 import { useAuth } from '../auth/AuthContext'
 import { Button, Pill } from '../ui'
+import { PersonasSection, PromptsSection, SnippetsSection, SupervisorSection } from './ContentSections'
 import '../auth/auth.css'
 import './admin.css'
 
-type Tab = 'ai' | 'suara' | 'simli'
+type Tab = 'ai' | 'suara' | 'simli' | 'siaran' | 'persona' | 'prompt' | 'supervisor'
 
 const TABS: { id: Tab; label: string; groups: string[] }[] = [
   { id: 'ai', label: 'Otak AI', groups: ['gemini', 'compat'] },
   { id: 'suara', label: 'Suara', groups: ['tts'] },
   { id: 'simli', label: 'Avatar (Simli)', groups: ['simli'] },
+  { id: 'siaran', label: 'Alur siaran', groups: ['show', 'kuota'] },
+  { id: 'persona', label: 'Penyiar AI', groups: ['persona'] },
+  { id: 'prompt', label: 'Prompt & teks', groups: [] },
+  { id: 'supervisor', label: 'Supervisor', groups: ['supervisor'] },
 ]
 
 const TEST_FOR: Record<string, { service: TestService; label: string }> = {
@@ -111,6 +116,14 @@ export function AdminPage() {
       ))}
 
       {tab === 'suara' && <VoicesSection />}
+      {tab === 'persona' && <PersonasSection />}
+      {tab === 'prompt' && (
+        <>
+          <PromptsSection />
+          <SnippetsSection />
+        </>
+      )}
+      {tab === 'supervisor' && <SupervisorSection />}
       {tab === 'simli' && <FacesSection faces={faces} inUse={cfg ? facesInUse(cfg) : new Set()} onChange={load} />}
     </main>
   )
@@ -240,6 +253,11 @@ function FieldRow({
                 {c}
               </option>
             ))}
+          </select>
+        ) : f.kind === 'bool' ? (
+          <select value={shown} onChange={(e) => onChange(e.target.value)}>
+            <option value="true">Ya</option>
+            <option value="false">Tidak</option>
           </select>
         ) : f.kind === 'face' ? (
           <select value={shown} onChange={(e) => onChange(e.target.value)}>

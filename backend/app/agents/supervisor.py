@@ -15,6 +15,8 @@ macet; batas waktu di jalur buat ulang berujung ke kalimat aman.
 
 from __future__ import annotations
 
+from app.tuning import tuning
+
 import asyncio
 import random
 import re
@@ -29,8 +31,6 @@ from app.content import content
 from app.prompts import load_prompt
 from app.schemas import CorrectionMemory, Emotion, LedgerEntry, PersonaCard, SupervisorJudgement, SupervisorMode, SupervisorVerdict
 
-MAX_WORDS = 90
-REPEAT_WINDOW = 8
 
 _EMOJI = re.compile("[\U0001F000-\U0001FAFF☀-➿⬀-⯿️]")
 # Keterangan panggung dalam kurung dibuang; *penekanan* cukup dibuang bintangnya (lewat _MARKDOWN).
@@ -72,13 +72,13 @@ def rule_violations(text: str, history: list[HistoryEntry]) -> list[str]:
     words = norm.split()
     if not words:
         hits.append("empty")
-    if len(words) > MAX_WORDS:
+    if len(words) > tuning.SUPERVISOR_MAX_WORDS:
         hits.append("too_long")
     padded = f" {norm} "
     for w in banned_words():
         if f" {_normalize(w)} " in padded:
             hits.append(f"banned:{w}")
-    if norm and any(norm == _normalize(h.text) for h in history[-REPEAT_WINDOW:]):
+    if norm and any(norm == _normalize(h.text) for h in history[-tuning.SUPERVISOR_REPEAT_WINDOW:]):
         hits.append("exact_repeat")
     return hits
 
@@ -87,7 +87,7 @@ def _repeat_free_pick(candidates: list[str], history: list[HistoryEntry], rng: r
     if not candidates:
         return ""
     offset = used.get(persona_id, 0)
-    recent = {_normalize(h.text) for h in history[-REPEAT_WINDOW:]}
+    recent = {_normalize(h.text) for h in history[-tuning.SUPERVISOR_REPEAT_WINDOW:]}
     for i in range(len(candidates)):
         c = candidates[(offset + i) % len(candidates)]
         if _normalize(c) not in recent:
@@ -137,20 +137,25 @@ class Supervisor:
     # ── LLM (mode full) ──────────────────────────────────────────────────────
 
     def judgement_prompt(self, persona: PersonaCard, text: str, ctx: TurnContext) -> str:
-        claims = [f"- {e.claim} (giliran {e.turn})" for e in self.ledger if e.persona == persona.id]
+        t = content.text
+        none = content.snippet("sup.none_item")
+        claims = [t("sup.ledger_line", claim=e.claim, turn=e.turn) for e in self.ledger if e.persona == persona.id]
         topic = f'"{ctx.topic.judul}"' if ctx.topic else ctx.segment
+        extra = (
+            (t("sup.seg_transition", next=ctx.transition_to.judul) if ctx.transition_to else "")
+            + (t("sup.seg_nudge", nudge_to=ctx.nudge_to) if ctx.nudge_to else "")
+            + (content.snippet("sup.seg_opening") if ctx.segment == "opening" and ctx.turn_in_segment == 0 else "")
+        )
+        plain_none = content.snippet("sup.none_plain")
         lines = [
-            f"PERSONA: {persona.name}. Lawan bicara: {ctx.partner_name}.",
-            "Fakta inti:\n" + "\n".join(f"- {f}" for f in persona.background_facts),
-            "Pendapat:\n" + "\n".join(f"- {o}" for o in persona.opinions),
-            "Klaim sebelumnya (ledger):\n" + ("\n".join(claims) if claims else "- (belum ada)"),
-            f"SEGMEN: {ctx.segment}; topik aktif: {topic}"
-            + (f"; giliran ini transisi ke \"{ctx.transition_to.judul}\"" if ctx.transition_to else "")
-            + (f"; giliran ini boleh menawarkan pindah ke \"{ctx.nudge_to}\" di akhir (kode halus dari produser, bukan pelanggaran)" if ctx.nudge_to else "")
-            + ("; giliran pembukaan (boleh menyebut diri AI)" if ctx.segment == "opening" and ctx.turn_in_segment == 0 else ""),
-            "Topik yang sudah lewat: " + ("; ".join(ctx.topics_done) or "(belum ada)"),
-            "Obrolan terakhir:\n" + ("\n".join(f"{h.name}: {h.text}" for h in ctx.history[-6:]) or "(belum ada)"),
-            f"UCAPAN KANDIDAT ({persona.name}): {text}",
+            t("sup.persona", name=persona.name, partner=ctx.partner_name),
+            t("sup.facts", items="\n".join(f"- {f}" for f in persona.background_facts)),
+            t("sup.opinions", items="\n".join(f"- {o}" for o in persona.opinions)),
+            t("sup.ledger", items="\n".join(claims) if claims else none),
+            t("sup.segment", segment=ctx.segment, topic=topic, extra=extra),
+            t("sup.done", topics="; ".join(ctx.topics_done) or plain_none),
+            t("sup.history", history="\n".join(f"{h.name}: {h.text}" for h in ctx.history[-6:]) or plain_none),
+            t("sup.candidate", name=persona.name, text=text),
         ]
         return "\n\n".join(lines)
 
@@ -174,7 +179,7 @@ class Supervisor:
 
     def fallback(self, persona: PersonaCard, segment: str = "topic", history: Optional[list[HistoryEntry]] = None) -> str:
         """Kalimat aman sesuai segmen (sapaan di opening, pamit di closing), bergiliran supaya tidak berulang."""
-        bank = fallback_bank().get(persona.id, {}).get(segment) or fallback_bank().get(persona.id, {}).get("topic") or ["Oke, lanjut."]
+        bank = fallback_bank().get(persona.id, {}).get(segment) or fallback_bank().get(persona.id, {}).get("topic") or [content.snippet("fallback_last_resort")]
         key = f"{persona.id}:{segment}"
         return _repeat_free_pick(bank, history or [], self._rng, key, self._fallback_used)
 
@@ -250,12 +255,9 @@ class Supervisor:
             return Reviewed(clean, out.emotion, verdict, candidate, prompt)
 
         # Pelanggaran: buat ulang sekali dengan memori koreksi, lalu periksa lagi.
-        correction_text = (judgement.correction if judgement and judgement.correction else "") or f"Tulis ulang tanpa: {', '.join(h for h in hits if h not in cleanup)}."
+        correction_text = (judgement.correction if judgement and judgement.correction else "") or content.text("sup.rewrite", hits=", ".join(h for h in hits if h not in cleanup))
         if judgement and judgement.responsiveness == "violation":
-            correction_text = (
-                f"{correction_text} Jawab pertanyaan lawan bicara secara langsung, lugas, dan tuntas dulu sebelum "
-                "mengaitkan ke rundown atau melempar ke penonton."
-            )
+            correction_text = content.text("sup.answer_first", correction=correction_text)
         correction = CorrectionMemory(
             persona_reminder=correction_text,
             facts_to_enforce=[f"{e.claim}" for e in self.ledger if e.persona == persona.id][-3:],

@@ -19,6 +19,8 @@ skip (audio dihentikan, lompat ke topik berikutnya atau penutup), stop.
 
 from __future__ import annotations
 
+from app.tuning import tuning
+
 import asyncio
 import logging
 import random
@@ -60,7 +62,6 @@ from app.tts import FailoverTTS, TTSError
 logger = logging.getLogger(__name__)
 
 Emit = Callable[[str, dict[str, Any]], Awaitable[None]]
-PLAYBACK_GRACE_SEC = 5.0
 TRANSCRIPT_KEEP = 60
 # Peringatan untuk konsol (DESIGN.md §4): kode → (tingkat, judul, pesan dengan istilah UI).
 ALERT_TEXT: dict[str, tuple[str, str, str]] = {
@@ -74,8 +75,6 @@ ALERT_TEXT: dict[str, tuple[str, str, str]] = {
     "engine_error": ("yellow", "Ada gangguan di sistem", "Siaran tetap jalan. Lihat Detail teknis."),
 }
 ALERT_STAGE_CODE = {"tts": "tts_silent", "quota": "llm_fallback", "engine": "ai_failing"}
-OPENING_CLOSING_MAX_TURNS = 24  # batas atas giliran Opening/Closing berbasis waktu (cegah AI mengulang-ulang)
-OPENING_CLOSING_TARGET_S = 180  # Opening ±3 menit, Closing ±3 menit (PRD v2.7 FR-1, §1.3.3)
 
 
 @dataclass
@@ -256,13 +255,13 @@ class ShowEngine:
             t = next((x for x in self.blocker.topics if x.id == topic.get("id")), None)
             if t is not None:
                 return t.menit * 60
-        return OPENING_CLOSING_TARGET_S
+        return tuning.OPENING_CLOSING_TARGET_S
 
     def show_clock(self) -> dict[str, Any]:
         """Jam siaran (PRD v2.7): total aktif vs target durasi, dan waktu segmen (topik/Opening/Closing)
         vs perkiraan menitnya. Klien menghitung maju sendiri selama `running`."""
         active = self._active_s()
-        plan_min = OPENING_CLOSING_TARGET_S * 2 / 60 + sum(t.menit for t in self.blocker.topics)
+        plan_min = tuning.OPENING_CLOSING_TARGET_S * 2 / 60 + sum(t.menit for t in self.blocker.topics)
         return {
             "elapsed_s": round(active, 1),
             "target_s": int((self.blocker.durasi_menit or plan_min) * 60),
@@ -460,11 +459,11 @@ class ShowEngine:
         maksimal OPENING_CLOSING_MAX_TURNS giliran). Materi lama tanpa durasi: tepat `min_turns` giliran seperti dulu."""
         if not self.blocker.durasi_menit:
             return turns >= min_turns
-        if turns >= OPENING_CLOSING_MAX_TURNS:
+        if turns >= tuning.OPENING_CLOSING_MAX_TURNS:
             return True
         # Perkiraan audio setelah giliran ini: rata-rata giliran segmen ini, supaya giliran penutup tidak jauh melewati target.
         avg = self._seg_audio_s / max(1, turns - 1) if turns > 1 else 0.0
-        return turns >= min_turns and self._seg_audio_s + avg * 0.5 >= OPENING_CLOSING_TARGET_S
+        return turns >= min_turns and self._seg_audio_s + avg * 0.5 >= tuning.OPENING_CLOSING_TARGET_S
 
     def _sync_point_limit(self) -> None:
         """Mode B: batas poin = menit topik ÷ jumlah poin (keputusan Favian 8 Nov 2026), minimal POINT_TIME_LIMIT_S
@@ -935,7 +934,7 @@ class ShowEngine:
             await self._emit_clock(True)
             if t.record.audio_url and self._has_owner():
                 try:
-                    await asyncio.wait_for(self._playback_done.wait(), t.duration_s + PLAYBACK_GRACE_SEC)
+                    await asyncio.wait_for(self._playback_done.wait(), t.duration_s + tuning.PLAYBACK_GRACE_SEC)
                 except asyncio.TimeoutError:
                     logger.warning("Tidak ada laporan selesai untuk giliran %d; lanjut", t.turn)
             else:

@@ -13,6 +13,8 @@ dihitung, karena salah pindah lebih merugikan daripada terlewat (tombol N tetap 
 
 from __future__ import annotations
 
+from app.tuning import tuning
+
 import re
 from typing import Optional
 
@@ -38,10 +40,6 @@ _STOP = set(
     "kalau kalo gimana apa ada jadi biar buat sama lagi pada tapi terus trus nah oke oh eh hmm soal tentang bareng mereka "
     "sobat hits sekarang abis habis".split()
 )
-TRANSITION_MIN_OVERLAP = 0.6
-TRANSITION_MIN_WORDS = 3
-TITLE_MIN_OVERLAP = 0.7
-TITLE_MIN_WORDS = 2
 
 
 def _norm(text: str) -> str:
@@ -87,15 +85,15 @@ def detect_topic_switch(
     trans = _content_words(transition)
     common = trans & words
     # Kalimat pindah dibacakan hampir utuh (≥80%, ≥4 kata isi), atau sebagian (≥60%) bersama ajakan pindah.
-    if len(trans) >= TRANSITION_MIN_WORDS and len(common) >= TRANSITION_MIN_WORDS and (
-        (len(common) >= 4 and _overlap(trans, words) >= 0.8) or (_overlap(trans, words) >= TRANSITION_MIN_OVERLAP and _INVITE.search(t))
+    if len(trans) >= tuning.VOICE_SWITCH_TRANSITION_MIN_WORDS and len(common) >= tuning.VOICE_SWITCH_TRANSITION_MIN_WORDS and (
+        (len(common) >= 4 and _overlap(trans, words) >= 0.8) or (_overlap(trans, words) >= tuning.VOICE_SWITCH_TRANSITION_OVERLAP and _INVITE.search(t))
     ):
         return "transisi"
     title = _content_words(next_title or "")
     if (
         not next_is_closing
-        and len(title) >= TITLE_MIN_WORDS
-        and _overlap(title, words) >= TITLE_MIN_OVERLAP
+        and len(title) >= tuning.VOICE_SWITCH_TITLE_MIN_WORDS
+        and _overlap(title, words) >= tuning.VOICE_SWITCH_TITLE_OVERLAP
         and _INVITE.search(t)
     ):
         return "judul"

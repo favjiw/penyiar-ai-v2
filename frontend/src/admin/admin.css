@@ -15,3 +15,12 @@
 .adm-warn code { font-weight: 400; }
 .adm-sub { margin: 12px 0 0; font-size: 16px; }
 .adm-id { font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; color: var(--n-600); }
+.adm-text { font: inherit; font-weight: 400; font-size: 15px; line-height: 1.5; width: 100%; min-height: 80px; padding: 10px 14px; border: 1.5px solid var(--n-300); border-radius: var(--r-input); background: var(--n-0); color: var(--ink); resize: vertical; box-sizing: border-box; }
+.adm-text--tall { min-height: 320px; font-family: ui-monospace, Consolas, monospace; font-size: 14px; }
+.adm-text:focus-visible { outline: 2px solid var(--brand-blue); outline-offset: 1px; }
+.adm-snippet { display: flex; flex-direction: column; gap: 8px; padding: 12px 0; border-top: 1px solid var(--n-200); }
+.adm-snippet code { font-size: 13px; }
+.adm-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.adm-chip { font: inherit; font-size: 14px; padding: 4px 10px; border-radius: 999px; border: 1.5px solid var(--n-300); background: var(--n-0); cursor: pointer; }
+.adm-chip:hover { border-color: var(--danger); color: var(--danger); }
+.adm summary { cursor: pointer; }

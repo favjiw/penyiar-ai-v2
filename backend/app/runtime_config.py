@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 class Field_:
     key: str
     label: str
-    kind: str = "text"  # text | secret | number | choice | face
+    kind: str = "text"  # text | secret | number | bool | choice | face
     help: str = ""
     choices: tuple[str, ...] = ()
 
@@ -80,6 +80,84 @@ GROUPS: list[tuple[str, str, list[Field_]]] = [
             Field_("SIMLI_FACE_ID_RAKA", "Wajah Raka", "face", "Pilih dari daftar wajah di bawah."),
             Field_("SIMLI_FACE_ID_SALSA", "Wajah Salsa", "face"),
             Field_("SIMLI_FACE_ID", "Wajah bawaan", "face", "Dipakai bila wajah penyiar belum dipilih."),
+        ],
+    ),
+    (
+        "show",
+        "Alur siaran",
+        [
+            Field_("POINT_TIME_LIMIT_S", "Batas waktu satu poin (detik)", "number", "Mode AI + AI. 0 = tanpa batas waktu per poin."),
+            Field_("POINT_WRAP_S", "Mulai menutup poin (detik sebelum habis)", "number", "Harus lebih kecil dari batas waktu poin."),
+            Field_("POINT_MIN_TURNS", "Giliran minimal sebelum poin boleh ditutup dini", "number", ""),
+            Field_("POINT_LIMIT_FROM_TOPIC", "Batas poin dari menit topik", "bool", "Ya: batas = menit topik dibagi jumlah poin (minimal batas di atas)."),
+            Field_("POINT_TRIM_FACTOR", "Faktor perapian teks", "number", "Teks dirapikan bila lebih dari sekian kali anggaran kata."),
+            Field_("TTS_WORDS_PER_SEC", "Kata per detik suara", "number", "Mengubah sisa waktu jadi anggaran kata (ElevenLabs belum terukur)."),
+            Field_("OPENING_CLOSING_TARGET_S", "Durasi Opening dan Closing (detik)", "number", "Tiap bagian."),
+            Field_("OPENING_CLOSING_MAX_TURNS", "Giliran maksimal Opening/Closing", "number", ""),
+            Field_("SHOWRUNNER_POLICY", "Kebijakan pengarah acara", "choice", "llm = dinilai model; lainnya untuk pembanding riset.", ('llm', 'fixed_turns', 'coverage_only')),
+            Field_("SHOWRUNNER_EVERY_K", "Pengarah acara menilai tiap … giliran", "number", ""),
+            Field_("MIN_TURNS_PER_TOPIC", "Giliran minimal per topik", "number", ""),
+            Field_("MAX_TURNS_PER_TOPIC", "Giliran maksimal per topik", "number", "Batas keras; lewat ini topik dipindah paksa."),
+            Field_("SHOWRUNNER_TIMEOUT_MS", "Batas waktu pengarah acara (ms)", "number", ""),
+            Field_("MODE_A_NUDGE_AFTER_S", "Kode halus pindah topik setelah (detik)", "number", "Mode penyiar + AI. 0 = mati."),
+            Field_("VOICE_TOPIC_SWITCH", "Pindah topik dari ucapan penyiar", "bool", "Mode penyiar + AI."),
+            Field_("VOICE_SWITCH_UNDO_S", "Jendela batal pindah topik (detik)", "number", ""),
+            Field_("VOICE_SWITCH_TRANSITION_OVERLAP", "Deteksi: kemiripan kalimat pindah topik", "number", "0 sampai 1."),
+            Field_("VOICE_SWITCH_TRANSITION_MIN_WORDS", "Deteksi: kata minimal kalimat pindah topik", "number", ""),
+            Field_("VOICE_SWITCH_TITLE_OVERLAP", "Deteksi: kemiripan judul topik berikutnya", "number", "0 sampai 1."),
+            Field_("VOICE_SWITCH_TITLE_MIN_WORDS", "Deteksi: kata minimal judul topik", "number", ""),
+            Field_("PIPELINE_DEPTH", "Kedalaman antrean giliran (pipelining)", "number", ""),
+            Field_("PLAYBACK_GRACE_SEC", "Toleransi laporan selesai-putar (detik)", "number", ""),
+            Field_("SUMMARY_EVERY_TURNS", "Ringkasan obrolan tiap … giliran", "number", "0 = mati."),
+            Field_("SUMMARY_MAX_CHARS", "Panjang ringkasan maksimal (karakter)", "number", ""),
+            Field_("SESSION_TARGET_MIN", "Petunjuk durasi total (menit)", "number", "Petunjuk lunak untuk pengarah acara; 0 = tanpa."),
+            Field_("HUMAN_HOST_NAME", "Nama penyiar manusia bawaan", "text", ""),
+        ],
+    ),
+    (
+        "persona",
+        "Gaya penyiar AI",
+        [
+            Field_("PERSONA_TEMPERATURE", "Temperature", "number", "Makin tinggi makin bervariasi (0 sampai 2)."),
+            Field_("HISTORY_TURNS", "Riwayat obrolan di prompt (giliran)", "number", ""),
+            Field_("CATCHPHRASE_PROBABILITY", "Peluang catchphrase", "number", "0 sampai 1, per giliran setelah jeda."),
+            Field_("CATCHPHRASE_COOLDOWN_TURNS", "Jeda catchphrase (giliran)", "number", ""),
+            Field_("ANTI_REPETITION_WINDOW", "Jendela anti-pembuka-berulang (giliran)", "number", ""),
+            Field_("TRIGRAM_REPEAT_LIMIT", "Batas pengulangan tiga kata", "number", ""),
+            Field_("TRIGRAM_HISTORY_WINDOW", "Jendela pengulangan tiga kata (giliran)", "number", ""),
+            Field_("GREETING_EVERY_TURNS", "Menyapa Sobat Hits tiap … giliran", "number", ""),
+            Field_("PERSONA_TIMEOUT_MS", "Batas waktu penyiar AI (ms)", "number", "Lewat ini diganti kalimat aman."),
+            Field_("PERSONA_FAILURES_BEFORE_WRAP", "Gagal beruntun sebelum menutup siaran", "number", ""),
+            Field_("PERSONA_FAILURE_WRAP_SEC", "Lama gagal sebelum menutup siaran (detik)", "number", ""),
+        ],
+    ),
+    (
+        "supervisor",
+        "Supervisor",
+        [
+            Field_("SUPERVISOR_MODE", "Mode Supervisor", "choice", "off = tanpa Supervisor (produk KP); rules = aturan saja; full = aturan + model.", ('off', 'rules', 'full')),
+            Field_("PILOT_CONDITION", "Kondisi pilot riset", "choice", "D memaksa Supervisor penuh. Untuk eksperimen, bukan siaran biasa.", ('A', 'B', 'C', 'D')),
+            Field_("SUPERVISOR_MAX_REGEN", "Buat ulang maksimal", "number", ""),
+            Field_("SUPERVISOR_TIMEOUT_MS", "Batas waktu Supervisor, mode AI + AI (ms)", "number", ""),
+            Field_("SUPERVISOR_TIMEOUT_MS_MODE_A", "Batas waktu Supervisor, mode penyiar + AI (ms)", "number", ""),
+            Field_("SUPERVISOR_MAX_WORDS", "Ucapan terlalu panjang (kata)", "number", ""),
+            Field_("SUPERVISOR_REPEAT_WINDOW", "Jendela pengulangan persis (giliran)", "number", ""),
+        ],
+    ),
+    (
+        "kuota",
+        "Kuota, kesiapan, dan batas teknis",
+        [
+            Field_("GEMINI_RPM_DEFAULT", "Batas permintaan per menit (bawaan)", "number", ""),
+            Field_("GEMINI_RPD_DEFAULT", "Kuota harian per model (bawaan)", "number", ""),
+            Field_("AI_TURNS_PER_MIN_A", "Laju awal giliran AI per menit, penyiar + AI", "number", "Dipakai sampai ada log sesi."),
+            Field_("AI_TURNS_PER_MIN_B", "Laju awal giliran AI per menit, AI + AI", "number", ""),
+            Field_("TTS_CREDITS_PER_MIN", "Laju kredit suara per menit", "number", ""),
+            Field_("TTS_QUOTA_ALERT_MIN", "Peringatan kredit suara (menit tersisa)", "number", ""),
+            Field_("TTS_TIMEOUT_SEC", "Batas waktu suara (detik)", "number", ""),
+            Field_("TTS_RETRIES", "Ulang suara utama sebelum cadangan", "number", ""),
+            Field_("SIMLI_MAX_SESSION_S", "Batas satu sambungan Simli (detik)", "number", ""),
+            Field_("SIMLI_MAX_IDLE_S", "Simli diputus bila sepi (detik)", "number", ""),
         ],
     ),
 ]
@@ -181,9 +259,23 @@ class RuntimeConfig:
                     raise ConfigError("SECRETS_KEY belum diatur di server; kunci API belum bisa disimpan dari halaman ini")
             raw = raw.strip() if spec.kind in ("secret", "face") else raw
             validate_value(key, raw)
+            if spec.kind == "bool":
+                raw = raw.strip().lower()
+                if raw not in ("true", "false"):
+                    raise ConfigError(f"{spec.label}: pilih Ya atau Tidak")
             if spec.kind == "choice" and raw not in spec.choices:
                 raise ConfigError(f"{spec.label}: pilih salah satu dari {', '.join(spec.choices)}")
             plan.append((key, raw))
+        merged = self.effective()
+        for key, raw in plan:
+            if raw is None:
+                merged[key] = self._base[key]
+            elif SPEC[key].kind != "secret":
+                merged[key] = validate_value(key, raw)
+        try:
+            Settings(_env_file=None, **{k: v for k, v in merged.items() if v is not None})
+        except ValidationError as e:
+            raise ConfigError("; ".join(err["msg"] for err in e.errors())) from e
         with self.db.engine.begin() as conn:
             for key, raw in plan:
                 if raw is None:
@@ -215,7 +307,7 @@ class RuntimeConfig:
                     item["is_set"] = bool(current)
                     item["masked"] = _mask(str(current or ""))
                 else:
-                    item["value"] = _text(current)
+                    item["value"] = str(bool(current)).lower() if f.kind == "bool" else _text(current)
                 items.append(item)
             groups.append({"id": gid, "label": label, "fields": items})
         return {"groups": groups, "secrets_enabled": self.box.enabled, "pending": self.pending}
