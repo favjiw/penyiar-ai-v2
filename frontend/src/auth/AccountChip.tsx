@@ -53,9 +53,14 @@ export function AccountChip() {
             </span>
           </div>
           {can('admin') && (
-            <a className="acct__item" role="menuitem" href="/pengguna">
-              Kelola pengguna
-            </a>
+            <>
+              <a className="acct__item" role="menuitem" href="/admin">
+                Halaman admin
+              </a>
+              <a className="acct__item" role="menuitem" href="/pengguna">
+                Kelola pengguna
+              </a>
+            </>
           )}
           {!changing ? (
             <button className="acct__item" role="menuitem" onClick={() => setChanging(true)}>

@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { api } from './api'
 import { AccountChip } from './auth/AccountChip'
 import { AuthGate, useAuth } from './auth/AuthContext'
+import { AdminPage } from './admin/AdminPage'
 import { UsersPage } from './auth/UsersPage'
 import { LivePanel } from './console/LivePanel'
 import { PrepPage } from './console/prep/PrepPage'
@@ -108,6 +109,7 @@ function Routes() {
   if (path === '/prompter') return <PrompterPage />
   if (path === '/stage') return <StagePage />
   if (path === '/pengguna') return <UsersPage />
+  if (path === '/admin') return <AdminPage />
   if (DevGallery && path === '/_ui')
     return (
       <Suspense fallback={null}>

@@ -21,6 +21,7 @@ from app.session_log import read_log
 from app.show.engine import ShowEngine
 from app.show.mode_a import HumanLedEngine
 from app.show.participants import DEFAULT_AI_IDS
+from app.runtime_config import apply_if_idle
 from app.tts.base import TTSError
 from app.show.readiness import build_readiness, rates_from_logs
 from app.tts.catalog import load_voice_catalog
@@ -53,6 +54,7 @@ async def start_show(req: StartShowRequest, request: Request, _: User = Depends(
     running = current(request)
     if running is not None and running.state != ShowState.ENDED:
         raise HTTPException(409, f"Siaran {running.session_id} masih berjalan; stop dulu")
+    apply_if_idle(app)  # setelan admin yang menunggu siaran selesai
     personas = load_personas()
     if req.mode == "A" and req.ai_persona not in personas:
         raise HTTPException(422, "Mode A: pilih ai_persona raka atau salsa")  # sebelum mengunci apa pun
@@ -121,6 +123,7 @@ async def readiness(request: Request, mode: str = "B", target_minutes: int = 60,
     """Cek kesiapan tanpa memanaskan suara (header konsol): menit aman per layanan, PERKIRAAN."""
     if mode not in ("A", "B"):
         raise HTTPException(422, "mode harus A atau B")
+    apply_if_idle(request.app)
     return await _readiness(request.app, mode, max(1, min(240, target_minutes)))
 
 
@@ -203,6 +206,7 @@ async def voice_sample(req: VoiceSampleRequest, request: Request, _: User = Depe
 async def precheck(request: Request, req: Optional[PrecheckRequest] = None, _: User = Depends(require_role("operator"))):
     """Cek pra-live (§5.1): model terisi, TTS dipanaskan (cold start suara library)."""
     app = request.app
+    apply_if_idle(app)
     running = current(request)
     if req is not None and (running is None or running.state == ShowState.ENDED):
         try:  # panaskan suara yang dipilih (kosong = bawaan); tidak menyentuh pilihan selama siaran berjalan

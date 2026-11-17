@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from sqlalchemy import insert
 
+from app.admin import router as admin_router
 from app.auth import AuthService, require_role, user_from_conn
 from app.auth import router as auth_router
 from app.blocker import (
@@ -31,11 +32,15 @@ from app.blocker import (
 from app.blocker.store import now_iso
 from app.config import REPO_ROOT, Settings, get_settings
 from app.db import Database, generation_log
+from app.faces import FaceCatalog
 from app.llm import create_llm_client
 from app.llm.quota import QuotaCounter
+from app.runtime_config import RuntimeConfig
 from app.schemas import Blocker, GenerateBlockerRequest, ShowState
+from app.secretbox import SecretBox
 from app.show.api import router as show_router
 from app.tts import create_tts
+from app.tts.catalog import catalog as voice_catalog
 from app.ws import ConnectionManager
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -53,8 +58,7 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.quota = QuotaCounter(settings.quota_path, settings.rpd_for_model)
-        llm = create_llm_client(settings, quota=app.state.quota)
-        # Database (Postgres di hosting): pengguna, sesi login, materi. Tanpa URL: materi file, tanpa login.
+        # Database (Postgres di hosting): pengguna, sesi login, materi, setelan admin. Tanpa URL: materi file, tanpa login.
         db = Database(settings.database_url) if settings.database_url else None
         if db is not None:
             db.create_all()
@@ -62,14 +66,23 @@ def build_app(settings: Settings | None = None) -> FastAPI:
         app.state.auth = AuthService(db, settings) if db is not None else None
         if settings.AUTH_REQUIRED and app.state.auth is None:
             raise RuntimeError("AUTH_REQUIRED=true membutuhkan database")
-        store = DbBlockerStore(db) if db is not None else BlockerStore(settings.DATA_DIR)
         app.state.settings = settings
+        app.state.engine = None
+        # Setelan dari halaman admin menimpa .env; diterapkan SEBELUM klien LLM/TTS dibuat.
+        voice_catalog.configure(db)
+        app.state.runtime_config = app.state.faces = None
+        if db is not None:
+            app.state.runtime_config = RuntimeConfig(db, settings, SecretBox(settings.SECRETS_KEY))
+            app.state.faces = FaceCatalog(db)
+            app.state.faces.seed(settings)
+            app.state.runtime_config.apply_to_settings()
+        llm = create_llm_client(settings, quota=app.state.quota)
+        store = DbBlockerStore(db) if db is not None else BlockerStore(settings.DATA_DIR)
         app.state.llm = llm
         app.state.store = store
         app.state.generator = BlockerGenerator(llm, settings.model_for("blocker"))
         app.state.tts = create_tts(settings)
         app.state.ws = ConnectionManager()
-        app.state.engine = None
         Path(settings.LOG_DIR).mkdir(parents=True, exist_ok=True)
         logger.info(
             "Siap: LLM_MODE=%s TTS_MODE=%s database=%s login=%s", settings.LLM_MODE, settings.TTS_MODE,
@@ -78,12 +91,14 @@ def build_app(settings: Settings | None = None) -> FastAPI:
         yield
         if app.state.engine is not None:
             await app.state.engine.stop()
+        voice_catalog.configure(None)  # kembali ke daftar dari file supaya tidak menunjuk database yang sudah ditutup
         if db is not None:
             db.dispose()
 
     app = FastAPI(title="Penyiar AI v2", lifespan=lifespan)
     app.include_router(show_router)
     app.include_router(auth_router)
+    app.include_router(admin_router)
 
     @app.exception_handler(BlockerNotFound)
     async def _not_found(_: Request, e: BlockerNotFound):

@@ -70,6 +70,9 @@ export function UsersPage() {
     <main className="users">
       <div className="users__top">
         <h1>Pengguna</h1>
+        <a className="ui-btn" href="/admin">
+          Admin
+        </a>
         <a className="ui-btn" href="/">
           Kembali ke konsol
         </a>

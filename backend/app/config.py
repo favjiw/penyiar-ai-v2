@@ -151,6 +151,8 @@ class Settings(BaseSettings):
     # Database: pengguna, sesi login, dan materi. Contoh Postgres: postgresql+psycopg://user:sandi@host:5432/nama.
     # Kosong = materi tetap file di DATA_DIR; bila AUTH_REQUIRED, dipakai SQLite <DATA_DIR>/app.db (pengembangan).
     DATABASE_URL: str = ""
+    # Kunci induk (Fernet) untuk mengenkripsi kunci API yang disimpan lewat halaman admin. Buat: python -m app.cli gen-secrets-key
+    SECRETS_KEY: str = ""
 
     # Login aplikasi. Mati (bawaan) = tanpa login, untuk pengembangan lokal dan tes; hosting WAJIB menyalakannya.
     AUTH_REQUIRED: bool = False
