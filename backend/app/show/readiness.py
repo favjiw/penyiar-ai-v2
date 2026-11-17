@@ -8,14 +8,14 @@ dipakai nilai bawaan dari .env. Semua angka adalah PERKIRAAN.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Optional
+
+from app.session_log import list_sessions, read_events
 
 MIN_SESSION_S = 180  # sesi lebih pendek dari ini tidak dipakai untuk mengukur laju
 RECENT_SESSIONS = 5
-MAX_FILES_SCANNED = 20  # batas berkas log yang dibaca (dibaca sinkron saat cek kesiapan)
+MAX_FILES_SCANNED = 20  # batas sesi yang dibaca (sinkron saat cek kesiapan)
 COMPAT_PREFIX = "compat:"
 
 
@@ -26,20 +26,20 @@ class Rates:
     source: str  # "log" atau "bawaan"
 
 
-def rates_from_logs(log_dir: str | Path, mode: str, default_turns: float, default_credits: float) -> Rates:
-    """Rata-rata giliran AI dan kredit suara per menit dari sesi terakhir mode yang sama."""
-    files = sorted(Path(log_dir).glob("show_*.jsonl"), reverse=True)
+def rates_from_logs(db, mode: str, default_turns: float, default_credits: float) -> Rates:
+    """Rata-rata giliran AI dan kredit suara per menit dari sesi terakhir mode yang sama (log di database)."""
     turns_pm, credits_pm = [], []
-    for f in files[:MAX_FILES_SCANNED]:
+    try:
+        sessions = list_sessions(db, limit=MAX_FILES_SCANNED)
+    except Exception:  # noqa: BLE001 - database bermasalah tidak boleh menggagalkan cek kesiapan atau Mulai
+        sessions = []
+    for sess in sessions:
         if len(turns_pm) >= RECENT_SESSIONS:
             break
         start = end = None
         turns, credits = 0, 0.0
         try:
-            for line in f.read_text(encoding="utf-8").splitlines():
-                ev = json.loads(line)
-                if not isinstance(ev, dict):
-                    continue
+            for ev in read_events(db, sess["session_id"]):
                 t = ev.get("type")
                 if t == "session_start":
                     start = ev
@@ -48,7 +48,7 @@ def rates_from_logs(log_dir: str | Path, mode: str, default_turns: float, defaul
                 elif t == "turn":
                     turns += 1
                     credits += float(ev.get("credit_cost") or 0)
-        except Exception:  # berkas log rusak tidak boleh menggagalkan cek kesiapan atau Mulai
+        except Exception:  # noqa: BLE001
             continue
         if not start or not end or start.get("mode") != mode:
             continue

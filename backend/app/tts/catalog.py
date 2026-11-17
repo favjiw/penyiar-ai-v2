@@ -1,7 +1,7 @@
 """Daftar suara terkurasi yang bisa dipilih operator sebelum live (FR-6).
 
 Sumber: tabel `voices` di database (dikelola admin di halaman admin); diisi satu kali dari
-`app/data/voices.json` saat pertama jalan. Tanpa database (pengembangan, tes) daftar dibaca dari file itu.
+`backend/seed/voices.json` saat pertama jalan. Tanpa database (skrip) daftar dibaca langsung dari seed itu.
 Daftar disimpan di memori dan dimuat ulang setiap admin mengubahnya.
 """
 
@@ -14,7 +14,9 @@ from typing import Literal
 from pydantic import BaseModel
 from sqlalchemy import delete, func, insert, select, update
 
-VOICES_FILE = Path(__file__).resolve().parents[1] / "data" / "voices.json"
+from app.content import SEED_DIR
+
+VOICES_FILE = SEED_DIR / "voices.json"
 SEEDED_FLAG = "meta.voices_seeded"
 
 
@@ -41,7 +43,7 @@ class VoiceCatalog:
         self._items: tuple[VoiceOption, ...] | None = None
 
     def configure(self, db) -> None:
-        """Pakai database (None = file). Mengisi tabel dari voices.json sekali saja."""
+        """Pakai database (None = seed). Mengisi tabel dari seed/voices.json sekali saja."""
         from app.blocker.store import now_iso
         from app.db import app_settings, voices
 

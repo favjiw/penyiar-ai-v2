@@ -1,8 +1,4 @@
-"""Penyimpanan blocker sebagai file JSON (DATA_DIR/blockers/{id}.json).
-
-Blocker yang sudah dikunci tidak bisa diubah; perubahan dibuat sebagai versi
-baru (versi + 1, parent_id = blocker asal), sesuai FR-1.
-"""
+"""Penyimpanan blocker (materi) di database, aturan kunci, normalisasi, dan versi (FR-1)."""
 
 from __future__ import annotations
 
@@ -10,7 +6,6 @@ import re
 import secrets
 import unicodedata
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 from app.schemas import MAX_TOPICS, Blocker
 
@@ -86,32 +81,66 @@ def validate_for_lock(blocker: Blocker) -> None:
 
 
 class BlockerStore:
-    def __init__(self, data_dir: str | Path):
-        self._dir = Path(data_dir) / "blockers"
-        self._dir.mkdir(parents=True, exist_ok=True)
+    """Materi di database (tabel `blockers`). Blocker yang sudah dikunci tidak bisa diubah; perubahan dibuat sebagai
+    versi baru (versi + 1, parent_id = blocker asal), sesuai FR-1.
 
-    def _path(self, blocker_id: str) -> Path:
+    Kolom indeks (tema, versi, locked, ...) disalin dari isi supaya daftar bisa disaring tanpa membuka JSON;
+    isi lengkap ada di kolom `data` dan itulah yang dibaca kembali.
+    """
+
+    def __init__(self, db):
+        self._db = db
+
+    @staticmethod
+    def _check_id(blocker_id: str) -> None:
         if not re.fullmatch(r"blk_[a-z0-9_-]+", blocker_id):
             raise BlockerNotFound(blocker_id)
-        return self._dir / f"{blocker_id}.json"
 
     def save(self, blocker: Blocker) -> Blocker:
-        self._path(blocker.id).write_text(blocker.model_dump_json(indent=2), encoding="utf-8")
+        from sqlalchemy import delete, insert
+
+        from app.db import blockers
+
+        self._check_id(blocker.id)
+        row = {
+            "id": blocker.id,
+            "tema": blocker.tema[:200],
+            "versi": blocker.versi,
+            "locked": blocker.locked,
+            "created_at": blocker.created_at,
+            "generation_id": blocker.generation_id,
+            "parent_id": blocker.parent_id,
+            "data": blocker.model_dump(mode="json"),
+        }
+        with self._db.engine.begin() as conn:  # hapus lalu sisip dalam satu transaksi: sama di SQLite dan Postgres
+            conn.execute(delete(blockers).where(blockers.c.id == blocker.id))
+            conn.execute(insert(blockers).values(**row))
         return blocker
 
     def get(self, blocker_id: str) -> Blocker:
-        path = self._path(blocker_id)
-        if not path.exists():
+        from sqlalchemy import select
+
+        from app.db import blockers
+
+        self._check_id(blocker_id)
+        with self._db.engine.connect() as conn:
+            data = conn.execute(select(blockers.c.data).where(blockers.c.id == blocker_id)).scalar_one_or_none()
+        if data is None:
             raise BlockerNotFound(blocker_id)
-        return Blocker.model_validate_json(path.read_text(encoding="utf-8"))
+        return Blocker.model_validate(data)
 
     def list(self, generation_id: str | None = None, locked: bool | None = None) -> list[Blocker]:
-        items = [Blocker.model_validate_json(p.read_text(encoding="utf-8")) for p in self._dir.glob("blk_*.json")]
+        from sqlalchemy import select
+
+        from app.db import blockers
+
+        stmt = select(blockers.c.data).order_by(blockers.c.created_at.desc())
         if generation_id is not None:
-            items = [b for b in items if b.generation_id == generation_id]
+            stmt = stmt.where(blockers.c.generation_id == generation_id)
         if locked is not None:
-            items = [b for b in items if b.locked == locked]
-        return sorted(items, key=lambda b: b.created_at, reverse=True)
+            stmt = stmt.where(blockers.c.locked == locked)
+        with self._db.engine.connect() as conn:
+            return [Blocker.model_validate(d) for d in conn.execute(stmt).scalars()]
 
     def create_draft(self, blocker: Blocker) -> Blocker:
         """Simpan varian hasil generate sebagai draf (pilihan operator). Id yang sudah ada dan masih draf ditimpa
@@ -169,65 +198,3 @@ class BlockerStore:
             },
         )
         return self.save(copy)
-
-
-class DbBlockerStore(BlockerStore):
-    """Materi di database (tabel `blockers`); aturan kunci, versi, dan normalisasi sama dengan versi file.
-
-    Kolom indeks (tema, versi, locked, ...) disalin dari isi supaya daftar bisa disaring tanpa membuka JSON;
-    isi lengkap ada di kolom `data` dan itulah yang dibaca kembali.
-    """
-
-    def __init__(self, db):  # noqa: D107 - sengaja tidak memanggil super().__init__ (tanpa folder)
-        self._db = db
-
-    @staticmethod
-    def _check_id(blocker_id: str) -> None:
-        if not re.fullmatch(r"blk_[a-z0-9_-]+", blocker_id):
-            raise BlockerNotFound(blocker_id)
-
-    def save(self, blocker: Blocker) -> Blocker:
-        from sqlalchemy import delete, insert
-
-        from app.db import blockers
-
-        self._check_id(blocker.id)
-        row = {
-            "id": blocker.id,
-            "tema": blocker.tema[:200],
-            "versi": blocker.versi,
-            "locked": blocker.locked,
-            "created_at": blocker.created_at,
-            "generation_id": blocker.generation_id,
-            "parent_id": blocker.parent_id,
-            "data": blocker.model_dump(mode="json"),
-        }
-        with self._db.engine.begin() as conn:  # hapus lalu sisip dalam satu transaksi: sama di SQLite dan Postgres
-            conn.execute(delete(blockers).where(blockers.c.id == blocker.id))
-            conn.execute(insert(blockers).values(**row))
-        return blocker
-
-    def get(self, blocker_id: str) -> Blocker:
-        from sqlalchemy import select
-
-        from app.db import blockers
-
-        self._check_id(blocker_id)
-        with self._db.engine.connect() as conn:
-            data = conn.execute(select(blockers.c.data).where(blockers.c.id == blocker_id)).scalar_one_or_none()
-        if data is None:
-            raise BlockerNotFound(blocker_id)
-        return Blocker.model_validate(data)
-
-    def list(self, generation_id: str | None = None, locked: bool | None = None) -> list[Blocker]:
-        from sqlalchemy import select
-
-        from app.db import blockers
-
-        stmt = select(blockers.c.data).order_by(blockers.c.created_at.desc())
-        if generation_id is not None:
-            stmt = stmt.where(blockers.c.generation_id == generation_id)
-        if locked is not None:
-            stmt = stmt.where(blockers.c.locked == locked)
-        with self._db.engine.connect() as conn:
-            return [Blocker.model_validate(d) for d in conn.execute(stmt).scalars()]

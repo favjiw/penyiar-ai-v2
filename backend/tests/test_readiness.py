@@ -5,6 +5,8 @@ from datetime import datetime
 
 from app.config import Settings
 from app.llm.quota import PACIFIC, QuotaCounter
+from tests.dbutil import make_db
+from app.session_log import SessionLogger
 from app.show.readiness import Rates, build_readiness, llm_requests_per_min, rates_from_logs
 
 
@@ -19,7 +21,7 @@ def settings(**kw):
 
 
 def counter(tmp_path, used=0, limit=500):
-    q = QuotaCounter(tmp_path / "q.json", lambda m: limit, lambda: datetime(2026, 11, 8, 12, tzinfo=PACIFIC))
+    q = QuotaCounter(make_db(tmp_path), lambda m: limit, lambda: datetime(2026, 11, 8, 12, tzinfo=PACIFIC))
     if used:
         q.record("flash-lite", used)
     return q
@@ -54,18 +56,21 @@ def test_unknown_tts_credits_are_not_counted_and_free_tts_is_unlimited(tmp_path)
 
 
 def test_rates_come_from_recent_logs_of_the_same_mode(tmp_path):
-    def write(name, mode, minutes, turns, credit):
-        lines = [{"type": "session_start", "mode": mode}]
-        lines += [{"type": "turn", "credit_cost": credit} for _ in range(turns)]
-        lines.append({"type": "session_end", "elapsed_s": minutes * 60})
-        (tmp_path / name).write_text("\n".join(json.dumps(l) for l in lines))
+    db = make_db(tmp_path)
 
-    write("show_20261108_100000_a.jsonl", "B", 10, 70, 30)
-    write("show_20261108_110000_b.jsonl", "A", 10, 40, 0)
-    write("show_20261108_120000_c.jsonl", "B", 1, 10, 30)  # terlalu pendek: diabaikan
-    r = rates_from_logs(tmp_path, "B", default_turns=5, default_credits=200)
+    def write(session_id, mode, minutes, turns, credit):
+        log = SessionLogger(session_id, db)
+        log.event("session_start", mode=mode)
+        for _ in range(turns):
+            log.event("turn", credit_cost=credit)
+        log.event("session_end", elapsed_s=minutes * 60)
+
+    write("show_20261108_100000_a", "B", 10, 70, 30)
+    write("show_20261108_110000_b", "A", 10, 40, 0)
+    write("show_20261108_120000_c", "B", 1, 10, 30)  # terlalu pendek: diabaikan
+    r = rates_from_logs(db, "B", default_turns=5, default_credits=200)
     assert r.source == "log" and r.ai_turns_per_min == 7 and r.tts_credits_per_min == 210
-    assert rates_from_logs(tmp_path / "kosong", "B", 5, 200).source == "bawaan"
+    assert rates_from_logs(make_db(tmp_path, "kosong.db"), "B", 5, 200).source == "bawaan"
 
 
 def test_unknown_service_is_reported_not_treated_as_unlimited(tmp_path):

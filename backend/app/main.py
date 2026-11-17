@@ -27,11 +27,11 @@ from app.blocker import (
     BlockerLocked,
     BlockerNotFound,
     BlockerStore,
-    DbBlockerStore,
 )
 from app.blocker.store import now_iso
 from app.config import REPO_ROOT, Settings, get_settings
-from app.db import Database, generation_log
+from app.content import content
+from app.db import database_for, generation_log
 from app.faces import FaceCatalog
 from app.llm import create_llm_client
 from app.llm.quota import QuotaCounter
@@ -57,43 +57,38 @@ def build_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        app.state.quota = QuotaCounter(settings.quota_path, settings.rpd_for_model)
-        # Database (Postgres di hosting): pengguna, sesi login, materi, setelan admin. Tanpa URL: materi file, tanpa login.
-        db = Database(settings.database_url) if settings.database_url else None
-        if db is not None:
-            db.create_all()
+        # Semua data aplikasi ada di database (Postgres di hosting, SQLite lokal): pengguna, sesi login, materi, setelan
+        # admin, persona, prompt, kata terlarang, kuota, dan log siaran. Berkas hanya untuk cache audio.
+        db = database_for(settings)
         app.state.db = db
-        app.state.auth = AuthService(db, settings) if db is not None else None
-        if settings.AUTH_REQUIRED and app.state.auth is None:
-            raise RuntimeError("AUTH_REQUIRED=true membutuhkan database")
+        app.state.quota = QuotaCounter(db, settings.rpd_for_model)
+        app.state.auth = AuthService(db, settings)
         app.state.settings = settings
         app.state.engine = None
-        # Setelan dari halaman admin menimpa .env; diterapkan SEBELUM klien LLM/TTS dibuat.
+        # Konten (persona, prompt, kata terlarang) dan katalog suara dibaca dari database; data awal diisi sekali dari backend/seed.
+        content.configure(db)
         voice_catalog.configure(db)
-        app.state.runtime_config = app.state.faces = None
-        if db is not None:
-            app.state.runtime_config = RuntimeConfig(db, settings, SecretBox(settings.SECRETS_KEY))
-            app.state.faces = FaceCatalog(db)
-            app.state.faces.seed(settings)
-            app.state.runtime_config.apply_to_settings()
+        # Setelan dari halaman admin menimpa .env; diterapkan SEBELUM klien LLM/TTS dibuat.
+        app.state.runtime_config = RuntimeConfig(db, settings, SecretBox(settings.SECRETS_KEY))
+        app.state.faces = FaceCatalog(db)
+        app.state.faces.seed(settings)
+        app.state.runtime_config.apply_to_settings()
         llm = create_llm_client(settings, quota=app.state.quota)
-        store = DbBlockerStore(db) if db is not None else BlockerStore(settings.DATA_DIR)
         app.state.llm = llm
-        app.state.store = store
+        app.state.store = BlockerStore(db)
         app.state.generator = BlockerGenerator(llm, settings.model_for("blocker"))
         app.state.tts = create_tts(settings)
         app.state.ws = ConnectionManager()
-        Path(settings.LOG_DIR).mkdir(parents=True, exist_ok=True)
         logger.info(
             "Siap: LLM_MODE=%s TTS_MODE=%s database=%s login=%s", settings.LLM_MODE, settings.TTS_MODE,
-            db.dialect if db is not None else "file", "wajib" if settings.AUTH_REQUIRED else "MATI (hanya untuk pengembangan)",
+            db.dialect, "wajib" if settings.AUTH_REQUIRED else "MATI (hanya untuk pengembangan)",
         )
         yield
         if app.state.engine is not None:
             await app.state.engine.stop()
-        voice_catalog.configure(None)  # kembali ke daftar dari file supaya tidak menunjuk database yang sudah ditutup
-        if db is not None:
-            db.dispose()
+        # Kembali ke seed supaya modul-modul ini tidak menunjuk database aplikasi yang sudah berhenti (penting untuk tes).
+        content.configure(None)
+        voice_catalog.configure(None)
 
     app = FastAPI(title="Penyiar AI v2", lifespan=lifespan)
     app.include_router(show_router)
@@ -128,12 +123,8 @@ def build_app(settings: Settings | None = None) -> FastAPI:
             "issues_first_attempt": meta.issues_first_attempt,
             "blocker_ids": [b.id for b in blockers],
         }
-        if app.state.db is not None:
-            with app.state.db.engine.begin() as conn:
-                conn.execute(insert(generation_log).values(ts=line["ts"], data=line))
-            return
-        with open(Path(app.state.settings.LOG_DIR) / "blocker_generations.jsonl", "a", encoding="utf-8") as f:
-            f.write(json.dumps(line, ensure_ascii=False) + "\n")
+        with app.state.db.engine.begin() as conn:
+            conn.execute(insert(generation_log).values(ts=line["ts"], data=line))
 
     @app.get("/api/health")
     def health(request: Request):

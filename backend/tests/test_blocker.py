@@ -2,6 +2,8 @@ import json
 
 import pytest
 
+from tests.dbutil import make_db
+
 from app.blocker import (
     BlockerGenerationError,
     BlockerGenerator,
@@ -35,7 +37,7 @@ def _good(tema="Kopi", topik=3, varian=3):
 
 @pytest.fixture
 def store(tmp_path):
-    return BlockerStore(tmp_path)
+    return BlockerStore(make_db(tmp_path))
 
 
 async def test_generate_mock_returns_distinct_valid_variants(store):

@@ -1,11 +1,8 @@
 """Materi di database (SQLite untuk tes; sama dengan Postgres lewat SQLAlchemy) berperilaku seperti versi file."""
 
-import json
-
 import pytest
 
-from app import cli
-from app.blocker import BlockerInvalid, BlockerLocked, BlockerNotFound, BlockerStore, DbBlockerStore
+from app.blocker import BlockerInvalid, BlockerLocked, BlockerNotFound, BlockerStore
 from app.db import Database
 from app.schemas import BlockerPoint
 from tests.test_persona import make_blocker
@@ -21,7 +18,7 @@ def db(tmp_path):
 
 @pytest.fixture
 def store(db):
-    return DbBlockerStore(db)
+    return BlockerStore(db)
 
 
 def _draft(store, n=2):
@@ -79,21 +76,3 @@ def test_list_filters_by_generation_and_orders_newest_first(store):
     store.save(b)
     assert [x.id for x in store.list()] == [b.id, a.id]
     assert [x.id for x in store.list(generation_id="g1")] == [a.id]
-
-
-def test_import_files_copies_once(tmp_path, db, monkeypatch, capsys):
-    files = BlockerStore(tmp_path / "data")
-    b = make_blocker(2)
-    b.locked = False
-    files.save(b)
-    logs = tmp_path / "logs"
-    logs.mkdir()
-    (logs / "blocker_generations.jsonl").write_text(json.dumps({"ts": "2026-11-01T10:00:00+07:00", "tema": "Kopi"}) + "\n", encoding="utf-8")
-    monkeypatch.setenv("DATABASE_URL", db.url)
-    monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
-    monkeypatch.setenv("LOG_DIR", str(logs))
-    cli.main(["import-files"])
-    cli.main(["import-files"])  # ulang aman
-    out = capsys.readouterr().out
-    assert "1 disalin, 0 sudah ada" in out and "0 disalin, 1 sudah ada" in out
-    assert DbBlockerStore(db).get(b.id) == b

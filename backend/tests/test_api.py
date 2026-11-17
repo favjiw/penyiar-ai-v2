@@ -4,17 +4,17 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings
+from app.db import generation_log
 from app.main import build_app
 
 
 @pytest.fixture
 def client(tmp_path):
     settings = Settings(
-        LLM_MODE="mock", TTS_MODE="mock", DATA_DIR=str(tmp_path / "data"), LOG_DIR=str(tmp_path / "logs"),
+        LLM_MODE="mock", TTS_MODE="mock", DATA_DIR=str(tmp_path / "data"),
         CACHE_DIR=str(tmp_path / "cache"), POINT_TIME_LIMIT_S=0, _env_file=None,  # tes API lama: Showrunner per topik
     )
     with TestClient(build_app(settings)) as c:
-        c.log_dir = tmp_path / "logs"
         yield c
 
 
@@ -75,8 +75,9 @@ def test_full_blocker_flow(client):
     v2 = client.post(f"/api/blocker/{chosen['id']}/version").json()
     assert v2["versi"] == 2 and v2["parent_id"] == chosen["id"]
 
-    log_lines = (client.log_dir / "blocker_generations.jsonl").read_text(encoding="utf-8").splitlines()
-    assert [json.loads(l)["type"] for l in log_lines] == ["generate", "regenerate"]
+    with client.app.state.db.engine.connect() as conn:  # catatan pembuatan materi ada di database
+        logged = [r.data["type"] for r in conn.execute(generation_log.select().order_by(generation_log.c.id))]
+    assert logged == ["generate", "regenerate"]
 
 
 def test_unknown_and_malformed_ids(client):
@@ -98,7 +99,7 @@ def test_frontend_is_served_with_spa_fallback_and_never_shadows_the_api(tmp_path
     (dist / "logo.png").write_bytes(b"png")
     settings = Settings(
         _env_file=None, LLM_MODE="mock", TTS_MODE="mock", FRONTEND_DIST=str(dist), DATA_DIR=str(tmp_path / "data"),
-        LOG_DIR=str(tmp_path / "logs"), CACHE_DIR=str(tmp_path / "cache"),
+        CACHE_DIR=str(tmp_path / "cache"),
     )
     with TestClient(build_app(settings)) as c:
         assert "shell" in c.get("/").text and "shell" in c.get("/stage").text and "shell" in c.get("/prompter").text

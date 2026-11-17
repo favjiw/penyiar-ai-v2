@@ -1,4 +1,5 @@
-from app.agents.hits_style import GREETING_HINT, OPENING_HINT, style_extras
+from app.agents.hits_style import style_extras
+from app.content import content
 from app.data.personas import load_personas
 
 
@@ -12,6 +13,6 @@ def test_personas_load_with_voices_and_assets():
 
 
 def test_style_extras_positions():
-    assert OPENING_HINT in style_extras(0, closing=False)
-    assert GREETING_HINT in style_extras(2, closing=False)
+    assert content.snippet("opening_hint") in style_extras(0, closing=False)
+    assert content.snippet("greeting_hint") in style_extras(2, closing=False)
     assert style_extras(3, closing=False) == style_extras(1, closing=False)

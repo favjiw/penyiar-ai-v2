@@ -4,7 +4,6 @@ from app.config import Settings
 from app.data.personas import load_personas
 from app.llm import MockLLMClient
 from app.schemas import ShowState
-from app.session_log import read_log
 from app.show.mode_a import ModeAEngine, split_sentences
 from app.tts import FailoverTTS, MockTTSProvider
 from tests.test_persona import make_blocker
@@ -12,7 +11,7 @@ from tests.test_persona import make_blocker
 
 def make(tmp_path, tts=None, **overrides):
     overrides.setdefault("POINT_TIME_LIMIT_S", 0)  # tes lama menguji perilaku Showrunner per topik; timer poin diuji di test_point_timer.py
-    settings = Settings(LLM_MODE="mock", TTS_MODE="mock", LOG_DIR=str(tmp_path / "logs"), CACHE_DIR=str(tmp_path / "cache"),
+    settings = Settings(LLM_MODE="mock", TTS_MODE="mock", CACHE_DIR=str(tmp_path / "cache"),
                         SHOWRUNNER_EVERY_K=2, _env_file=None, **overrides)
     events = []
 
@@ -51,7 +50,7 @@ async def test_human_turn_replies_directly_without_filler(tmp_path):
     turn = next(d for t, d in events if t == "turn")
     assert turn["persona"] == "salsa" and turn["parts"] >= 1 and turn["audio_url"]
     assert sum(1 for t, _ in events if t == "audio_part") == turn["parts"] - 1
-    log = list(read_log(engine.log.path))
+    log = engine.log.events()
     rec = next(l for l in log if l["type"] == "turn")
     assert rec["mode"] == "A" and rec["filler"] is None and rec["latency_ms"]["stt"] == 420
     assert any(l["type"] == "stt" and "teh atau kopi" in l["text"] for l in log)

@@ -1,4 +1,4 @@
-# PRD Penyiar AI Co-Host Live TikTok HITS (v2.14)
+# PRD Penyiar AI Co-Host Live TikTok HITS (v2.15)
 
 | | |
 |---|---|
@@ -576,6 +576,7 @@ Kode Supervisor di repo lama masih **stub**: prompt satu baris, tanpa koreksi da
   - semua kontrol bisa dioperasikan tanpa mouse (pintasan keyboard).
 
 ### FR-12 Logging
+- **Penyimpanan [F, 17 Nov 2026, v2.15]:** log siaran, log giliran riset, dan materi per sesi ada di database (tabel `session_events`, `session_turns`, `session_blockers`), bukan berkas. Medan dan jenis event di bawah tetap berlaku (satu baris = satu event/giliran, isi JSON yang sama). Untuk analisis di luar aplikasi: `python -m app.cli export-session <id>` menulis `<id>.jsonl`, `turns.jsonl`, dan `blocker.json`; skrip riset membaca hasil ekspor itu. Penyebutan `sessions/<id>/turns.jsonl` dan `logs/<id>.jsonl` di bawah dibaca sebagai bentuk ekspor.
 - **Log giliran riset [F, 30 Okt 2026]:** `sessions/<session_id>/turns.jsonl`, satu baris per giliran (manusia dan AI) dengan medan `session_id, mode, turn_idx, speaker, is_human, topic_idx, text, t_start, t_end, latency_asr_ms, latency_llm_ms, latency_tts_ms, model, tts_chars, filler_used` (plus nama, segmen, `raw_text`, verdict Supervisor, provider TTS, `tts_fallback_used`, `interrupted`). Blocker terkunci disalin ke `sessions/<session_id>/blocker.json`. `t_start`/`t_end` = detik epoch: audio mulai dan selesai diputar (AI), tombol bicara ditekan dan dilepas (manusia). `latency_asr_ms` pada giliran AI pertama sesudah manusia = ASR ucapan yang memicunya.
 - Satu JSONL per sesi (`logs/{session_id}.jsonl`) dengan event bertipe:
   - `session_start`, `turn`, `showrunner`, `supervisor`, `topic_change`, `point_start`, `point_end` (alasan: timer / early / skip / advance / wrap / stop; batas, audio dibuat, jumlah giliran), `point_trim`, `operator_action`, `stt`, `error`, `quota`, `session_end`.
@@ -704,7 +705,7 @@ Sama dengan `PersonaCard` di repo lama (`id`, `name`, `gender`, `voice`, `speaki
 ---
 
 ## 10. Pedoman prompt [C]
-- Semua prompt disimpan di `backend/app/prompts/*.md`, bukan string panjang di kode, dan diberi versi (`PROMPT_VERSION` dicatat di log).
+- Semua prompt disimpan di database (tabel `prompts`, berversi; yang aktif dipakai), bukan di kode (v2.15). Data awal ada di `backend/seed/prompts/*.md` dan hanya dibaca saat pertama jalan; versi baru lewat `python -m app.cli prompts add`. Versi dan hash prompt dicatat di log `session_start`.
 - **Persona:**
   - pakai ulang profil `natural_v2` dan `hits_style.py`;
   - contoh gaya dari transkrip on-air HITS (tiru nada, jangan salin);
@@ -960,6 +961,7 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 - **v2.9 (17 Nov 2026) [F]:** KP dibekukan tanpa Supervisor (FR-5 keluar dari cakupan KP, tetap untuk riset; §2.2, FR-5); avatar Simli menggantikan karakter 2D di `/stage` untuk kedua mode, 2D jadi cadangan otomatis (§2.2, §2.3, §8, FR-10, §16).
 - **v2.10 (17 Nov 2026) [F]:** hosting di VPS dengan database Postgres direncanakan; satu image Docker, CI GitHub Actions, HTTPS via Caddy, login sementara (§16 tahap 11, `deploy/README.md`); model suara ElevenLabs v4 dengan voice settings, gain per penyiar, dan pilihan tampilan karakter realistis atau kartun 2D (FR-6, FR-10).
 - **v2.11 (17 Nov 2026) [F]:** login aplikasi dan Postgres (§6.4, §8, §16 tahap 11): pengguna dengan peran `penyiar`/`operator`/`admin`, sesi cookie, REST + WebSocket terlindungi, halaman `/pengguna` dan CLI pengelolaan; materi dan catatan pembuatan materi di Postgres; basic auth Caddy dicabut; cadangan harian.
+- **v2.15 (17 Nov 2026) [F]:** kode hanya kode: semua data pindah ke database. Log siaran, log giliran, materi per sesi, kuota harian, persona, prompt berversi, potongan teks prompt (gaya HITS, petunjuk aksi dialog), kata terlarang (per kategori) dan kalimat aman Supervisor ada di tabel; data awal dari `backend/seed/` hanya dibaca saat pertama jalan. Penyimpanan berkas tinggal cache audio. Dihapus: kode filler (tidak dipakai sejak v2.8), `LOG_DIR`/`SESSIONS_DIR`/`QUOTA_FILE`, penyimpanan materi berbentuk berkas. Transkrip referensi HITS pindah ke `research/reference/` (bahan riset, bukan kode aplikasi). Database selalu ada: SQLite lokal bila `DATABASE_URL` kosong.
 - **v2.14 (17 Nov 2026) [F]:** halaman admin (`/admin`): kunci API (Gemini, ElevenLabs, Simli, LLM cadangan), model, setelan suara, daftar suara, daftar wajah Simli dan pilihan wajah per penyiar dikelola dari web, bukan `.env` (§6.4, §8, `deploy/README.md`). Nilai di database menimpa `.env`; kunci API terenkripsi dengan `SECRETS_KEY` dan tidak pernah dikirim balik ke browser; perubahan berlaku tanpa restart dan menunggu siaran selesai bila ada siaran.
 - **v2.13 (17 Nov 2026) [F]:** deploy otomatis: push ke `main` men-deploy image ke VPS lewat kunci SSH khusus yang dibatasi ke `deploy-hook.sh`; ditunda saat ada siaran live (`/api/health` memuat `live`), rollback otomatis bila tidak sehat (§16 tahap 11, `deploy/README.md`).
 - **v2.12 (17 Nov 2026) [F]:** hasil generate materi tidak lagi tersimpan otomatis; operator memilih varian yang disimpan (FR-1, §6.4, §1.3.2 R2).

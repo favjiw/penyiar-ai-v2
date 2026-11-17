@@ -30,7 +30,7 @@ from app.config import Settings  # noqa: E402
 from app.data.personas import load_personas  # noqa: E402
 from app.llm import MockLLMClient  # noqa: E402
 from app.schemas import GenerateBlockerRequest  # noqa: E402
-from app.session_log import read_log  # noqa: E402
+from app.db import Database  # noqa: E402
 from app.show import engine as engine_mod  # noqa: E402
 from app.show import mode_a as mode_a_mod  # noqa: E402
 from app.show.engine import ShowEngine  # noqa: E402
@@ -65,15 +65,16 @@ def patch_clock(clock: FakeClock) -> None:
 
 
 async def make_blocker(tmp: Path, durasi: int):
-    store = BlockerStore(tmp / "data")
+    store = BlockerStore(Database(f"sqlite:///{(tmp / 'sim.db').as_posix()}"))
+    store._db.create_all()
     gen = BlockerGenerator(MockLLMClient(delay_sec=0), "mock")
     blockers, _ = await gen.generate(GenerateBlockerRequest(tema="Zodiak", durasi_menit=durasi, jumlah_varian=2))
     return store.lock(store.create_draft(blockers[0]).id)
 
 
 def settings(tmp: Path, **kw) -> Settings:
-    return Settings(LLM_MODE="mock", TTS_MODE="mock", LOG_DIR=str(tmp / "logs"), CACHE_DIR=str(tmp / "cache"),
-                    SESSIONS_DIR=str(tmp / "sessions"), _env_file=None, **kw)
+    return Settings(LLM_MODE="mock", TTS_MODE="mock", CACHE_DIR=str(tmp / "cache"),
+                    DATA_DIR=str(tmp / "data"), _env_file=None, **kw)
 
 
 async def sim_mode_b(tmp: Path, seed: int, durasi: int, policy: str = "fixed_turns") -> dict:
@@ -94,7 +95,7 @@ async def sim_mode_b(tmp: Path, seed: int, durasi: int, policy: str = "fixed_tur
         await asyncio.sleep(0.01)
         if real_time.perf_counter() - started > 600:
             raise RuntimeError("mode B tidak selesai dalam 10 menit waktu nyata")
-    log = list(read_log(eng.log.path))
+    log = eng.log.events()
     turns = [l for l in log if l["type"] == "turn"]
     per_topic: dict[str, float] = {}
     for t in turns:
@@ -171,7 +172,7 @@ async def sim_mode_a(tmp: Path, seed: int, durasi: int) -> dict:
         await say(rng.choice(HOST_LINES))
     clock_end = eng.show_clock()
     await eng.stop()
-    log = list(read_log(eng.log.path))
+    log = eng.log.events()
     nudges = [l for l in log if l["type"] == "nudge"]
     switches = [l for l in log if l["type"] == "voice_switch" and l["action"] == "switch"]
     topic_times = [l for l in log if l["type"] == "topic_time"]

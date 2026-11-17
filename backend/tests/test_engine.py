@@ -6,7 +6,6 @@ from app.config import Settings
 from app.data.personas import load_personas
 from app.llm import MockLLMClient
 from app.schemas import ShowState
-from app.session_log import read_log
 from app.show.engine import ShowEngine
 from app.tts import FailoverTTS, MockTTSProvider
 from tests.test_persona import make_blocker
@@ -15,7 +14,7 @@ from tests.test_persona import make_blocker
 def make_engine(tmp_path, time_scale=0.0, **overrides):
     overrides.setdefault("POINT_TIME_LIMIT_S", 0)  # tes lama menguji perilaku Showrunner per topik; timer poin diuji di test_point_timer.py
     settings = Settings(
-        LLM_MODE="mock", TTS_MODE="mock", LOG_DIR=str(tmp_path / "logs"), CACHE_DIR=str(tmp_path / "cache"), _env_file=None, **overrides
+        LLM_MODE="mock", TTS_MODE="mock", CACHE_DIR=str(tmp_path / "cache"), _env_file=None, **overrides
     )
     events = []
 
@@ -49,7 +48,7 @@ async def test_mode_b_runs_whole_rundown_and_log_reconstructs_it(tmp_path):
     engine.start()
     await wait_end(engine)
 
-    log = list(read_log(engine.log.path))
+    log = engine.log.events()
     types = [l["type"] for l in log]
     assert types[0] == "session_start" and types[-1] == "session_end"
     assert log[0]["blocker"]["id"] == "blk_test" and log[-1]["reason"] == "completed"
@@ -76,11 +75,11 @@ async def test_skip_jumps_to_next_topic(tmp_path):
     await asyncio.sleep(0.05)  # biarkan giliran berikutnya sudah disiapkan (pipelining)
     await engine.skip()
     await wait_end(engine)
-    turns = [l for l in read_log(engine.log.path) if l["type"] == "turn"]
+    turns = [l for l in engine.log.events() if l["type"] == "turn"]
     t1 = [t for t in turns if t["topic_id"] == "t1"]
     assert len(t1) < 6  # topik 1 dipotong operator
     assert sum(1 for t in turns if t["topic_id"] == "t2") >= 6  # topik 2 tidak ikut terlewati
-    assert any(l["type"] == "operator_action" and l["action"] == "skip" for l in read_log(engine.log.path))
+    assert any(l["type"] == "operator_action" and l["action"] == "skip" for l in engine.log.events())
 
 
 async def test_stop_is_immediate_even_mid_audio(tmp_path):
@@ -93,7 +92,7 @@ async def test_stop_is_immediate_even_mid_audio(tmp_path):
     await engine.stop()
     assert asyncio.get_event_loop().time() - start < 1.0
     assert engine.state == ShowState.ENDED
-    assert list(read_log(engine.log.path))[-1]["reason"] == "stopped"
+    assert engine.log.events()[-1]["reason"] == "stopped"
 
 
 async def test_pause_holds_next_turn(tmp_path):
@@ -115,7 +114,7 @@ async def test_fixed_turns_policy(tmp_path):
     engine, _ = make_engine(tmp_path, SHOWRUNNER_POLICY="fixed_turns", FIXED_TURNS_PER_TOPIC=7)
     engine.start()
     await wait_end(engine)
-    turns = [l for l in read_log(engine.log.path) if l["type"] == "turn"]
+    turns = [l for l in engine.log.events() if l["type"] == "turn"]
     # 7 giliran topik + 1 giliran transisi per topik
     assert sum(1 for t in turns if t["topic_id"] == "t1") == 8
 
@@ -137,7 +136,7 @@ async def test_report_summarizes_session(tmp_path):
     engine, _ = make_engine(tmp_path)
     engine.start()
     await wait_end(engine)
-    lines = list(read_log(engine.log.path))
+    lines = engine.log.events()
     s = summarize(lines)
     assert s["end_reason"] == "completed" and s["turns"] == len([l for l in lines if l["type"] == "turn"])
     assert set(s["topics"]) == {"t1", "t2"} and s["topics"]["t1"]["coverage"] == "3/3"
@@ -154,7 +153,7 @@ async def test_skip_while_next_topic_is_prefetched_moves_one_topic(tmp_path):
         await asyncio.sleep(0.005)
     await engine.skip()
     await wait_end(engine)
-    turns = [l for l in read_log(engine.log.path) if l["type"] == "turn"]
+    turns = [l for l in engine.log.events() if l["type"] == "turn"]
     assert sum(1 for t in turns if t["topic_id"] == "t2") >= 6
 
 
@@ -173,7 +172,7 @@ async def test_slow_llm_stages_fall_back_instead_of_dead_air(tmp_path):
     engine.showrunner._llm = Hanging()
     engine.start()
     await wait_end(engine, timeout=15)
-    log = list(read_log(engine.log.path))
+    log = engine.log.events()
     assert log[-1]["reason"] == "completed"
     assert any(l["type"] == "error" and l["stage"] == "persona" for l in log)
     assert any(l["type"] == "showrunner" and "SHOWRUNNER_TIMEOUT_MS" in l["reason"] for l in log)
@@ -194,7 +193,7 @@ async def test_topic_budget_keeps_topic_going_with_new_angles(tmp_path, monkeypa
     engine, _ = make_engine(tmp_path, time_scale=0.05, SESSION_TARGET_MIN=2, CLOSING_TURNS=1)
     engine.start()
     await wait_end(engine, timeout=60)
-    log = list(read_log(engine.log.path))
+    log = engine.log.events()
     budgets = [l for l in log if l["type"] == "quota" and "topic_budget_s" in l]
     assert [b["topic_id"] for b in budgets] == ["t1", "t2"]
     angles = [l for l in log if l["type"] == "showrunner" and l["steer_hint"].startswith("sudut baru")]
@@ -226,7 +225,7 @@ async def test_persona_switches_to_fallback_model_on_daily_quota(tmp_path):
     engine.persona_agent._llm = llm
     engine.start()
     await wait_end(engine)
-    log = list(read_log(engine.log.path))
+    log = engine.log.events()
     assert log[-1]["reason"] == "completed"
     assert any(l["type"] == "quota" and l.get("model_to") == "cadangan" for l in log)
     assert not any(l["type"] == "error" and l["stage"] == "persona" for l in log)
@@ -238,7 +237,7 @@ async def test_persona_down_for_good_wraps_up_to_closing(tmp_path):
     engine.persona_agent._llm = _QuotaGone()
     engine.start()
     await wait_end(engine)
-    turns = [l for l in read_log(engine.log.path) if l["type"] == "turn"]
+    turns = [l for l in engine.log.events() if l["type"] == "turn"]
     assert len(turns) <= 8  # tidak berputar di kalimat aman sampai topik habis
     assert turns[-1]["segment"] == "closing"
     assert any(t == "alert" and "Closing" in d["detail"] for t, d in events)
@@ -250,7 +249,7 @@ async def test_supervisor_drops_to_rules_on_daily_quota(tmp_path):
     engine.start()
     await wait_end(engine)
     assert engine.supervisor.mode == "rules"
-    turns = [l for l in read_log(engine.log.path) if l["type"] == "turn"]
+    turns = [l for l in engine.log.events() if l["type"] == "turn"]
     assert turns[-1]["supervisor"]["mode"] == "rules"
     assert sum(1 for t, d in events if t == "alert" and "Supervisor" in d["detail"]) == 1
     assert next(d for t, d in events if t == "alert" and "Supervisor" in d["detail"])["code"] == "supervisor_rules"
@@ -277,7 +276,7 @@ async def test_producer_failure_ends_session_with_error(tmp_path):
     engine.start()
     await wait_end(engine)
     assert engine.error and "produksi rusak" in engine.error
-    assert list(read_log(engine.log.path))[-1]["reason"] == "error"
+    assert engine.log.events()[-1]["reason"] == "error"
 
 
 async def test_pilot_condition_d_forces_supervisor_full(tmp_path):
@@ -289,7 +288,7 @@ async def test_turnlog_contains_pilot_fields(tmp_path):
     engine, _ = make_engine(tmp_path, PILOT_CONDITION="C")
     engine.start()
     await wait_end(engine)
-    rows = [r for r in read_log(engine.turn_log.path.parent / "turns.jsonl")]
+    rows = engine.turn_log.all()
     ai = next(r for r in rows if not r["is_human"])
     assert ai["condition"] == "C"
     assert "draft_text" in ai and "supervisor_verdict" in ai and "timing_breakdown" in ai
@@ -315,6 +314,6 @@ async def test_short_network_blip_does_not_wrap_up(tmp_path):
     engine.persona_agent._llm = Blip()
     engine.start()
     await wait_end(engine)
-    turns = [l for l in read_log(engine.log.path) if l["type"] == "turn"]
+    turns = [l for l in engine.log.events() if l["type"] == "turn"]
     assert {t["topic_id"] for t in turns} >= {"t1", "t2"}  # siaran tidak dipotong ke Closing
     assert not any(t == "alert" and "Closing" in d["detail"] for t, d in events)

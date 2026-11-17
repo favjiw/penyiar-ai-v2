@@ -70,33 +70,6 @@ def test_start_accepts_a_valid_voice_selection(client):
     client.post("/api/show/stop")
 
 
-async def test_filler_files_are_separate_per_voice(tmp_path):
-    from app.tts import AudioCache
-    from app.tts.filler import FillerBank
-
-    class _Voiced(MockTTSProvider):
-        voice = "v1"
-
-        async def synthesize(self, text, persona):
-            r = await super().synthesize(text, persona)
-            return type(r)(r.audio, r.mime, r.provider, self.voice, r.duration_s)
-
-        def cache_key(self, persona):
-            return self.voice
-
-    provider = _Voiced(delay_sec=0)
-    tts = FailoverTTS(provider, cache=AudioCache(tmp_path / "tts"))
-    persona = load_personas()["raka"]
-    bank = FillerBank(tts, tmp_path / "audio")
-    await bank.prepare(persona)
-    first = {f.url for f in bank._bank["raka"]}
-    provider.voice = "v2"
-    await bank.prepare(persona)
-    second = {f.url for f in bank._bank["raka"]}
-    provider.voice = "v1"  # kembali ke suara lama: kena cache, tetap berkas milik v1
-    await bank.prepare(persona)
-    assert first.isdisjoint(second) and {f.url for f in bank._bank["raka"]} == first
-
 
 def test_voice_of_another_provider_or_persona_outside_show_is_rejected():
     book = VoiceBook(Settings(_env_file=None), load_personas())
@@ -141,10 +114,10 @@ async def test_turns_jsonl_and_session_start_record_the_voice(tmp_path):
     await settle(engine)
     await engine.human_turn("Raka, halo")
     await settle(engine)
-    rows = [json.loads(l) for l in open(tmp_path / "sessions" / engine.session_id / "turns.jsonl", encoding="utf-8")]
+    rows = engine.turn_log.all()
     human, raka = rows
     assert human["tts_voice"] == "" and raka["tts_voice"] == "mock-raka"
-    start = next(e for e in map(json.loads, open(engine.log.path, encoding="utf-8")) if e["type"] == "session_start")
+    start = next(e for e in engine.log.events() if e["type"] == "session_start")
     assert start["voices"] == {"raka": "mock-raka"}
 
 
