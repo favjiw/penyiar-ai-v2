@@ -323,8 +323,8 @@ async def ws_session(ws: WebSocket, role: str = "console"):
                     manager.mic[ws] = state
                     await manager.broadcast_output_status()
             elif action == "avatar_state" and manager.clients.get(ws) == "stage":
-                # Stage melaporkan avatar tiap persona: simli (video realistis) atau fallback (karakter 2D); konsol memberi peringatan kuning.
-                state = {str(p)[:20]: (s if s in ("simli", "connecting") else "fallback") for p, s in list((data.get("personas") or {}).items())[:4]}
+                # Stage melaporkan avatar tiap persona: simli (video realistis), 2d (kartun dipilih operator), atau fallback (Simli gagal, 2D sementara); konsol memberi peringatan kuning hanya untuk fallback.
+                state = {str(p)[:20]: (s if s in ("simli", "connecting", "2d") else "fallback") for p, s in list((data.get("personas") or {}).items())[:4]}
                 if manager.avatar.get(ws) != state:
                     manager.avatar[ws] = state
                     await manager.broadcast_output_status()

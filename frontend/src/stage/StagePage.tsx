@@ -2,11 +2,13 @@
  * Layar untuk OBS (`/stage`, PRD v2.7 FR-10): hanya karakter, tanpa teks atau komponen,
  * dan satu-satunya pemutar audio siaran. Mode B: dua panel bertumpuk (9:16).
  * Mode A: satu panel AI (kamera studio ditumpuk di OBS).
- * Karakternya avatar Simli per panel; karakter 2D menjadi cadangan otomatis (Avatar.tsx).
+ * Karakter per panel: avatar realistis Simli (2D sebagai cadangan otomatis) atau kartun 2D beranimasi, sesuai
+ * pilihan operator (Avatar.tsx).
  */
 import { useCallback, useEffect, useState } from 'react'
 import { useLiveSession } from '../live/useLiveSession'
 import { AvatarPanel, type AvatarPersona } from './Avatar'
+import { useAvatarStyle } from './avatarStyle'
 import type { AvatarState } from './useSimliStream'
 import './stage.css'
 
@@ -17,6 +19,7 @@ export function StagePage() {
   const live = useLiveSession('stage')
   const { snapshot: snap, speaking, level, audioReady, unlockAudio, output, send, connected, getAudioTrack, setLocalMuted } = live
   const params = new URLSearchParams(window.location.search)
+  const [avatarStyle] = useAvatarStyle() // pilihan operator di konsol (Siap live); ikut berganti seketika bila diubah
 
   useEffect(() => {
     document.title = 'Layar untuk OBS · Penyiar AI HITS'
@@ -49,6 +52,7 @@ export function StagePage() {
           name={NAMES[p]}
           speaking={speaking === p}
           getLevel={level}
+          realistic={avatarStyle === 'realistic'}
           getAudioTrack={getAudioTrack}
           setLocalMuted={setLocalMuted}
           audioReady={audioReady}

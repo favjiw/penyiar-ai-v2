@@ -268,9 +268,9 @@ def test_stage_avatar_state_reaches_console(client):
         with client.websocket_connect("/ws/session?role=stage") as stage:
             stage.receive_json()
             _output_status(console)
-            stage.send_json({"action": "avatar_state", "data": {"personas": {"raka": "simli", "salsa": "ngawur"}}})
-            # Nilai tak dikenal dianggap fallback (karakter 2D), bukan dipercaya begitu saja.
-            assert _output_status(console)["avatar"] == {"raka": "simli", "salsa": "fallback"}
+            stage.send_json({"action": "avatar_state", "data": {"personas": {"raka": "simli", "salsa": "ngawur", "x": "2d"}}})
+            # Nilai tak dikenal dianggap fallback (karakter 2D), bukan dipercaya begitu saja; "2d" = kartun pilihan operator.
+            assert _output_status(console)["avatar"] == {"raka": "simli", "salsa": "fallback", "x": "2d"}
         for _ in range(5):
             st = _output_status(console)
             if st["clients"]["stage"] == 0:

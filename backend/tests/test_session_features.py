@@ -357,3 +357,8 @@ async def test_session_start_records_effective_condition_and_hashes(tmp_path):
     assert all(len(h) == 12 for h in start["prompt_hashes"].values())
     assert set(start["persona_hashes"]) == {p.id for p in engine.personas}
     await engine.stop()
+
+
+async def test_snapshot_carries_per_persona_voice_gain(tmp_path):
+    engine, _ = make_a(tmp_path, VOICE_GAIN_DB_RAKA=6)
+    assert engine.snapshot()["voice_gain"] == {"raka": 1.9953}

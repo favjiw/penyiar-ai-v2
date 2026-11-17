@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
@@ -63,6 +63,13 @@ class Settings(BaseSettings):
     TTS_TIMEOUT_SEC: float = 12.0  # Edge dari laptop ini sering 3-8 s per kalimat; pindah suara di tengah siaran lebih buruk daripada menunggu
     ELEVENLABS_API_KEY: str = ""
     ELEVENLABS_MODEL: str = ""
+    # Pengaturan suara ElevenLabs (voice_settings), sama dengan slider di studio web. Kosong = tidak dikirim,
+    # jadi ElevenLabs memakai pengaturan tersimpan milik suara itu. Kecepatan 0,7-1,2.
+    ELEVENLABS_STABILITY: Optional[float] = Field(default=None, ge=0, le=1)
+    ELEVENLABS_SIMILARITY: Optional[float] = Field(default=None, ge=0, le=1)
+    ELEVENLABS_STYLE: Optional[float] = Field(default=None, ge=0, le=1)
+    ELEVENLABS_SPEED: Optional[float] = Field(default=None, ge=0.7, le=1.2)
+    ELEVENLABS_SPEAKER_BOOST: Optional[bool] = None
     ELEVENLABS_VOICE_MALE: str = ""
     ELEVENLABS_VOICE_FEMALE: str = ""
     ELEVENLABS_VOICE_RAKA: str = ""  # opsional: menimpa voice di kartu persona
@@ -116,6 +123,11 @@ class Settings(BaseSettings):
     SUMMARY_EVERY_TURNS: int = 10  # ringkasan obrolan diperbarui tiap sekian giliran yang keluar dari jendela riwayat; 0 = mati
     HUMAN_HOST_NAME: str = ""  # mode A (Tahap 4); keputusan terbuka PRD §15.2 #2
 
+    # Penyeimbang volume antarpenyiar, dalam dB, diterapkan di layar OBS (suara lokal dan jalur Simli). 0 = tanpa perubahan.
+    # Provider dan model suara punya kenyaringan berbeda; ukur dari rekaman OBS lalu samakan (sekitar -17 dB rata-rata).
+    VOICE_GAIN_DB_RAKA: float = Field(default=0.0, ge=-12, le=9)
+    VOICE_GAIN_DB_SALSA: float = Field(default=0.0, ge=-12, le=9)
+
     # Simli (avatar video realistis di /stage menggantikan karakter 2D; 2D tetap jadi cadangan otomatis)
     SIMLI_API_KEY: str = ""
     SIMLI_FACE_ID: str = "bf13113a-355a-4d97-8b90-4edccd1da7b2"  # wajah bawaan bila wajah per persona kosong
@@ -126,6 +138,9 @@ class Settings(BaseSettings):
 
     # Uji: "llm" dan/atau "tts" untuk mensimulasikan galat
     FAIL_INJECT: str = ""
+
+    # Hosting: folder hasil build frontend yang disajikan backend (kosong = frontend/dist di repo, bila ada).
+    FRONTEND_DIST: str = ""
 
     # Penyimpanan
     DATA_DIR: str = str(BACKEND_ROOT / "data")
@@ -153,6 +168,22 @@ class Settings(BaseSettings):
         if unknown:
             raise ValueError(f"TTS_FALLBACK memuat provider tidak dikenal: {', '.join(unknown)}")
         return [n for n in names if n != "none"]
+
+    def voice_gain(self, persona: str) -> float:
+        """Pengali volume (linear) untuk satu persona dari VOICE_GAIN_DB_<PERSONA>; 1.0 bila tidak diatur."""
+        db = getattr(self, f"VOICE_GAIN_DB_{persona.upper()}", 0.0)
+        return round(10 ** (db / 20), 4)
+
+    def elevenlabs_voice_settings(self) -> dict[str, float | bool]:
+        """voice_settings untuk permintaan ElevenLabs; hanya yang diisi di .env."""
+        pairs = {
+            "stability": self.ELEVENLABS_STABILITY,
+            "similarity_boost": self.ELEVENLABS_SIMILARITY,
+            "style": self.ELEVENLABS_STYLE,
+            "speed": self.ELEVENLABS_SPEED,
+            "use_speaker_boost": self.ELEVENLABS_SPEAKER_BOOST,
+        }
+        return {k: v for k, v in pairs.items() if v is not None}
 
     def simli_face_for(self, persona: str = "") -> str:
         """Wajah Simli untuk satu persona (raka | salsa); jatuh ke SIMLI_FACE_ID bila belum diatur."""

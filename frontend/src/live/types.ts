@@ -129,6 +129,8 @@ export interface ShowSnapshot {
   /** Perkiraan menit suara AI tersisa (null = tidak diketahui). */
   tts_minutes_left?: number | null
   tts_quota_low?: boolean
+  /** Pengali volume per penyiar (VOICE_GAIN_DB_*), diterapkan di layar OBS. */
+  voice_gain?: Record<string, number>
   fillers_ready?: number
 }
 
@@ -140,6 +142,6 @@ export interface OutputStatus {
   clients: Record<string, number>
   /** Status mic penyiar dari prompter (mode A); null bila belum ada laporan. */
   mic?: { down: boolean; reason: string } | null
-  /** Avatar di layar OBS per persona: simli | connecting | fallback (karakter 2D); null bila stage belum melapor. */
-  avatar?: Record<string, 'simli' | 'connecting' | 'fallback'> | null
+  /** Avatar di layar OBS per persona: simli | connecting | 2d (kartun dipilih) | fallback (Simli gagal, 2D sementara); null bila stage belum melapor. */
+  avatar?: Record<string, 'simli' | 'connecting' | '2d' | 'fallback'> | null
 }
