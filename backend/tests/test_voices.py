@@ -21,7 +21,7 @@ def test_catalog_has_current_voices_and_valid_entries():
     assert ids["id-ID-ArdiNeural"].provider == "edge" and find_voice("tidak-ada") is None
     el_male = [v for v in catalog if v.provider == "elevenlabs" and v.gender == "male"]
     el_female = [v for v in catalog if v.provider == "elevenlabs" and v.gender == "female"]
-    assert len(el_male) == 6 and len(el_female) == 6
+    assert el_male and el_female  # daftar dikurasi operator; jumlahnya bebas, minimal satu suara per gender
 
 
 def test_operator_selection_wins_over_defaults_and_resets():

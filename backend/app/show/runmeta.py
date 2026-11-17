@@ -8,6 +8,7 @@ dicatat terpisah, bersama commit kode, temperature, dan hash isi prompt serta ka
 from __future__ import annotations
 
 import hashlib
+import os
 import subprocess
 from functools import lru_cache
 from pathlib import Path
@@ -22,7 +23,12 @@ def _digest(text: str) -> str:
 
 @lru_cache
 def git_revision() -> dict[str, Any]:
-    """SHA commit kode yang berjalan dan apakah ada perubahan yang belum di-commit; kosong bila bukan repo git."""
+    """SHA commit kode yang berjalan dan apakah ada perubahan yang belum di-commit; kosong bila bukan repo git.
+
+    Di image Docker tidak ada folder .git: SHA datang dari variabel GIT_SHA yang diisi saat build (dirty = False).
+    """
+    if sha := os.environ.get("GIT_SHA", "").strip():
+        return {"sha": sha, "dirty": False}
 
     def run(*args: str) -> str:
         return subprocess.run(["git", *args], cwd=Path(REPO_ROOT), capture_output=True, text=True, timeout=5, check=True).stdout.strip()

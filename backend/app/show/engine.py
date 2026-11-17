@@ -293,6 +293,7 @@ class ShowEngine:
             "show_clock": self.show_clock(),
             "tts_minutes_left": None if (m := self.tts_minutes_left()) is None else int(m),
             "tts_quota_low": m is not None and m <= self.settings.TTS_QUOTA_ALERT_MIN,
+            "voice_gain": {p.id: self.settings.voice_gain(p.id) for p in self.personas},  # pengali volume per penyiar untuk layar OBS
             "error": self.error,
         }
 

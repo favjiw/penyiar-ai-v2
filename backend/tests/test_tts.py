@@ -208,7 +208,7 @@ def test_factory_elevenlabs_with_key_and_fallback_chain(tmp_path):
         settings(TTS_MODE="live", TTS_PROVIDER="elevenlabs", TTS_FALLBACK="edge,gtts", ELEVENLABS_API_KEY="k", ELEVENLABS_MODEL="m", CACHE_DIR=str(tmp_path))
     )
     assert tts.primary.name == "elevenlabs" and [f.name for f in tts.fallbacks] == ["edge", "gtts"] and tts.warnings == []
-    assert tts.primary.cache_key("raka") == load_personas()["raka"].voices["elevenlabs"]
+    assert tts.primary.cache_key("raka").split("|")[0] == load_personas()["raka"].voices["elevenlabs"]
 
 
 def test_factory_elevenlabs_without_key_falls_back_to_edge_with_warning(tmp_path):
@@ -222,3 +222,61 @@ def test_factory_fallback_none_and_unknown(tmp_path):
     assert create_tts(settings(TTS_MODE="live", TTS_FALLBACK="none", CACHE_DIR=str(tmp_path))).fallbacks == []
     with pytest.raises(ValueError, match="tidak dikenal"):
         create_tts(settings(TTS_MODE="live", TTS_FALLBACK="festival", CACHE_DIR=str(tmp_path)))
+
+
+def test_elevenlabs_sends_voice_settings_and_keys_the_cache_by_model_and_settings(tmp_path):
+    """Pengaturan suara ikut permintaan; ganti model atau slider tidak boleh menyajikan audio lama dari cache."""
+    import asyncio
+
+    import httpx
+
+    from app.tts.provider import ElevenLabsTTSProvider
+    from app.tts.voices import VoiceBook
+
+    sent = []
+
+    class FakeStream:
+        status_code = 200
+        headers = {"character-cost": "3"}
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            pass
+
+        async def aiter_bytes(self):
+            yield bytes([255, 251, 144, 0]) * 400
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            pass
+
+        def stream(self, method, url, params=None, headers=None, json=None):
+            sent.append(json)
+            return FakeStream()
+
+    cfg = settings(ELEVENLABS_API_KEY="k", ELEVENLABS_MODEL="eleven_v4", ELEVENLABS_STABILITY=0.5, ELEVENLABS_SIMILARITY=0.75)
+    book = VoiceBook(cfg, load_personas())
+    assert cfg.elevenlabs_voice_settings() == {"stability": 0.5, "similarity_boost": 0.75}  # yang kosong tidak dikirim
+    p = ElevenLabsTTSProvider("k", "eleven_v4", book, voice_settings=cfg.elevenlabs_voice_settings())
+    other_model = ElevenLabsTTSProvider("k", "eleven_flash_v2_5", book, voice_settings=cfg.elevenlabs_voice_settings())
+    other_settings = ElevenLabsTTSProvider("k", "eleven_v4", book, voice_settings={"stability": 0.9})
+    assert len({p.cache_key("raka"), other_model.cache_key("raka"), other_settings.cache_key("raka")}) == 3
+    assert p.cache_key("raka").split("|")[0] == load_personas()["raka"].voices["elevenlabs"]
+
+    real = httpx.AsyncClient
+    httpx.AsyncClient = FakeClient
+    try:
+        asyncio.run(p.synthesize("Halo", "raka"))
+        asyncio.run(ElevenLabsTTSProvider("k", "m", book).synthesize("Halo", "raka"))
+    finally:
+        httpx.AsyncClient = real
+    assert sent[0] == {"text": "Halo", "model_id": "eleven_v4", "voice_settings": {"stability": 0.5, "similarity_boost": 0.75}}
+    assert sent[1] == {"text": "Halo", "model_id": "m"}  # tanpa pengaturan: tidak ada voice_settings

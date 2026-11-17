@@ -19,3 +19,10 @@ def test_simli_face_falls_back_to_default_face():
     assert s.simli_face_for("raka") == "raka-face"
     assert s.simli_face_for("salsa") == "default-face"
     assert s.simli_face_for() == "default-face"
+
+
+def test_voice_gain_db_to_linear_and_snapshot_default():
+    s = Settings(_env_file=None, VOICE_GAIN_DB_RAKA=6, VOICE_GAIN_DB_SALSA=-6)
+    assert s.voice_gain("raka") == 1.9953 and s.voice_gain("salsa") == 0.5012
+    assert Settings(_env_file=None).voice_gain("raka") == 1.0  # tidak diatur = tanpa perubahan
+    assert Settings(_env_file=None).voice_gain("tidak-ada") == 1.0

@@ -64,3 +64,30 @@ def test_full_blocker_flow(client):
 def test_unknown_and_malformed_ids(client):
     assert client.get("/api/blocker/blk_tidak_ada").status_code == 404
     assert client.get("/api/blocker/..%2Fsecret").status_code == 404
+
+
+def test_frontend_is_served_with_spa_fallback_and_never_shadows_the_api(tmp_path):
+    """Hosting: satu proses menyajikan halaman; rute klien dijawab index.html, path API yang salah tetap 404."""
+    from fastapi.testclient import TestClient
+
+    from app.config import Settings
+    from app.main import build_app
+
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<!doctype html><title>shell</title>", encoding="utf-8")
+    (dist / "assets" / "app.js").write_text("console.log(1)", encoding="utf-8")
+    (dist / "logo.png").write_bytes(b"png")
+    settings = Settings(
+        _env_file=None, LLM_MODE="mock", TTS_MODE="mock", FRONTEND_DIST=str(dist), DATA_DIR=str(tmp_path / "data"),
+        LOG_DIR=str(tmp_path / "logs"), CACHE_DIR=str(tmp_path / "cache"),
+    )
+    with TestClient(build_app(settings)) as c:
+        assert "shell" in c.get("/").text and "shell" in c.get("/stage").text and "shell" in c.get("/prompter").text
+        assert c.get("/assets/app.js").text == "console.log(1)"
+        assert c.get("/logo.png").content == b"png"
+        assert c.get("/api/health").json()["llm_mode"] == "mock"  # API tidak tertimpa
+        assert c.get("/api/tidak-ada").status_code == 404 and c.get("/audio/tidak-ada.mp3").status_code == 404
+        (tmp_path / "secret.txt").write_text("RAHASIA", encoding="utf-8")
+        for attempt in ("/..%2fsecret.txt", "/%2e%2e/secret.txt", "/../secret.txt"):
+            assert "RAHASIA" not in c.get(attempt).text  # tidak boleh keluar dari folder dist

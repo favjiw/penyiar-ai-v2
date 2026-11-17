@@ -92,8 +92,10 @@ export function useLiveSession(role: Role): LiveSession {
   const ctxRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   // Satu jalur keluaran per persona: suara lokal (gain) dan jalur untuk avatar Simli (dest). Hanya persona yang sedang bicara tersambung ke analyser.
-  const routesRef = useRef<Map<string, { gain: GainNode; dest: MediaStreamAudioDestinationNode; muted: boolean }>>(new Map())
+  // trim = penyeimbang volume per penyiar (VOICE_GAIN_DB_*), sebelum suara lokal dan jalur Simli.
+  const routesRef = useRef<Map<string, { trim: GainNode; gain: GainNode; dest: MediaStreamAudioDestinationNode; muted: boolean }>>(new Map())
   const routedRef = useRef<string | null>(null)
+  const voiceGainRef = useRef<Record<string, number>>({})
   const samplesRef = useRef<Uint8Array | null>(null)
   const queueRef = useRef<PlayItem[]>([])
   const playingRef = useRef(false)
@@ -140,10 +142,15 @@ export function useLiveSession(role: Role): LiveSession {
       if (!ctx) return null
       let r = routesRef.current.get(persona)
       if (!r) {
+        const trim = ctx.createGain()
+        trim.gain.value = voiceGainRef.current[persona] ?? 1.0
         const gain = ctx.createGain()
         gain.gain.value = 1.0
+        const dest = ctx.createMediaStreamDestination()
+        trim.connect(gain)
         gain.connect(ctx.destination)
-        r = { gain, dest: ctx.createMediaStreamDestination(), muted: false }
+        trim.connect(dest)
+        r = { trim, gain, dest, muted: false }
         routesRef.current.set(persona, r)
       }
       return r
@@ -158,12 +165,8 @@ export function useLiveSession(role: Role): LiveSession {
       const next = routeFor(persona)
       if (!analyser || !next || routedRef.current === persona) return
       const prev = routedRef.current ? routesRef.current.get(routedRef.current) : null
-      if (prev) {
-        analyser.disconnect(prev.gain)
-        analyser.disconnect(prev.dest)
-      }
-      analyser.connect(next.gain)
-      analyser.connect(next.dest)
+      if (prev) analyser.disconnect(prev.trim)
+      analyser.connect(next.trim)
       routedRef.current = persona
     },
     [routeFor],
@@ -181,6 +184,14 @@ export function useLiveSession(role: Role): LiveSession {
     },
     [routeFor],
   )
+
+  // Penyeimbang volume dari server (snapshot.voice_gain): berlaku juga untuk jalur yang sudah dibuat.
+  useEffect(() => {
+    const gains = snapshot.voice_gain
+    if (!gains) return
+    voiceGainRef.current = gains
+    for (const [persona, r] of routesRef.current) r.trim.gain.value = gains[persona] ?? 1.0
+  }, [snapshot.voice_gain])
 
   const level = useCallback((): number | null => {
     const analyser = analyserRef.current

@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import io
+import json
 import logging
 import time
 from dataclasses import replace
@@ -88,15 +89,18 @@ class ElevenLabsTTSProvider(TTSProvider):
     OUTPUT_FORMAT = "mp3_44100_128"
     KBPS = 128
 
-    def __init__(self, api_key: str, model: str, voices: VoiceBook, timeout_sec: float = 15.0):
+    def __init__(self, api_key: str, model: str, voices: VoiceBook, timeout_sec: float = 15.0, voice_settings: dict | None = None):
         if not (api_key and model):
             raise ValueError("ELEVENLABS_API_KEY dan ELEVENLABS_MODEL wajib untuk TTS ElevenLabs")
         self._key, self._model = api_key, model
         self._voices = voices
         self._timeout = timeout_sec
+        self._voice_settings = dict(voice_settings or {})
+        # Model dan pengaturan masuk kunci cache supaya ganti model/slider tidak menyajikan audio lama (mis. contoh suara).
+        self._variant = hashlib.sha256(json.dumps([model, self._voice_settings], sort_keys=True).encode()).hexdigest()[:8]
 
     def cache_key(self, persona: str) -> str:
-        return self._voices.voice(self.name, persona)
+        return f"{self._voices.voice(self.name, persona)}|{self._variant}"  # id suara di depan "|", seperti kunci Edge
 
     async def synthesize(self, text, persona):
         import httpx
@@ -105,13 +109,16 @@ class ElevenLabsTTSProvider(TTSProvider):
         start = time.perf_counter()
         first = None
         chunks: list[bytes] = []
+        body: dict = {"text": text, "model_id": self._model}
+        if self._voice_settings:
+            body["voice_settings"] = self._voice_settings
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             async with client.stream(
                 "POST",
                 f"https://api.elevenlabs.io/v1/text-to-speech/{voice}/stream",
                 params={"output_format": self.OUTPUT_FORMAT},
                 headers={"xi-api-key": self._key},
-                json={"text": text, "model_id": self._model},
+                json=body,
             ) as resp:
                 if resp.status_code != 200:
                     body = (await resp.aread()).decode(errors="replace")[:300]
@@ -412,7 +419,9 @@ def _build(name: str, settings, voices: VoiceBook, warnings: list[str]) -> TTSPr
     if name == "elevenlabs":
         if not (settings.ELEVENLABS_API_KEY and settings.ELEVENLABS_MODEL):
             return None
-        return ElevenLabsTTSProvider(settings.ELEVENLABS_API_KEY, settings.ELEVENLABS_MODEL, voices)
+        return ElevenLabsTTSProvider(
+            settings.ELEVENLABS_API_KEY, settings.ELEVENLABS_MODEL, voices, voice_settings=settings.elevenlabs_voice_settings()
+        )
     raise ValueError(f"TTS provider {name!r} tidak dikenal")
 
 

@@ -43,3 +43,7 @@ backend/data/
 
 # Sesi (blocker.json per sesi; log JSONL menyusul di Fase 4)
 backend/sessions/
+
+# Hosting: rahasia lokal untuk deploy (sandi login sementara, dll.)
+deploy/*.local*
+deploy/secrets*

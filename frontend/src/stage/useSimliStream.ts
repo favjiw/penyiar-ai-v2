@@ -10,7 +10,8 @@ import { useEffect, useRef, useState } from 'react'
 import { LogLevel, SimliClient } from 'simli-client'
 import { ApiError, api } from '../api'
 
-export type AvatarState = 'simli' | 'connecting' | 'fallback'
+/** simli: video realistis tampil; connecting: menyambung; fallback: Simli gagal/putus (2D sementara); 2d: kartun 2D dipilih operator. */
+export type AvatarState = 'simli' | 'connecting' | 'fallback' | '2d'
 
 const RETRY_MIN_MS = 5_000
 const RETRY_MAX_MS = 60_000
@@ -20,6 +21,7 @@ export function useSimliStream(
   getAudioTrack: (persona: string) => MediaStreamTrack | null,
   setLocalMuted: (persona: string, muted: boolean) => void,
   audioReady: boolean,
+  enabled = true,
 ) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -34,6 +36,8 @@ export function useSimliStream(
   mute.current = setLocalMuted
 
   useEffect(() => {
+    if (!enabled) return // kartun 2D dipilih: tidak membuka sesi Simli sama sekali (hemat kuota)
+    setPhase('connecting')
     let alive = true
     let client: SimliClient | null = null
     let timer: number | undefined
@@ -80,9 +84,10 @@ export function useSimliStream(
         c = new SimliClient(session_token, video, audio, null, LogLevel.ERROR, 'livekit')
         client = c
         const current = c
-        c.on('error', () => fail(current))
-        c.on('startup_error', () => fail(current))
-        c.on('stop', () => fail(current))
+        // Alasan dicatat di konsol browser (bukan ke server) supaya wajah/akun yang bermasalah mudah dilacak.
+        c.on('error', (detail) => { console.warn(`[simli:${persona}] error`, detail); fail(current) })
+        c.on('startup_error', (detail) => { console.warn(`[simli:${persona}] startup_error`, detail); fail(current) })
+        c.on('stop', () => { if (client === current) console.warn(`[simli:${persona}] stop tak terduga`); fail(current) })
         await c.start()
         if (!alive || client !== c) return
         const t = track.current(persona)
@@ -96,6 +101,7 @@ export function useSimliStream(
           setPhase('off')
           return
         }
+        console.warn(`[simli:${persona}] gagal tersambung`, e)
         fail(c)
       }
     }
@@ -110,13 +116,13 @@ export function useSimliStream(
       video?.removeEventListener('playing', onVideoPlaying)
       teardown()
     }
-  }, [persona])
+  }, [persona, enabled])
 
   // Autoplay: suara Simli baru boleh diputar setelah satu klik di layar OBS (stage-unlock, atau klik di mana pun saat live).
   useEffect(() => {
     if (audioReady && phase === 'connected') void audioRef.current?.play().catch(() => undefined)
   }, [audioReady, phase])
 
-  const state: AvatarState = phase === 'connected' && videoReady ? 'simli' : phase === 'connecting' || phase === 'connected' ? 'connecting' : 'fallback'
+  const state: AvatarState = !enabled ? '2d' : phase === 'connected' && videoReady ? 'simli' : phase === 'connecting' || phase === 'connected' ? 'connecting' : 'fallback'
   return { videoRef, audioRef, state }
 }
