@@ -7,11 +7,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { adminApi, api, ApiError, type AdminConfig, type AdminFace, type AdminField, type AdminVoice, type TestService } from '../api'
 import { useAuth } from '../auth/AuthContext'
 import { Button, Pill } from '../ui'
+import { LogsSection } from './LogsSection'
 import { PersonasSection, PromptsSection, SnippetsSection, SupervisorSection } from './ContentSections'
 import '../auth/auth.css'
 import './admin.css'
 
-type Tab = 'ai' | 'suara' | 'simli' | 'siaran' | 'persona' | 'prompt' | 'supervisor'
+type Tab = 'ai' | 'suara' | 'simli' | 'siaran' | 'persona' | 'prompt' | 'supervisor' | 'log'
 
 const TABS: { id: Tab; label: string; groups: string[] }[] = [
   { id: 'ai', label: 'Otak AI', groups: ['gemini', 'compat'] },
@@ -21,6 +22,7 @@ const TABS: { id: Tab; label: string; groups: string[] }[] = [
   { id: 'persona', label: 'Penyiar AI', groups: ['persona'] },
   { id: 'prompt', label: 'Prompt & teks', groups: [] },
   { id: 'supervisor', label: 'Supervisor', groups: ['supervisor'] },
+  { id: 'log', label: 'Log siaran', groups: [] },
 ]
 
 const TEST_FOR: Record<string, { service: TestService; label: string }> = {
@@ -35,7 +37,7 @@ const errText = (e: unknown) => (e instanceof ApiError ? e.message : 'Gagal meng
 export function AdminPage() {
   const { can } = useAuth()
   const isAdmin = can('admin')
-  const [tab, setTab] = useState<Tab>(() => (TABS.find((t) => t.id === window.location.hash.slice(1))?.id ?? 'ai'))
+  const [tab, setTab] = useState<Tab>(() => (TABS.find((t) => t.id === window.location.hash.slice(1).split('/')[0])?.id ?? 'ai'))
   const [cfg, setCfg] = useState<AdminConfig | null>(null)
   const [faces, setFaces] = useState<AdminFace[]>([])
   const [error, setError] = useState('')
@@ -124,6 +126,7 @@ export function AdminPage() {
         </>
       )}
       {tab === 'supervisor' && <SupervisorSection />}
+      {tab === 'log' && <LogsSection />}
       {tab === 'simli' && <FacesSection faces={faces} inUse={cfg ? facesInUse(cfg) : new Set()} onChange={load} />}
     </main>
   )

@@ -73,6 +73,7 @@ Admin mengelola di `/admin` (tab Otak AI, Suara, Avatar Simli) tanpa menyentuh `
 - Perubahan berlaku tanpa restart. Saat ada siaran live/jeda, perubahan **tersimpan dan menunggu** sampai siaran selesai (berlaku saat halaman admin dibuka, atau saat siaran berikutnya dimulai).
 - Suara baru ElevenLabs harus sudah ada di akun (My Voices); ID diperiksa saat ditambahkan.
 - Tab **Alur siaran**, **Penyiar AI**, **Supervisor**, dan **Kuota** mengatur parameter perilaku (batas waktu poin, riwayat prompt, peluang catchphrase, mode Supervisor, dst.). Aturan antar-setelan divalidasi bersama (mis. batas penutupan poin harus lebih kecil dari batas waktu poin).
+- Tab **Log siaran** menampilkan riwayat semua siaran (termasuk yang lampau): transkrip, event, konfigurasi saat mulai, materi, dan unduhan JSONL. Siaran lama dari berkas diimpor dulu dengan `python -m app.cli import-files`.
 - Tab **Penyiar AI** menyunting kartu persona; **Prompt & teks** menyunting prompt berversi dan potongan teks penyusun prompt; **Supervisor** mengelola kata terlarang dan kalimat aman. Perubahan dipakai giliran/siaran berikutnya.
 
 ## Data dan cadangan
