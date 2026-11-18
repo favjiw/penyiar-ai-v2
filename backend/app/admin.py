@@ -5,6 +5,7 @@ Semua rute hanya untuk admin. Nilai kunci API tidak pernah dikirim balik (hanya 
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import Literal, Optional
@@ -18,6 +19,7 @@ from app.config import Settings
 from app.content import content
 from app.faces import Face, FaceCatalog, FaceError
 from app.schemas import PersonaCard
+from app.session_log import read_events, session_detail, session_page
 from app.runtime_config import ConfigError, RuntimeConfig, apply_if_idle, show_is_live
 from app.tts.catalog import VoiceError, VoiceOption, catalog
 
@@ -402,3 +404,44 @@ def remove_fallback(fallback_id: int, _: User = admin):
     except KeyError:
         raise HTTPException(404, "Kalimat tidak ditemukan") from None
     return {"ok": True}
+
+
+# ── Log semua siaran (termasuk yang lampau) ──────────────────────────────────
+@router.get("/sessions")
+def list_sessions_admin(request: Request, limit: int = 50, offset: int = 0, mode: Optional[Literal["A", "B"]] = None, q: Optional[str] = None, _: User = admin):
+    """Riwayat siaran dari database, terbaru dulu. `live_session` = sesi yang sedang berjalan (bila ada)."""
+    page = session_page(request.app.state.db, limit=max(1, min(200, limit)), offset=max(0, offset), mode=mode, q=q)
+    engine = request.app.state.engine
+    page["live_session"] = engine.session_id if engine is not None and show_is_live(request.app) else None
+    return page
+
+
+_SESSION_ID = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
+@router.get("/sessions/{session_id}")
+def get_session_admin(session_id: str, request: Request, _: User = admin):
+    detail = session_detail(request.app.state.db, session_id) if _SESSION_ID.match(session_id) else None
+    if detail is None:
+        raise HTTPException(404, "Log sesi tidak ditemukan")
+    engine = request.app.state.engine
+    detail["live"] = bool(engine is not None and show_is_live(request.app) and engine.session_id == session_id)
+    return detail
+
+
+@router.get("/sessions/{session_id}/export/{part}")
+def export_session_admin(session_id: str, part: Literal["events", "turns"], request: Request, _: User = admin):
+    """Unduh log sebagai JSONL (bentuk yang dibaca skrip riset)."""
+    from fastapi.responses import Response
+
+    from app.show.turnlog import read_turns
+
+    if not _SESSION_ID.match(session_id):
+        raise HTTPException(404, "Log sesi tidak ditemukan")
+    db = request.app.state.db
+    rows = read_events(db, session_id) if part == "events" else read_turns(db, session_id)
+    if not rows:
+        raise HTTPException(404, "Log sesi tidak ditemukan" if part == "events" else "Sesi ini tidak punya log giliran riset")
+    body = "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows)
+    name = f"{session_id}.jsonl" if part == "events" else f"{session_id}.turns.jsonl"
+    return Response(body, media_type="application/x-ndjson", headers={"Content-Disposition": f'attachment; filename="{name}"'})

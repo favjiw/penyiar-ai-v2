@@ -158,7 +158,45 @@ export interface AdminSupervisor {
   kinds: string[]
 }
 
+export interface SessionSummary {
+  session_id: string
+  mode: 'A' | 'B' | null
+  started: string | null
+  ended: string | null
+  elapsed_s: number | null
+  end_reason: string | null
+  tema: string | null
+  variant_label: string | null
+  n_topics: number
+  participants: string[]
+  n_events: number
+  n_ai_turns: number
+  n_human_turns: number
+  llm_mode: string | null
+  tts_mode: string | null
+  tts_provider: string | null
+  supervisor_mode: string | null
+  pilot_condition: string | null
+  models: Record<string, string> | null
+  code: { sha?: string; dirty?: boolean | null } | null
+}
+
+export interface SessionDetail {
+  summary: SessionSummary
+  config: Record<string, unknown>
+  blocker: unknown
+  events: Record<string, unknown>[]
+  turns: Record<string, unknown>[]
+  live: boolean
+}
+
 export const adminApi = {
+  sessions: (p: { limit?: number; offset?: number; q?: string; mode?: 'A' | 'B' } = {}) => {
+    const qs = new URLSearchParams()
+    for (const [k, v] of Object.entries(p)) if (v !== undefined && v !== '') qs.set(k, String(v))
+    return request<{ total: number; items: SessionSummary[]; live_session: string | null }>(`/api/admin/sessions?${qs}`)
+  },
+  session: (id: string) => request<SessionDetail>(`/api/admin/sessions/${encodeURIComponent(id)}`),
   config: () => request<AdminConfig>('/api/admin/config'),
   /** null = hapus timpaan (kembali ke .env); kunci rahasia "" = biarkan. */
   saveConfig: (values: Record<string, string | null>) => request<AdminConfig>('/api/admin/config', { method: 'PUT', body: JSON.stringify({ values }) }),

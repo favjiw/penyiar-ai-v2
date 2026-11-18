@@ -279,3 +279,69 @@ def test_behavior_parameters_are_editable_and_validated_together(client):
     r = put(client, POINT_WRAP_S="200")
     assert r.status_code == 422 and "POINT_WRAP_S" in r.json()["detail"]
     assert client.app.state.settings.POINT_WRAP_S != 200
+
+
+# ── log semua siaran ─────────────────────────────────────────────────────────
+def _fake_past_session(db, sid="show_20261101_100000_aaaa", mode="A", tema="Zodiak"):
+    from app.session_log import SessionLogger
+    from app.show.turnlog import REQUIRED, TurnLog
+
+    log = SessionLogger(sid, db)
+    log.event("session_start", mode=mode, blocker={"tema": tema, "variant_label": "Lama", "topics": [{}, {}]}, participants=[{"name": "Favian"}, {"name": "Salsa"}],
+              config={"LLM_MODE": "live", "TTS_MODE": "live", "TTS_PROVIDER": "elevenlabs", "SUPERVISOR_MODE": "off"})
+    log.event("turn", persona="salsa", final_text="halo")
+    log.event("session_end", reason="stopped", elapsed_s=61.5)
+    tl = TurnLog(sid, db)
+    base = {k: None for k in REQUIRED}
+    tl.write(**{**base, "session_id": sid, "turn_idx": 1, "is_human": True, "speaker": "human", "text": "Zodiak lu apa?", "mode": mode})
+    tl.write(**{**base, "session_id": sid, "turn_idx": 2, "is_human": False, "speaker": "salsa", "text": "Gue Leo.", "mode": mode})
+    return sid
+
+
+def test_session_history_lists_past_and_current_shows(client):
+    as_user(client, "admin")
+    db = client.app.state.db
+    old = _fake_past_session(db)
+    v = client.post("/api/blocker/generate", json={"tema": "Kopi", "jumlah_topik": 1, "jumlah_varian": 2}).json()["variants"][0]
+    client.post("/api/blockers", json=v)
+    assert client.post("/api/show/start", json={"blocker_id": v["id"], "mode": "B"}).status_code == 200
+    live = client.get("/api/admin/sessions").json()
+    assert live["live_session"] and live["total"] == 2
+    assert client.get(f"/api/admin/sessions/{live['live_session']}").json()["live"] is True
+    client.post("/api/show/stop")
+    page = client.get("/api/admin/sessions").json()
+    assert page["live_session"] is None and [i["session_id"] for i in page["items"]][-1] == old  # terbaru dulu, yang lampau di bawah
+    past = next(i for i in page["items"] if i["session_id"] == old)
+    assert (past["mode"], past["tema"], past["n_topics"], past["n_ai_turns"], past["n_human_turns"], past["elapsed_s"], past["end_reason"]) == ("A", "Zodiak", 2, 1, 1, 61.5, "stopped")
+    assert past["participants"] == ["Favian", "Salsa"]
+    now = next(i for i in page["items"] if i["session_id"] != old)
+    assert now["mode"] == "B" and now["tema"] == "Kopi" and now["end_reason"] == "stopped"
+
+    assert client.get("/api/admin/sessions", params={"mode": "A"}).json()["total"] == 1
+    assert [i["tema"] for i in client.get("/api/admin/sessions", params={"q": "kopi"}).json()["items"]] == ["Kopi"]
+    assert client.get("/api/admin/sessions", params={"q": "tidak-ada-ini"}).json()["total"] == 0
+    assert len(client.get("/api/admin/sessions", params={"limit": 1}).json()["items"]) == 1
+    assert [i["session_id"] for i in client.get("/api/admin/sessions", params={"limit": 1, "offset": 1}).json()["items"]] == [old]
+
+
+def test_session_detail_and_export(client):
+    as_user(client, "admin")
+    old = _fake_past_session(client.app.state.db)
+    d = client.get(f"/api/admin/sessions/{old}").json()
+    assert d["summary"]["tema"] == "Zodiak" and d["live"] is False
+    assert [e["type"] for e in d["events"]] == ["session_start", "turn", "session_end"]
+    assert [t["text"] for t in d["turns"]] == ["Zodiak lu apa?", "Gue Leo."]
+    assert d["config"]["config"]["TTS_PROVIDER"] == "elevenlabs" and "blocker" not in d["config"]
+    ev = client.get(f"/api/admin/sessions/{old}/export/events")
+    assert ev.status_code == 200 and "attachment" in ev.headers["content-disposition"] and len(ev.text.splitlines()) == 3
+    tu = client.get(f"/api/admin/sessions/{old}/export/turns")
+    assert tu.status_code == 200 and old in tu.headers["content-disposition"] and len(tu.text.splitlines()) == 2
+    assert client.get("/api/admin/sessions/show_tidak_ada").status_code == 404
+    assert client.get("/api/admin/sessions/..%2Fx").status_code == 404
+    assert client.get("/api/admin/sessions/show_tidak_ada/export/turns").status_code == 404
+
+
+def test_session_history_is_admin_only(client):
+    as_user(client, "opa")
+    assert client.get("/api/admin/sessions").status_code == 403
+    assert client.get("/api/admin/sessions/x/export/events").status_code == 403
