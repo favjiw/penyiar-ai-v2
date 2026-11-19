@@ -1,15 +1,7 @@
-"""TTS (FR-6): provider yang bisa diganti lewat `.env`, cache file, retry, dan cadangan.
+"""TTS (FR-6): layer suara gratis — Edge TTS (utama) dan gTTS (cadangan), cache file, retry, dan breaker.
 
-Default selama pengembangan: Edge TTS (gratis). ElevenLabs dipakai untuk demo cukup dengan
-`TTS_PROVIDER=elevenlabs`. gTTS menjadi cadangan terakhir (`TTS_FALLBACK=gtts`).
-
-Diadaptasi dari repo lama (conversational-ai@v1-format-clock). Catatan:
-- ElevenLabs memakai endpoint streaming (byte pertama ±0,45 s di Tahap 0) dan mencatat header
-  `character-cost` untuk pemantauan kredit;
-- Edge memakai resolver DNS sistem (aiodns menggantung di laptop streaming) dan rate/pitch per persona;
-- provider utama diulang sekali bila gagal, lalu cadangan berurutan; breaker melewati provider yang
-  gagal beruntun supaya giliran berikutnya tidak menunggu timeout lagi;
-- audio kosong atau berdurasi 0 dianggap gagal, bukan siaran bisu.
+Branch full free service: seluruh keluaran suara memakai Edge TTS (gratis, tanpa API key) dengan
+cadangan gTTS (gratis). Audio kosong atau berdurasi 0 dianggap gagal, bukan siaran bisu.
 """
 
 from __future__ import annotations
@@ -17,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import io
-import json
 import logging
 import time
 from dataclasses import replace
@@ -43,7 +34,6 @@ __all__ = [
     "AudioCache",
     "AudioResult",
     "EdgeTTSProvider",
-    "ElevenLabsTTSProvider",
     "FailoverTTS",
     "GTTSProvider",
     "MockTTSProvider",
@@ -54,7 +44,7 @@ __all__ = [
     "provider_label",
 ]
 
-PROVIDER_LABELS = {"edge": "Edge (gratis)", "elevenlabs": "ElevenLabs", "gtts": "gTTS (gratis)", "mock": "mock (hening)"}
+PROVIDER_LABELS = {"edge": "Edge (gratis)", "gtts": "gTTS (gratis)", "mock": "mock (hening)"}
 
 
 def provider_label(name: str) -> str:
@@ -79,68 +69,6 @@ class MockTTSProvider(TTSProvider):
         await asyncio.sleep(self._delay)
         audio = silence_wav(max(500, len(text) * 60))
         return AudioResult(audio, "audio/wav", self.name, self.cache_key(persona), wav_duration(audio), latency_ms=int(self._delay * 1000))
-
-
-# ── ElevenLabs ───────────────────────────────────────────────────────────────
-
-
-class ElevenLabsTTSProvider(TTSProvider):
-    name = "elevenlabs"
-    OUTPUT_FORMAT = "mp3_44100_128"
-    KBPS = 128
-
-    def __init__(self, api_key: str, model: str, voices: VoiceBook, timeout_sec: float = 15.0, voice_settings: dict | None = None):
-        if not (api_key and model):
-            raise ValueError("ELEVENLABS_API_KEY dan ELEVENLABS_MODEL wajib untuk TTS ElevenLabs")
-        self._key, self._model = api_key, model
-        self._voices = voices
-        self._timeout = timeout_sec
-        self._voice_settings = dict(voice_settings or {})
-        # Model dan pengaturan masuk kunci cache supaya ganti model/slider tidak menyajikan audio lama (mis. contoh suara).
-        self._variant = hashlib.sha256(json.dumps([model, self._voice_settings], sort_keys=True).encode()).hexdigest()[:8]
-
-    def cache_key(self, persona: str) -> str:
-        return f"{self._voices.voice(self.name, persona)}|{self._variant}"  # id suara di depan "|", seperti kunci Edge
-
-    async def synthesize(self, text, persona):
-        import httpx
-
-        voice = self._voices.voice(self.name, persona)
-        start = time.perf_counter()
-        first = None
-        chunks: list[bytes] = []
-        body: dict = {"text": text, "model_id": self._model}
-        if self._voice_settings:
-            body["voice_settings"] = self._voice_settings
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            async with client.stream(
-                "POST",
-                f"https://api.elevenlabs.io/v1/text-to-speech/{voice}/stream",
-                params={"output_format": self.OUTPUT_FORMAT},
-                headers={"xi-api-key": self._key},
-                json=body,
-            ) as resp:
-                if resp.status_code != 200:
-                    body = (await resp.aread()).decode(errors="replace")[:300]
-                    raise TTSError(f"ElevenLabs HTTP {resp.status_code}: {body}")
-                cost = int(resp.headers.get("character-cost", "0") or 0)
-                async for chunk in resp.aiter_bytes():
-                    if first is None:
-                        first = time.perf_counter() - start
-                    chunks.append(chunk)
-        audio = b"".join(chunks)
-        if not audio:
-            raise TTSError("ElevenLabs mengembalikan audio kosong")
-        return AudioResult(
-            audio,
-            "audio/mpeg",
-            self.name,
-            voice,
-            cbr_mp3_duration(audio, self.KBPS),
-            latency_ms=int((time.perf_counter() - start) * 1000),
-            first_byte_ms=int((first or 0) * 1000),
-            credit_cost=cost,
-        )
 
 
 # ── Edge TTS ─────────────────────────────────────────────────────────────────
@@ -228,8 +156,6 @@ def _audio_duration(audio: bytes, ext: str, provider: str) -> float:
         return wav_duration(audio)
     if provider == "edge":
         return cbr_mp3_duration(audio, EdgeTTSProvider.KBPS)
-    if provider == "elevenlabs":
-        return cbr_mp3_duration(audio, ElevenLabsTTSProvider.KBPS)
     return mp3_duration(audio)
 
 
@@ -406,7 +332,7 @@ class FailoverTTS:
         return out
 
 
-def _build(name: str, settings, voices: VoiceBook, warnings: list[str]) -> TTSProvider | None:
+def _build(name: str, voices: VoiceBook, warnings: list[str]) -> TTSProvider | None:
     if name == "edge":
         return EdgeTTSProvider(voices)
     if name == "gtts":
@@ -416,12 +342,6 @@ def _build(name: str, settings, voices: VoiceBook, warnings: list[str]) -> TTSPr
             warnings.append("Pustaka gTTS belum terpasang (pip install gTTS); cadangan gTTS dilewati.")
             return None
         return GTTSProvider()
-    if name == "elevenlabs":
-        if not (settings.ELEVENLABS_API_KEY and settings.ELEVENLABS_MODEL):
-            return None
-        return ElevenLabsTTSProvider(
-            settings.ELEVENLABS_API_KEY, settings.ELEVENLABS_MODEL, voices, voice_settings=settings.elevenlabs_voice_settings()
-        )
     raise ValueError(f"TTS provider {name!r} tidak dikenal")
 
 
@@ -436,17 +356,15 @@ def create_tts(settings, personas: dict | None = None) -> FailoverTTS:
     cache = AudioCache(Path(settings.CACHE_DIR) / "tts")
     warnings: list[str] = []
 
-    name = settings.TTS_PROVIDER
-    primary = _build(name, settings, voices, warnings)
-    if primary is None:  # ElevenLabs diminta tetapi key kosong: jangan crash, pakai Edge dan beri tahu operator.
-        warnings.append(f"TTS_PROVIDER={name} tetapi ELEVENLABS_API_KEY atau ELEVENLABS_MODEL kosong; memakai Edge TTS (gratis).")
-        name, primary = "edge", EdgeTTSProvider(voices)
+    name = settings.TTS_PROVIDER if settings.TTS_PROVIDER in ("edge", "gtts") else "edge"
+    primary = _build(name, voices, warnings)
+    assert primary is not None
 
     fallbacks: list[TTSProvider] = []
     for fb in settings.tts_fallbacks():
         if fb == name or any(f.name == fb for f in fallbacks):
             continue
-        provider = _build(fb, settings, voices, warnings)
+        provider = _build(fb, voices, warnings)
         if provider is not None:
             fallbacks.append(provider)
     tts = FailoverTTS(

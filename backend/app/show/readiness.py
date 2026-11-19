@@ -99,45 +99,33 @@ def build_readiness(
     services: list[dict[str, Any]] = []
     known_minutes: list[float] = []
 
-    # Otak AI: model dengan menit tersisa paling sedikit yang menentukan.
+    # Otak AI: model Gemini free tier dengan menit tersisa paling sedikit yang menentukan.
     llm_rows = []
     unknown: list[str] = []
     for model, rpm in llm_requests_per_min(settings, rates).items():
         if model.startswith(COMPAT_PREFIX):
-            llm_rows.append({"model": model, "paid": True, "requests_per_min": round(rpm, 2), "minutes_left": None, "percent_left": None, "remaining": None})
-            continue  # berbayar per panggilan: tanpa kuota harian
+            continue  # mode gratis tidak memakai endpoint compat: berbayar
         st = quota.status(model)
         minutes = None if st["remaining"] is None else st["remaining"] / rpm
         llm_rows.append({**st, "requests_per_min": round(rpm, 2), "minutes_left": None if minutes is None else int(minutes)})
-    limited = [r for r in llm_rows if not r.get("paid")]
-    worst = min((r for r in limited if r["minutes_left"] is not None), key=lambda r: r["minutes_left"], default=None)
-    pick = worst or (limited[0] if limited else None)
-    llm_unlimited = not limited  # hanya model berbayar (compat:) atau tanpa model: tidak dibatasi kuota harian
+    worst = min((r for r in llm_rows if r["minutes_left"] is not None), key=lambda r: r["minutes_left"], default=None)
+    pick = worst or (llm_rows[0] if llm_rows else None)
     services.append({
         "kind": "llm",
         "label": "Otak AI",
         "percent_left": pick["percent_left"] if pick else None,
         "minutes_left": pick["minutes_left"] if pick else None,
-        "unlimited": llm_unlimited,
-        "paid": bool(llm_rows) and llm_unlimited,
+        "unlimited": not llm_rows,
+        "paid": False,
         "detail": llm_rows,
     })
     if worst is not None:
         known_minutes.append(worst["minutes_left"])
-    if limited and any(r["minutes_left"] is None for r in limited):
+    if llm_rows and any(r["minutes_left"] is None for r in llm_rows):
         unknown.append("Otak AI")
 
-    # Suara AI
-    if tts_primary in ("edge", "gtts", "mock"):
-        tts = {"kind": "tts", "label": "Suara AI", "percent_left": None, "minutes_left": None, "unlimited": True, "detail": tts_primary}
-    else:
-        minutes = None if tts_credits_left is None else int(tts_credits_left / max(1e-6, rates.tts_credits_per_min))
-        tts = {"kind": "tts", "label": "Suara AI", "percent_left": None, "minutes_left": minutes, "unlimited": False,
-               "credits_left": tts_credits_left, "credits_per_min": round(rates.tts_credits_per_min, 1), "detail": tts_note or tts_primary}
-        if minutes is not None:
-            known_minutes.append(minutes)
-        else:
-            unknown.append("Suara AI")
+    # Suara AI (Edge / gTTS gratis, tanpa batas kuota)
+    tts = {"kind": "tts", "label": "Suara AI", "percent_left": None, "minutes_left": None, "unlimited": True, "detail": tts_primary}
     services.append(tts)
 
     if mode == "A":
@@ -145,7 +133,8 @@ def build_readiness(
                          "detail": "Web Speech di browser prompter"})
 
     fallbacks = []
-    if settings.GEMINI_MODEL_PERSONA_FALLBACK:
+    fb_model = settings.GEMINI_MODEL_PERSONA_FALLBACK
+    if fb_model and not fb_model.startswith(COMPAT_PREFIX):
         fallbacks.append("llm")
     if tts_fallbacks:
         fallbacks.append("tts")

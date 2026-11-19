@@ -626,7 +626,7 @@ class ShowEngine:
             return result
         except LLMQuotaExhausted as e:
             fallback_model = self.settings.GEMINI_MODEL_PERSONA_FALLBACK
-            if fallback_model and self.persona_agent._model != fallback_model:
+            if fallback_model and not fallback_model.startswith("compat:") and self.persona_agent._model != fallback_model:
                 await self._alert("quota", f"Kuota harian model persona habis; pindah ke {fallback_model}")
                 self.log.event("quota", role="persona", model_from=self.persona_agent._model, model_to=fallback_model)
                 self.persona_agent._model = fallback_model

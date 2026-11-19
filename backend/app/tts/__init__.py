@@ -2,7 +2,6 @@ from app.tts.base import AudioResult, TTSError, TTSProvider, TTSResult
 from app.tts.provider import (
     AudioCache,
     EdgeTTSProvider,
-    ElevenLabsTTSProvider,
     FailoverTTS,
     GTTSProvider,
     MockTTSProvider,
@@ -15,7 +14,6 @@ __all__ = [
     "AudioCache",
     "AudioResult",
     "EdgeTTSProvider",
-    "ElevenLabsTTSProvider",
     "FailoverTTS",
     "GTTSProvider",
     "MockTTSProvider",

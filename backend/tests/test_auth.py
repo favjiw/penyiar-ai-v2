@@ -55,7 +55,7 @@ def test_everything_but_login_and_minimal_health_needs_login(client):
     assert client.get("/api/health").json() == {"status": "ok", "live": False}  # cek Docker/deploy tanpa rincian
     for method, path in [("get", "/api/blockers"), ("get", "/api/show"), ("get", "/api/voices"), ("get", "/api/logs"),
                          ("get", "/api/auth/me"), ("get", "/api/users"), ("get", "/audio/x.mp3"),
-                         ("post", "/api/ptt/turn"), ("post", "/api/blocker/generate"), ("post", "/api/simli/token")]:
+                         ("post", "/api/ptt/turn"), ("post", "/api/blocker/generate")]:
         assert getattr(client, method)(path).status_code == 401, path
 
 

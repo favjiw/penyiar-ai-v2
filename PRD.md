@@ -923,6 +923,9 @@ Setiap tahap diakhiri demo singkat ke Favian dan pembaruan §16.
 | 7 Eksperimen | Belum | | |
 
 ## 17. Riwayat
+- **v2.17-free (19 Nov 2026):** branch `feat/full-free-service` dari `main` untuk perbandingan layanan gratis vs berbayar ke stakeholder:
+  - seluruh layanan memakai komponen gratis: Gemini free tier (tanpa `compat:` berbayar), Edge TTS + cadangan gTTS (tanpa ElevenLabs), Web Speech STT, dan Avatar Kartun 2D beranimasi di `/stage` (tanpa Simli / `simli-client`);
+  - halaman `/admin` dan `.env.example` disesuaikan agar hanya menampilkan dan menguji layanan gratis (Gemini & Edge TTS).
 - **v2.0 (24 Okt 2026):** PRD tunggal setelah revisi pembimbing HITS. Menggantikan seluruh PRD dan dokumen desain v1.
 - **v2.1 (24 Okt 2026):** §12 diperbarui setelah memeriksa folder lokal `penyiar-ai` (clone `conversational-ai`, branch `talk-durasi` @ `a3e04ca`):
   - sumber diganti ke branch `talk-durasi`;

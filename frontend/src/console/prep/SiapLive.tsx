@@ -7,7 +7,6 @@ import { api, ApiError, type Readiness, type VoiceCatalog, type VoiceOption } fr
 import { DURASI_PILIHAN, factCheckCount, materiIssues, materiSummary, planMinutes, type Durasi } from '../../lib/materi'
 import { usePersisted } from '../../lib/usePersisted'
 import type { LiveSession } from '../../live/useLiveSession'
-import { useAvatarStyle } from '../../stage/avatarStyle'
 import { openStageWindow } from '../../stage/openStageWindow'
 import type { Blocker } from '../../types'
 import { Button, IconAlert, IconCheck, IconPlay } from '../../ui'
@@ -54,7 +53,6 @@ type Precheck = { state: 'idle' | 'running' } | { state: 'ok' } | { state: 'fail
 export function SiapLive({ live, mode, onMode: setMode, readiness, materi, durasi, onDurasi, onEdit, onRegenerateForDuration, generating }: Props) {
   const { output } = live
   const [aiPersona, setAiPersona] = usePersisted<Persona>('hits.aiPersona', 'salsa', isPersona)
-  const [avatarStyle, setAvatarStyle] = useAvatarStyle()
   const [hostName, setHostName] = usePersisted<string>('hits.hostName', '', isStr)
   const [voices, setVoices] = usePersisted<Record<string, string>>('hits.voices', {}, isVoiceMap)
   const [catalog, setCatalog] = useState<VoiceCatalog | null>(null)
@@ -238,28 +236,10 @@ export function SiapLive({ live, mode, onMode: setMode, readiness, materi, duras
         <span className="siap-hint">Jumlah topik menyesuaikan, ±9 menit per topik.</span>
       </fieldset>
 
-      <fieldset className="siap-field">
-        <legend>Tampilan karakter</legend>
-        <div className="siap-modes">
-          {(
-            [
-              ['realistic', 'Realistis', 'Avatar Simli, bibir sinkron suara'],
-              ['2d', 'Kartun 2D', 'Karakter ilustrasi beranimasi ala VTuber'],
-            ] as const
-          ).map(([v, title, hint]) => (
-            <label key={v} className={`siap-mode${avatarStyle === v ? ' is-on' : ''}`}>
-              <input type="radio" name="avatar-style" checked={avatarStyle === v} onChange={() => setAvatarStyle(v)} />
-              <span className="siap-mode__title">{title}</span>
-              <span className="siap-mode__hint">{hint}</span>
-            </label>
-          ))}
-        </div>
-        <span className="siap-hint">
-          {avatarStyle === 'realistic' && mode === 'B'
-            ? 'Format AI + AI memakai 2 sesi Simli sekaligus. Bila paket Simli hanya 1 sesi, satu penyiar tampil sebagai kartun 2D.'
-            : 'Berlaku seketika di layar OBS yang sedang terbuka.'}
-        </span>
-      </fieldset>
+      <div className="siap-field">
+        <span className="siap-legend">Layanan gratis aktif</span>
+        <span className="siap-hint">Avatar Kartun 2D beranimasi · Suara Edge TTS (cadangan gTTS) · Otak AI Gemini free tier.</span>
+      </div>
 
       {mode === 'A' && (
         <label className="siap-field siap-name">

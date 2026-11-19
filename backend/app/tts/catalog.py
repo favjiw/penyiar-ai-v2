@@ -22,7 +22,7 @@ SEEDED_FLAG = "meta.voices_seeded"
 
 class VoiceOption(BaseModel):
     id: str  # voice id provider
-    provider: Literal["elevenlabs", "edge"]
+    provider: Literal["edge"] = "edge"
     name: str
     gender: Literal["male", "female"]
     notes: str = ""
@@ -65,8 +65,8 @@ class VoiceCatalog:
                 from app.db import voices
 
                 with self._db.engine.connect() as conn:
-                    rows = conn.execute(select(voices).order_by(voices.c.position, voices.c.name)).all()
-                self._items = tuple(VoiceOption(id=r.id, provider=r.provider, name=r.name, gender=r.gender, notes=r.notes or "") for r in rows)
+                    rows = conn.execute(select(voices).where(voices.c.provider == "edge").order_by(voices.c.position, voices.c.name)).all()
+                self._items = tuple(VoiceOption(id=r.id, provider="edge", name=r.name, gender=r.gender, notes=r.notes or "") for r in rows)
         return self._items
 
     def all(self) -> list[VoiceOption]:

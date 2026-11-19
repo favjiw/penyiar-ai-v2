@@ -177,40 +177,6 @@ def test_prompter_mic_state_reaches_console(client):
         assert st["mic"] is None  # prompter pergi: status mic ikut hilang
 
 
-def test_simli_token_requires_api_key(client):
-    r = client.post("/api/simli/token", json={})
-    assert r.status_code == 400
-    assert "SIMLI_API_KEY" in r.json()["detail"]
-
-
-def test_simli_token_proxies_to_simli(client, monkeypatch):
-    import httpx
-
-    client.app.state.settings.SIMLI_API_KEY = "dummy-simli-key"
-
-    class FakeClient:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *args):
-            pass
-
-        async def post(self, url, headers=None, json=None):
-            assert url == "https://api.simli.ai/compose/token"
-            assert headers["x-simli-api-key"] == "dummy-simli-key"
-            assert json["faceId"] == "bf13113a-355a-4d97-8b90-4edccd1da7b2"
-            return httpx.Response(200, json={"session_token": "test-simli-session-token-xyz"})
-
-    monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
-    r = client.post("/api/simli/token", json={})
-    assert r.status_code == 200
-    assert r.json()["session_token"] == "test-simli-session-token-xyz"
-
-
-
 def test_undo_topic_endpoint(client):
     blocker = locked_blocker(client)
     client.post("/api/show/start", json={"blocker_id": blocker["id"], "mode": "B"})
@@ -230,37 +196,6 @@ def test_readiness_endpoint_reports_minutes_per_service(client):
     assert pre["readiness"]["target_minutes"] == 45
 
 
-def test_simli_token_uses_the_face_of_each_persona(client, monkeypatch):
-    import httpx
-
-    settings = client.app.state.settings
-    settings.SIMLI_API_KEY = "dummy-simli-key"
-    settings.SIMLI_FACE_ID_RAKA, settings.SIMLI_FACE_ID_SALSA = "face-raka", ""
-    seen = []
-
-    class FakeClient:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *args):
-            pass
-
-        async def post(self, url, headers=None, json=None):
-            seen.append(json)
-            return httpx.Response(200, json={"session_token": "tok"})
-
-    monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
-    assert client.post("/api/simli/token", json={"persona": "raka"}).status_code == 200
-    assert client.post("/api/simli/token", json={"persona": "salsa"}).status_code == 200  # wajah kosong → SIMLI_FACE_ID
-    assert seen[0]["faceId"] == "face-raka"
-    assert seen[1]["faceId"] == settings.SIMLI_FACE_ID
-    # Sambungan tidak lagi dibatasi 5 menit uji coba; batasnya dari konfigurasi.
-    assert seen[0]["maxSessionLength"] == settings.SIMLI_MAX_SESSION_S >= 3600
-
-
 def test_stage_avatar_state_reaches_console(client):
     with client.websocket_connect("/ws/session?role=console") as console:
         console.receive_json()
@@ -268,9 +203,8 @@ def test_stage_avatar_state_reaches_console(client):
         with client.websocket_connect("/ws/session?role=stage") as stage:
             stage.receive_json()
             _output_status(console)
-            stage.send_json({"action": "avatar_state", "data": {"personas": {"raka": "simli", "salsa": "ngawur", "x": "2d"}}})
-            # Nilai tak dikenal dianggap fallback (karakter 2D), bukan dipercaya begitu saja; "2d" = kartun pilihan operator.
-            assert _output_status(console)["avatar"] == {"raka": "simli", "salsa": "fallback", "x": "2d"}
+            stage.send_json({"action": "avatar_state", "data": {"personas": {"raka": "2d", "salsa": "2d"}}})
+            assert _output_status(console)["avatar"] == {"raka": "2d", "salsa": "2d"}
         for _ in range(5):
             st = _output_status(console)
             if st["clients"]["stage"] == 0:

@@ -35,7 +35,7 @@ const post = <T>(path: string, data?: unknown) =>
 
 export interface VoiceOption {
   id: string
-  provider: 'elevenlabs' | 'edge'
+  provider: 'edge'
   name: string
   gender: 'male' | 'female'
   notes: string
@@ -107,19 +107,13 @@ export interface AdminConfig {
 
 export interface AdminVoice {
   id: string
-  provider: 'elevenlabs' | 'edge'
+  provider: 'edge'
   name: string
   gender: 'male' | 'female'
   notes: string
 }
 
-export interface AdminFace {
-  id: string
-  name: string
-  notes: string
-}
-
-export type TestService = 'gemini' | 'compat' | 'elevenlabs' | 'simli'
+export type TestService = 'gemini' | 'edge'
 
 export interface AdminPersona {
   id: string
@@ -206,9 +200,6 @@ export const adminApi = {
   patchVoice: (id: string, patch: Partial<Pick<AdminVoice, 'name' | 'gender' | 'notes'>>) =>
     request<AdminVoice>(`/api/admin/voices/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   deleteVoice: (id: string) => request<{ ok: boolean }>(`/api/admin/voices/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  faces: () => request<AdminFace[]>('/api/admin/faces'),
-  addFace: (f: { id: string; name: string; notes?: string }) => post<AdminFace>('/api/admin/faces', f),
-  deleteFace: (id: string) => request<{ ok: boolean }>(`/api/admin/faces/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   personas: () => request<AdminPersona[]>('/api/admin/personas'),
   savePersona: (p: AdminPersona) => request<AdminPersona>(`/api/admin/personas/${p.id}`, { method: 'PUT', body: JSON.stringify(p) }),
   prompts: () => request<AdminPromptRow[]>('/api/admin/prompts'),
@@ -268,5 +259,4 @@ export const api = {
       { voices, mode, target_minutes },
     ),
   health: () => request<{ llm_mode: string; tts_mode: string; models: Record<string, string>; tts?: TtsStatus }>('/api/health'),
-  simliToken: (persona: string) => post<{ session_token: string }>('/api/simli/token', { persona }),
 }

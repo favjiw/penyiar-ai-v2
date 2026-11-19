@@ -17,11 +17,11 @@ def test_catalog_ids_are_unique():
 def test_catalog_has_current_voices_and_valid_entries():
     catalog = load_voice_catalog()
     ids = {v.id: v for v in catalog}
-    assert ids["q8qwd1jY2jS3AWOBeq25"].name == "Pratama" and ids["ffTJE9l3Kt2ipEM32UOc"].name == "Aita"
+    assert ids["id-ID-ArdiNeural"].name == "Ardi" and ids["id-ID-GadisNeural"].name == "Gadis"
     assert ids["id-ID-ArdiNeural"].provider == "edge" and find_voice("tidak-ada") is None
-    el_male = [v for v in catalog if v.provider == "elevenlabs" and v.gender == "male"]
-    el_female = [v for v in catalog if v.provider == "elevenlabs" and v.gender == "female"]
-    assert el_male and el_female  # daftar dikurasi operator; jumlahnya bebas, minimal satu suara per gender
+    edge_male = [v for v in catalog if v.provider == "edge" and v.gender == "male"]
+    edge_female = [v for v in catalog if v.provider == "edge" and v.gender == "female"]
+    assert edge_male and edge_female
 
 
 def test_operator_selection_wins_over_defaults_and_resets():
@@ -33,13 +33,6 @@ def test_operator_selection_wins_over_defaults_and_resets():
     assert book.voice("edge", "raka") == default_raka and book.voice("edge", "salsa") == "id-ID-ArdiNeural"
     book.select({})
     assert (book.voice("edge", "raka"), book.voice("edge", "salsa")) == (default_raka, default_salsa)
-
-
-def test_selection_is_per_provider_so_fallback_keeps_its_own_voice():
-    book = VoiceBook(Settings(_env_file=None), load_personas())
-    edge_default = book.voice("edge", "raka")
-    book.select({"raka": "ffTJE9l3Kt2ipEM32UOc"})  # suara ElevenLabs
-    assert book.voice("elevenlabs", "raka") == "ffTJE9l3Kt2ipEM32UOc" and book.voice("edge", "raka") == edge_default
 
 
 def test_unknown_voice_is_rejected_even_with_mock_tts():
@@ -54,7 +47,7 @@ def test_unknown_voice_is_rejected_even_with_mock_tts():
 
 def test_voices_endpoint_lists_catalog(client):
     r = client.get("/api/voices").json()
-    assert {v["name"] for v in r["voices"]} >= {"Pratama", "Aita", "Ardi", "Gadis"} and "provider" in r
+    assert {v["name"] for v in r["voices"]} >= {"Ardi", "Gadis"} and r["provider"] == "mock"
 
 
 def test_start_with_unknown_voice_is_422_and_does_not_lock(client):
@@ -70,13 +63,10 @@ def test_start_accepts_a_valid_voice_selection(client):
     client.post("/api/show/stop")
 
 
-
-def test_voice_of_another_provider_or_persona_outside_show_is_rejected():
+def test_voice_of_persona_outside_show_is_rejected():
     book = VoiceBook(Settings(_env_file=None), load_personas())
     tts = FailoverTTS(EdgeTTSProvider(book))
     tts.voice_book = book
-    with pytest.raises(TTSError, match="tidak cocok"):
-        tts.set_voices({"raka": "q8qwd1jY2jS3AWOBeq25"}, ["raka", "salsa"])  # suara ElevenLabs saat TTS aktif Edge
     with pytest.raises(TTSError, match="tidak ikut"):
         tts.set_voices({"salsa": "id-ID-GadisNeural"}, ["raka"])
     tts.set_voices({"raka": "id-ID-GadisNeural"}, ["raka", "salsa"])

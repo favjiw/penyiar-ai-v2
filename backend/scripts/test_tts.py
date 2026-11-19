@@ -4,10 +4,10 @@ Memastikan audio tidak kosong, durasinya lebih dari 0 detik, dan suara Raka dan 
 Hasil disimpan ke `backend/cache/test_tts/` supaya bisa didengar langsung.
 
     cd backend
-    python scripts/test_tts.py                      # semua provider yang tersedia
-    python scripts/test_tts.py --providers edge,gtts  # tanpa menyentuh kredit ElevenLabs
+    python scripts/test_tts.py                      # semua provider gratis (edge,gtts)
+    python scripts/test_tts.py --providers edge       # hanya Edge TTS
 
-Provider yang tidak tersedia (gTTS belum terpasang, key ElevenLabs kosong) dilewati dan
+Provider yang tidak tersedia (gTTS belum terpasang) dilewati dan
 dilaporkan; skrip gagal bila ada provider tersedia yang gagal, atau bila tidak ada yang lulus.
 """
 
@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.config import get_settings  # noqa: E402
 from app.data.personas import load_personas  # noqa: E402
-from app.tts import EdgeTTSProvider, ElevenLabsTTSProvider, GTTSProvider, VoiceBook  # noqa: E402
+from app.tts import EdgeTTSProvider, GTTSProvider, VoiceBook  # noqa: E402
 from app.tts.base import mp3_duration  # noqa: E402
 
 SENTENCE = "Halo Sobat Hits, kita ngobrol santai dulu ya soal kos-kosan hari ini."
@@ -39,16 +39,12 @@ def build(name: str, settings, book: VoiceBook):
         except ImportError:
             return None, "pustaka gTTS belum terpasang (pip install gTTS)"
         return GTTSProvider(), ""
-    if name == "elevenlabs":
-        if not (settings.ELEVENLABS_API_KEY and settings.ELEVENLABS_MODEL):
-            return None, "ELEVENLABS_API_KEY atau ELEVENLABS_MODEL kosong"
-        return ElevenLabsTTSProvider(settings.ELEVENLABS_API_KEY, settings.ELEVENLABS_MODEL, book), ""
     raise SystemExit(f"Provider tidak dikenal: {name}")
 
 
 async def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--providers", default="edge,gtts,elevenlabs")
+    ap.add_argument("--providers", default="edge,gtts")
     ap.add_argument("--text", default=SENTENCE)
     args = ap.parse_args()
 
@@ -91,8 +87,8 @@ async def main() -> int:
                 f"{(time.perf_counter() - started) * 1000:5.0f} ms  voice={result.voice}  -> {path.name}"
             )
 
-    # Suara Raka dan Salsa harus berbeda untuk provider yang punya suara per persona.
-    for name in ("edge", "elevenlabs"):
+    # Suara Raka dan Salsa harus berbeda untuk Edge TTS.
+    for name in ("edge",):
         a, b = audio_by_persona.get((name, "raka")), audio_by_persona.get((name, "salsa"))
         if a is not None and b is not None:
             same = a == b

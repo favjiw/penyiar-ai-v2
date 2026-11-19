@@ -284,10 +284,6 @@ def create_llm_client(settings, quota=None) -> LLMClient:
     limiters = RateLimiterRegistry(default_rpm=settings.GEMINI_RPM_DEFAULT)
     for role in ("blocker", "persona", "supervisor", "showrunner"):
         limiters.set_limit(settings.model_for(role), settings.rpm_for(role))
-    compat = None
-    if settings.OPENAI_COMPAT_BASE_URL and settings.OPENAI_COMPAT_API_KEY:
-        compat = OpenAICompatLLMClient(settings.OPENAI_COMPAT_BASE_URL, settings.OPENAI_COMPAT_API_KEY, limiters, settings.OPENAI_COMPAT_REASONING_EFFORT)
-    gemini = GeminiLLMClient(settings.GEMINI_API_KEY, limiters, fail_inject="llm" in settings.FAIL_INJECT, quota=quota) if settings.GEMINI_API_KEY else None
-    if gemini is None and compat is None:
-        raise ValueError("LLM_MODE=live butuh GEMINI_API_KEY atau OPENAI_COMPAT_BASE_URL + OPENAI_COMPAT_API_KEY")
-    return RouterLLMClient(gemini, compat, limiters)
+    if not settings.GEMINI_API_KEY:
+        raise ValueError("LLM_MODE=live butuh GEMINI_API_KEY")
+    return GeminiLLMClient(settings.GEMINI_API_KEY, limiters, fail_inject="llm" in settings.FAIL_INJECT, quota=quota)

@@ -32,7 +32,6 @@ from app.blocker.store import now_iso
 from app.config import REPO_ROOT, Settings, get_settings
 from app.content import content
 from app.db import database_for, generation_log
-from app.faces import FaceCatalog
 from app.llm import create_llm_client
 from app.llm.quota import QuotaCounter
 from app.runtime_config import RuntimeConfig
@@ -72,8 +71,6 @@ def build_app(settings: Settings | None = None) -> FastAPI:
         tuning.configure(settings)
         # Setelan dari halaman admin menimpa .env; diterapkan SEBELUM klien LLM/TTS dibuat.
         app.state.runtime_config = RuntimeConfig(db, settings, SecretBox(settings.SECRETS_KEY))
-        app.state.faces = FaceCatalog(db)
-        app.state.faces.seed(settings)
         app.state.runtime_config.apply_to_settings()
         llm = create_llm_client(settings, quota=app.state.quota)
         app.state.llm = llm

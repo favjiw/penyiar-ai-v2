@@ -45,10 +45,6 @@ export interface LiveSession {
   audioReady: boolean
   unlockAudio: () => void
   send: (action: string, data?: Record<string, unknown>) => void
-  /** Jalur audio khusus satu persona (untuk avatar Simli-nya); hanya berisi suara saat persona itu bicara, selain itu hening. */
-  getAudioTrack: (persona: string) => MediaStreamTrack | null
-  /** Bisukan keluaran lokal persona ini (dipakai bila avatar Simli-nya yang memutar suara); false = suara lokal menyala lagi. */
-  setLocalMuted: (persona: string, muted: boolean) => void
 }
 
 /** Satu hal yang diputar berurutan: filler, atau giliran AI yang bisa terdiri dari beberapa bagian kalimat. */
@@ -91,9 +87,8 @@ export function useLiveSession(role: Role): LiveSession {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const ctxRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
-  // Satu jalur keluaran per persona: suara lokal (gain) dan jalur untuk avatar Simli (dest). Hanya persona yang sedang bicara tersambung ke analyser.
-  // trim = penyeimbang volume per penyiar (VOICE_GAIN_DB_*), sebelum suara lokal dan jalur Simli.
-  const routesRef = useRef<Map<string, { trim: GainNode; gain: GainNode; dest: MediaStreamAudioDestinationNode; muted: boolean }>>(new Map())
+  // trim = penyeimbang volume per penyiar (VOICE_GAIN_DB_*); hanya persona yang sedang bicara tersambung ke analyser.
+  const routesRef = useRef<Map<string, { trim: GainNode }>>(new Map())
   const routedRef = useRef<string | null>(null)
   const voiceGainRef = useRef<Record<string, number>>({})
   const samplesRef = useRef<Uint8Array | null>(null)
@@ -144,13 +139,8 @@ export function useLiveSession(role: Role): LiveSession {
       if (!r) {
         const trim = ctx.createGain()
         trim.gain.value = voiceGainRef.current[persona] ?? 1.0
-        const gain = ctx.createGain()
-        gain.gain.value = 1.0
-        const dest = ctx.createMediaStreamDestination()
-        trim.connect(gain)
-        gain.connect(ctx.destination)
-        trim.connect(dest)
-        r = { trim, gain, dest, muted: false }
+        trim.connect(ctx.destination)
+        r = { trim }
         routesRef.current.set(persona, r)
       }
       return r
@@ -168,19 +158,6 @@ export function useLiveSession(role: Role): LiveSession {
       if (prev) analyser.disconnect(prev.trim)
       analyser.connect(next.trim)
       routedRef.current = persona
-    },
-    [routeFor],
-  )
-
-  const getAudioTrack = useCallback((persona: string): MediaStreamTrack | null => routeFor(persona)?.dest.stream.getAudioTracks()[0] ?? null, [routeFor])
-
-  const setLocalMuted = useCallback(
-    (persona: string, muted: boolean) => {
-      const r = routeFor(persona)
-      if (r) {
-        r.muted = muted
-        r.gain.gain.value = muted ? 0.0 : 1.0
-      }
     },
     [routeFor],
   )
@@ -480,5 +457,5 @@ export function useLiveSession(role: Role): LiveSession {
     }
   }, [role, enqueue, pump, send, stopAudio])
 
-  return { connected, snapshot, transcript, showrunner, supervisor, output, pointClock, showClock, lastTopicChange, lastNudge, speaking, alerts, sttPartial, micActive, level, audioBlocked, audioReady, unlockAudio, send, getAudioTrack, setLocalMuted }
+  return { connected, snapshot, transcript, showrunner, supervisor, output, pointClock, showClock, lastTopicChange, lastNudge, speaking, alerts, sttPartial, micActive, level, audioBlocked, audioReady, unlockAudio, send }
 }

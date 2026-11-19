@@ -26,7 +26,6 @@ from app.runtime_config import apply_if_idle
 from app.tts.base import TTSError
 from app.show.readiness import build_readiness, rates_from_logs
 from app.tts.catalog import load_voice_catalog
-from app.tts.credits import elevenlabs_credits_left
 from app.ws import ConnectionManager
 
 logger = logging.getLogger(__name__)
@@ -91,22 +90,11 @@ async def start_show(req: StartShowRequest, request: Request, _: User = Depends(
     return engine.snapshot()
 
 
-START_CREDITS_TIMEOUT_S = 2.5  # Mulai tidak boleh tertahan lama oleh ElevenLabs (KT FR-2: tombol ≤1 s sebisanya)
-
-
 async def _tts_budget(app, mode: str, fresh: bool = False) -> dict:
-    """Sisa kredit suara saat mulai + laju per menit; sisa None bila tidak diketahui (tanpa peringatan)."""
+    """Mode full free service (Edge/gTTS): tanpa batas kredit suara."""
     s = app.state.settings
     rates = rates_from_logs(app.state.db, mode, s.AI_TURNS_PER_MIN_A if mode == "A" else s.AI_TURNS_PER_MIN_B, s.TTS_CREDITS_PER_MIN)
-    left, note = (None, "")
-    used_at = app.state.tts.credits_used
-    if app.state.tts.primary.name == "elevenlabs":
-        if fresh:
-            left, note = await elevenlabs_credits_left(s.ELEVENLABS_API_KEY, timeout_sec=START_CREDITS_TIMEOUT_S, fresh=True)
-        else:
-            left, note = await elevenlabs_credits_left(s.ELEVENLABS_API_KEY)
-        used_at = app.state.tts.credits_used
-    return {"credits_left": left, "per_min": rates.tts_credits_per_min, "used_at_start": used_at, "note": note, "rates": rates}
+    return {"credits_left": None, "per_min": 0.0, "used_at_start": 0, "note": "", "rates": rates}
 
 
 async def _readiness(app, mode: str, target_minutes: int) -> dict:
@@ -251,44 +239,6 @@ async def get_log(session_id: str, request: Request, _: User = Depends(require_r
     return events
 
 
-class SimliTokenRequest(BaseModel):
-    persona: Optional[str] = None  # raka | salsa: wajah diambil dari SIMLI_FACE_ID_<PERSONA>
-    face_id: Optional[str] = None
-
-
-@router.post("/api/simli/token")
-async def get_simli_token(req: SimliTokenRequest, request: Request, _: User = Depends(require_role("operator"))):
-    """Token sesi Simli untuk satu panel karakter di /stage. Kunci API tetap di server; browser hanya menerima token."""
-    settings = request.app.state.settings
-    api_key = (settings.SIMLI_API_KEY or "").strip().strip("'\"")
-    if not api_key:
-        raise HTTPException(400, "SIMLI_API_KEY belum dikonfigurasi di .env")
-    face_id = (req.face_id or settings.simli_face_for(req.persona or "")).strip().strip("'\"")
-    import httpx
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            res = await client.post(
-                "https://api.simli.ai/compose/token",
-                headers={
-                    "x-simli-api-key": api_key,
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "faceId": face_id,
-                    "handleSilence": True,
-                    "maxSessionLength": settings.SIMLI_MAX_SESSION_S,
-                    "maxIdleTime": settings.SIMLI_MAX_IDLE_S,
-                },
-            )
-            if res.status_code != 200:
-                logger.error("Simli token error %d: %s", res.status_code, res.text[:300])
-                raise HTTPException(res.status_code, f"Simli API error: {res.text[:300]}")
-            return res.json()
-    except httpx.HTTPError as e:
-        logger.error("Simli connection error: %s", e)
-        raise HTTPException(502, f"Gagal menghubungi Simli API: {e}")
-
-
 def _ws_allowed(ws: WebSocket, role: str) -> bool:
     """Login wajib (bila dinyalakan): konsol dan layar OBS untuk operator ke atas, prompter untuk semua peran.
     Origin yang membawa cookie dari situs lain ditolak (WebSocket tidak terkena aturan CORS)."""
@@ -344,8 +294,8 @@ async def ws_session(ws: WebSocket, role: str = "console"):
                     manager.mic[ws] = state
                     await manager.broadcast_output_status()
             elif action == "avatar_state" and manager.clients.get(ws) == "stage":
-                # Stage melaporkan avatar tiap persona: simli (video realistis), 2d (kartun dipilih operator), atau fallback (Simli gagal, 2D sementara); konsol memberi peringatan kuning hanya untuk fallback.
-                state = {str(p)[:20]: (s if s in ("simli", "connecting", "2d") else "fallback") for p, s in list((data.get("personas") or {}).items())[:4]}
+                # Mode gratis: avatar layar OBS selalu karakter 2D beranimasi.
+                state = {str(p)[:20]: "2d" for p in list((data.get("personas") or {}).keys())[:4]}
                 if manager.avatar.get(ws) != state:
                     manager.avatar[ws] = state
                     await manager.broadcast_output_status()

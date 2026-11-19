@@ -96,10 +96,6 @@ function PersonaCard({ initial }: { initial: AdminPersona }) {
           </select>
         </label>
         <label className="auth-field">
-          Suara ElevenLabs bawaan (ID)
-          <input value={p.voices.elevenlabs ?? ''} onChange={(e) => setP({ ...p, voices: { ...p.voices, elevenlabs: e.target.value } })} spellCheck={false} />
-        </label>
-        <label className="auth-field">
           Suara Edge bawaan
           <input value={p.voices.edge ?? ''} onChange={(e) => setP({ ...p, voices: { ...p.voices, edge: e.target.value } })} spellCheck={false} />
         </label>

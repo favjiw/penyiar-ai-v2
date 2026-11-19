@@ -2,14 +2,11 @@
  * Layar untuk OBS (`/stage`, PRD v2.7 FR-10): hanya karakter, tanpa teks atau komponen,
  * dan satu-satunya pemutar audio siaran. Mode B: dua panel bertumpuk (9:16).
  * Mode A: satu panel AI (kamera studio ditumpuk di OBS).
- * Karakter per panel: avatar realistis Simli (2D sebagai cadangan otomatis) atau kartun 2D beranimasi, sesuai
- * pilihan operator (Avatar.tsx).
+ * Mode full free service: karakter kartun 2D beranimasi mengikuti amplitudo suara Edge TTS.
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useLiveSession } from '../live/useLiveSession'
 import { AvatarPanel, type AvatarPersona } from './Avatar'
-import { useAvatarStyle } from './avatarStyle'
-import type { AvatarState } from './useSimliStream'
 import './stage.css'
 
 const NAMES: Record<AvatarPersona, string> = { raka: 'Raka', salsa: 'Salsa' }
@@ -17,9 +14,8 @@ const isPersona = (x: unknown): x is AvatarPersona => x === 'raka' || x === 'sal
 
 export function StagePage() {
   const live = useLiveSession('stage')
-  const { snapshot: snap, speaking, level, audioReady, unlockAudio, output, send, connected, getAudioTrack, setLocalMuted } = live
+  const { snapshot: snap, speaking, level, audioReady, unlockAudio, output, send, connected } = live
   const params = new URLSearchParams(window.location.search)
-  const [avatarStyle] = useAvatarStyle() // pilihan operator di konsol (Siap live); ikut berganti seketika bila diubah
 
   useEffect(() => {
     document.title = 'Layar untuk OBS · Penyiar AI HITS'
@@ -33,31 +29,17 @@ export function StagePage() {
   const onAir = snap.state === 'live' || snap.state === 'paused'
   const showArm = !onAir && !audioReady && output?.is_audio_owner === true
 
-  // Status avatar tiap panel dilaporkan ke server; konsol memberi peringatan kuning bila ada yang jatuh ke karakter 2D.
-  const [avatars, setAvatars] = useState<Record<string, AvatarState>>({})
-  const onAvatarState = useCallback((persona: string, state: AvatarState) => setAvatars((a) => (a[persona] === state ? a : { ...a, [persona]: state })), [])
   const shown = personas.join(',')
   useEffect(() => {
-    if (!connected) return // kirim ulang setiap kali sambungan WS (kembali) terbuka: server tidak menyimpannya antar sambungan
-    const active = Object.fromEntries(Object.entries(avatars).filter(([p]) => shown.split(',').includes(p)))
+    if (!connected) return
+    const active = Object.fromEntries(shown.split(',').map((p) => [p, '2d']))
     send('avatar_state', { personas: active })
-  }, [avatars, shown, send, connected])
+  }, [shown, send, connected])
 
   return (
     <div className={`stage stage--${mode === 'A' ? 'a' : 'b'}`}>
       {personas.map((p) => (
-        <AvatarPanel
-          key={p}
-          persona={p}
-          name={NAMES[p]}
-          speaking={speaking === p}
-          getLevel={level}
-          realistic={avatarStyle === 'realistic'}
-          getAudioTrack={getAudioTrack}
-          setLocalMuted={setLocalMuted}
-          audioReady={audioReady}
-          onAvatarState={onAvatarState}
-        />
+        <AvatarPanel key={p} persona={p} name={NAMES[p]} speaking={speaking === p} getLevel={level} />
       ))}
 
       {/* Satu-satunya elemen non-karakter, dan hanya SEBELUM live: browser butuh satu klik di

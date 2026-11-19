@@ -10,11 +10,19 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Optional
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = REPO_ROOT / "backend"
+
+
+def _parse_tts_fallbacks(raw: str) -> list[str]:
+    names = [n.strip().lower() for n in raw.split(",") if n.strip()]
+    unknown = [n for n in names if n not in ("edge", "gtts", "elevenlabs", "none")]
+    if unknown:
+        raise ValueError(f"TTS_FALLBACK memuat provider tidak dikenal: {', '.join(unknown)}")
+    return [n for n in names if n not in ("none", "elevenlabs")]
 
 
 class Settings(BaseSettings):
@@ -47,32 +55,14 @@ class Settings(BaseSettings):
     # Laju bawaan untuk perkiraan menit aman bila log sesi belum cukup (diganti otomatis dari log).
     AI_TURNS_PER_MIN_A: float = 4.0
     AI_TURNS_PER_MIN_B: float = 7.0
-    TTS_CREDITS_PER_MIN: float = 200.0  # ElevenLabs flash: ±4 rb kredit per 20 menit mode B (Tahap 0)
-    TTS_QUOTA_ALERT_MIN: int = 5  # peringatan kuning saat perkiraan sisa suara ≤ sekian menit
+    TTS_CREDITS_PER_MIN: float = 0.0  # Mode full free service (Edge/gTTS): tanpa kredit berbayar
+    TTS_QUOTA_ALERT_MIN: int = 5
 
-    # Endpoint kompatibel OpenAI (opsional): dipakai lewat model `compat:<nama>` di GEMINI_MODEL_*
-    OPENAI_COMPAT_BASE_URL: str = ""
-    OPENAI_COMPAT_API_KEY: str = ""
-    OPENAI_COMPAT_REASONING_EFFORT: str = "none"  # kosong = default endpoint
-
-    # TTS
-    TTS_PROVIDER: Literal["edge", "elevenlabs"] = "edge"  # Edge (gratis) untuk pengembangan; elevenlabs untuk demo
-    TTS_FALLBACK: str = "gtts"  # cadangan berurutan, dipisah koma: edge | gtts | elevenlabs | none
+    # TTS (full free service: Edge TTS utama + gTTS cadangan, tanpa layanan berbayar)
+    TTS_PROVIDER: Literal["edge", "gtts"] = "edge"
+    TTS_FALLBACK: str = "gtts"  # cadangan berurutan, dipisah koma: edge | gtts | none
     TTS_RETRIES: int = 1  # ulang provider utama sebelum pindah ke cadangan
     TTS_TIMEOUT_SEC: float = 12.0  # Edge dari laptop ini sering 3-8 s per kalimat; pindah suara di tengah siaran lebih buruk daripada menunggu
-    ELEVENLABS_API_KEY: str = ""
-    ELEVENLABS_MODEL: str = ""
-    # Pengaturan suara ElevenLabs (voice_settings), sama dengan slider di studio web. Kosong = tidak dikirim,
-    # jadi ElevenLabs memakai pengaturan tersimpan milik suara itu. Kecepatan 0,7-1,2.
-    ELEVENLABS_STABILITY: Optional[float] = Field(default=None, ge=0, le=1)
-    ELEVENLABS_SIMILARITY: Optional[float] = Field(default=None, ge=0, le=1)
-    ELEVENLABS_STYLE: Optional[float] = Field(default=None, ge=0, le=1)
-    ELEVENLABS_SPEED: Optional[float] = Field(default=None, ge=0.7, le=1.2)
-    ELEVENLABS_SPEAKER_BOOST: Optional[bool] = None
-    ELEVENLABS_VOICE_MALE: str = ""
-    ELEVENLABS_VOICE_FEMALE: str = ""
-    ELEVENLABS_VOICE_RAKA: str = ""  # opsional: menimpa voice di kartu persona
-    ELEVENLABS_VOICE_SALSA: str = ""
     EDGE_VOICE_MALE: str = "id-ID-ArdiNeural"
     EDGE_VOICE_FEMALE: str = "id-ID-GadisNeural"
     EDGE_VOICE_RAKA: str = ""
@@ -142,18 +132,9 @@ class Settings(BaseSettings):
     VOICE_SWITCH_TITLE_OVERLAP: float = Field(default=0.7, ge=0, le=1)
     VOICE_SWITCH_TITLE_MIN_WORDS: int = Field(default=2, ge=1)
 
-    # Penyeimbang volume antarpenyiar, dalam dB, diterapkan di layar OBS (suara lokal dan jalur Simli). 0 = tanpa perubahan.
-    # Provider dan model suara punya kenyaringan berbeda; ukur dari rekaman OBS lalu samakan (sekitar -17 dB rata-rata).
+    # Penyeimbang volume antarpenyiar, dalam dB, diterapkan di layar OBS. 0 = tanpa perubahan.
     VOICE_GAIN_DB_RAKA: float = Field(default=0.0, ge=-12, le=9)
     VOICE_GAIN_DB_SALSA: float = Field(default=0.0, ge=-12, le=9)
-
-    # Simli (avatar video realistis di /stage menggantikan karakter 2D; 2D tetap jadi cadangan otomatis)
-    SIMLI_API_KEY: str = ""
-    SIMLI_FACE_ID: str = "bf13113a-355a-4d97-8b90-4edccd1da7b2"  # wajah bawaan bila wajah per persona kosong
-    SIMLI_FACE_ID_RAKA: str = ""  # wajah per persona; kosong = SIMLI_FACE_ID
-    SIMLI_FACE_ID_SALSA: str = ""
-    SIMLI_MAX_SESSION_S: int = 3600  # batas satu sambungan Simli; layar OBS menyambung ulang sendiri setelahnya
-    SIMLI_MAX_IDLE_S: int = 300  # Simli memutus sambungan yang sepi sekian detik; menyambung ulang otomatis
 
     # Uji: "llm" dan/atau "tts" untuk mensimulasikan galat
     FAIL_INJECT: str = ""
@@ -181,6 +162,19 @@ class Settings(BaseSettings):
     # Variabel kosong (mis. `GEMINI_RPM_PERSONA=` di .env.example) berarti pakai default.
     model_config = {"env_file": str(REPO_ROOT / ".env"), "env_file_encoding": "utf-8", "extra": "ignore", "env_ignore_empty": True}
 
+    @field_validator("TTS_PROVIDER", mode="before")
+    @classmethod
+    def _coerce_free_tts(cls, v):
+        if isinstance(v, str) and v.strip().lower() == "elevenlabs":
+            return "edge"
+        return v
+
+    @field_validator("TTS_FALLBACK")
+    @classmethod
+    def _validate_tts_fallback(cls, v: str) -> str:
+        _parse_tts_fallbacks(v)
+        return v
+
     @model_validator(mode="after")
     def _point_timer_is_consistent(self):
         if self.POINT_TIME_LIMIT_S > 0 and self.POINT_WRAP_S >= self.POINT_TIME_LIMIT_S:
@@ -200,33 +194,13 @@ class Settings(BaseSettings):
         return url
 
     def tts_fallbacks(self) -> list[str]:
-        """Daftar cadangan TTS dari TTS_FALLBACK; 'none' atau kosong berarti tanpa cadangan."""
-        names = [n.strip().lower() for n in self.TTS_FALLBACK.split(",") if n.strip()]
-        unknown = [n for n in names if n not in ("edge", "gtts", "elevenlabs", "none")]
-        if unknown:
-            raise ValueError(f"TTS_FALLBACK memuat provider tidak dikenal: {', '.join(unknown)}")
-        return [n for n in names if n != "none"]
+        """Daftar cadangan TTS gratis dari TTS_FALLBACK; 'none' atau kosong berarti tanpa cadangan."""
+        return _parse_tts_fallbacks(self.TTS_FALLBACK)
 
     def voice_gain(self, persona: str) -> float:
         """Pengali volume (linear) untuk satu persona dari VOICE_GAIN_DB_<PERSONA>; 1.0 bila tidak diatur."""
         db = getattr(self, f"VOICE_GAIN_DB_{persona.upper()}", 0.0)
         return round(10 ** (db / 20), 4)
-
-    def elevenlabs_voice_settings(self) -> dict[str, float | bool]:
-        """voice_settings untuk permintaan ElevenLabs; hanya yang diisi di .env."""
-        pairs = {
-            "stability": self.ELEVENLABS_STABILITY,
-            "similarity_boost": self.ELEVENLABS_SIMILARITY,
-            "style": self.ELEVENLABS_STYLE,
-            "speed": self.ELEVENLABS_SPEED,
-            "use_speaker_boost": self.ELEVENLABS_SPEAKER_BOOST,
-        }
-        return {k: v for k, v in pairs.items() if v is not None}
-
-    def simli_face_for(self, persona: str = "") -> str:
-        """Wajah Simli untuk satu persona (raka | salsa); jatuh ke SIMLI_FACE_ID bila belum diatur."""
-        per_persona = getattr(self, f"SIMLI_FACE_ID_{persona.upper()}", "") if persona else ""
-        return (per_persona or self.SIMLI_FACE_ID).strip().strip("'\"")
 
     def rpd_for_model(self, model: str) -> int:
         """Kuota harian sebuah model: yang paling ketat di antara peran yang memakainya (kuota Google per model)."""

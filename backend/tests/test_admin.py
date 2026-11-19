@@ -15,7 +15,7 @@ def make_settings(tmp_path, **kw):
     return Settings(
         LLM_MODE="mock", TTS_MODE="mock", DATA_DIR=str(tmp_path / "data"),
         CACHE_DIR=str(tmp_path / "cache"), AUTH_REQUIRED=True, SECRETS_KEY=SECRETS_KEY,
-        SIMLI_FACE_ID_RAKA="face-raka-0001", SIMLI_FACE_ID_SALSA="face-salsa-0001", _env_file=None, **kw,
+        _env_file=None, **kw,
     )
 
 
@@ -39,7 +39,7 @@ def put(client, **values):
 
 # ── akses ────────────────────────────────────────────────────────────────────
 def test_only_admin_reaches_admin_api(client):
-    paths = ["/api/admin/config", "/api/admin/voices", "/api/admin/faces"]
+    paths = ["/api/admin/config", "/api/admin/voices"]
     for p in paths:
         assert client.get(p).status_code == 401
     as_user(client, "opa")
@@ -65,15 +65,15 @@ def test_non_secret_setting_applies_without_restart_and_can_be_cleared(client):
 def test_validation_is_atomic_and_uses_settings_rules(client):
     as_user(client, "admin")
     s = client.app.state.settings
-    assert put(client, ELEVENLABS_STABILITY="2").status_code == 422  # di luar 0..1
-    assert put(client, TTS_PROVIDER="suara-ngarang").status_code == 422
+    assert put(client, VOICE_GAIN_DB_RAKA="20").status_code == 422  # di luar -12..9
+    assert put(client, TTS_FALLBACK="suara-ngarang").status_code == 422
     assert put(client, BUKAN_SETELAN="x").status_code == 422
-    r = put(client, GEMINI_MODEL_PERSONA="tidak-boleh-tersimpan", ELEVENLABS_STABILITY="2")
+    r = put(client, GEMINI_MODEL_PERSONA="tidak-boleh-tersimpan", VOICE_GAIN_DB_RAKA="20")
     assert r.status_code == 422 and s.GEMINI_MODEL_PERSONA != "tidak-boleh-tersimpan"
-    assert put(client, ELEVENLABS_STABILITY="0.4", VOICE_GAIN_DB_RAKA="3").status_code == 200
-    assert s.ELEVENLABS_STABILITY == 0.4 and s.VOICE_GAIN_DB_RAKA == 3
-    assert put(client, ELEVENLABS_STABILITY="").status_code == 200  # angka kosong = hapus timpaan
-    assert s.ELEVENLABS_STABILITY is None
+    assert put(client, EDGE_RATE_RAKA="+6%", VOICE_GAIN_DB_RAKA="3").status_code == 200
+    assert s.EDGE_RATE_RAKA == "+6%" and s.VOICE_GAIN_DB_RAKA == 3
+    assert put(client, VOICE_GAIN_DB_RAKA="").status_code == 200  # angka kosong = hapus timpaan
+    assert s.VOICE_GAIN_DB_RAKA == 0.0
 
 
 def test_secrets_are_encrypted_masked_and_survive_restart(client):
@@ -129,8 +129,8 @@ def test_service_test_runs_with_saved_settings(client):
     as_user(client, "admin")
     r = client.post("/api/admin/test/gemini").json()
     assert r["ok"] is True and "mode uji" in r["message"]  # LLM_MODE=mock di tes
-    assert client.post("/api/admin/test/elevenlabs").json() == {"ok": False, "message": "Kunci API ElevenLabs belum diisi."}
-    assert client.post("/api/admin/test/simli").json()["ok"] is False
+    r_edge = client.post("/api/admin/test/edge").json()
+    assert r_edge["ok"] is True and "mode uji" in r_edge["message"]
     assert client.post("/api/admin/test/lainnya").status_code == 422
 
 
@@ -138,11 +138,11 @@ def test_service_test_runs_with_saved_settings(client):
 def test_voice_catalog_is_seeded_then_managed_in_database(client):
     as_user(client, "admin")
     voices = client.get("/api/admin/voices").json()
-    assert {"Pratama", "Aita", "Ardi", "Gadis"} <= {v["name"] for v in voices}
+    assert {"Ardi", "Gadis"} <= {v["name"] for v in voices}
     r = client.post("/api/admin/voices", json={"id": "id-ID-NabillaNeural", "provider": "edge", "name": "Nabilla", "gender": "female"})
     assert r.status_code == 201
     assert client.post("/api/admin/voices", json={"id": "id-ID-NabillaNeural", "provider": "edge", "name": "x", "gender": "female"}).status_code == 422  # dobel
-    assert client.post("/api/admin/voices", json={"id": "../etc", "provider": "elevenlabs", "name": "x", "gender": "male"}).status_code == 422  # bukan ID suara
+    assert client.post("/api/admin/voices", json={"id": "../etc", "provider": "edge", "name": "x", "gender": "male"}).status_code == 422  # bukan ID suara
     assert client.post("/api/admin/voices", json={"id": "kosong", "provider": "edge", "name": " ", "gender": "male"}).status_code == 422
     assert client.patch("/api/admin/voices/id-ID-NabillaNeural", json={"name": "Nabilla B", "notes": "ceria"}).json()["name"] == "Nabilla B"
     as_user(client, "opa")  # operator melihat daftar yang sama di pilihan sebelum live
@@ -157,26 +157,6 @@ def test_voice_catalog_is_seeded_then_managed_in_database(client):
     with TestClient(build_app(make_settings(client.tmp_path))) as again:
         as_user(again, "admin")
         assert again.get("/api/admin/voices").json() == []
-
-
-def test_adding_elevenlabs_voice_without_key_warns_but_saves(client):
-    as_user(client, "admin")
-    r = client.post("/api/admin/voices", json={"id": "AbCdEf123456", "provider": "elevenlabs", "name": "Suara Baru", "gender": "male"})
-    assert r.status_code == 201 and "belum diisi" in r.json()["warning"]
-
-
-# ── wajah Simli ──────────────────────────────────────────────────────────────
-def test_faces_seeded_from_env_chosen_per_persona_and_protected_while_used(client):
-    as_user(client, "admin")
-    faces = client.get("/api/admin/faces").json()
-    assert {f["id"] for f in faces} >= {"face-raka-0001", "face-salsa-0001"}
-    assert client.post("/api/admin/faces", json={"id": "bad id!", "name": "x"}).status_code == 422
-    assert client.post("/api/admin/faces", json={"id": "face-baru-0001", "name": "Wajah baru"}).status_code == 201
-    assert client.post("/api/admin/faces", json={"id": "face-baru-0001", "name": "dobel"}).status_code == 422
-    assert client.delete("/api/admin/faces/face-raka-0001").status_code == 409  # sedang dipilih untuk Raka
-    assert put(client, SIMLI_FACE_ID_RAKA="face-baru-0001").status_code == 200
-    assert client.app.state.settings.simli_face_for("raka") == "face-baru-0001"  # dipakai /api/simli/token
-    assert client.delete("/api/admin/faces/face-raka-0001").status_code == 200
 
 
 # ── konten: persona, prompt, teks, Supervisor ────────────────────────────────
@@ -288,7 +268,7 @@ def _fake_past_session(db, sid="show_20261101_100000_aaaa", mode="A", tema="Zodi
 
     log = SessionLogger(sid, db)
     log.event("session_start", mode=mode, blocker={"tema": tema, "variant_label": "Lama", "topics": [{}, {}]}, participants=[{"name": "Favian"}, {"name": "Salsa"}],
-              config={"LLM_MODE": "live", "TTS_MODE": "live", "TTS_PROVIDER": "elevenlabs", "SUPERVISOR_MODE": "off"})
+              config={"LLM_MODE": "live", "TTS_MODE": "live", "TTS_PROVIDER": "edge", "SUPERVISOR_MODE": "off"})
     log.event("turn", persona="salsa", final_text="halo")
     log.event("session_end", reason="stopped", elapsed_s=61.5)
     tl = TurnLog(sid, db)
@@ -331,7 +311,7 @@ def test_session_detail_and_export(client):
     assert d["summary"]["tema"] == "Zodiak" and d["live"] is False
     assert [e["type"] for e in d["events"]] == ["session_start", "turn", "session_end"]
     assert [t["text"] for t in d["turns"]] == ["Zodiak lu apa?", "Gue Leo."]
-    assert d["config"]["config"]["TTS_PROVIDER"] == "elevenlabs" and "blocker" not in d["config"]
+    assert d["config"]["config"]["TTS_PROVIDER"] == "edge" and "blocker" not in d["config"]
     ev = client.get(f"/api/admin/sessions/{old}/export/events")
     assert ev.status_code == 200 and "attachment" in ev.headers["content-disposition"] and len(ev.text.splitlines()) == 3
     tu = client.get(f"/api/admin/sessions/{old}/export/turns")

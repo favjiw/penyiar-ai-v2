@@ -1,16 +1,11 @@
 /**
- * Satu panel karakter di layar OBS. Ada dua tampilan, dipilih operator di konsol (avatarStyle.ts):
- * - realistis: avatar Simli (video, tanpa klik). Karakter 2D menjadi cadangan otomatis selama Simli belum
- *   tersambung atau bila putus;
- * - kartun 2D: karakter ilustrasi (mockup StageModeA/B) beranimasi ala VTuber, tanpa Simli sama sekali.
- * Panel, latar, dan tata letaknya sama di keduanya.
+ * Satu panel karakter kartun 2D beranimasi di layar OBS (gratis, tanpa layanan berbayar).
  *
  * Animasi 2D digerakkan per frame dari level audio sungguhan yang sedang diputar (tanpa render ulang React):
  * napas, goyang kepala, anggukan saat bicara, kedip acak (kadang dua kali), lirikan mata, alis naik pada aksen,
  * dan bukaan mulut mengikuti amplitudo.
  */
 import { useEffect, useRef, type RefObject } from 'react'
-import { useSimliStream, type AvatarState } from './useSimliStream'
 
 export type AvatarPersona = 'raka' | 'salsa'
 
@@ -25,14 +20,6 @@ interface Props {
   speaking: boolean
   /** Level audio 0..1 yang sedang diputar; null bila tidak tersedia. */
   getLevel: () => number | null
-  /** true = avatar realistis Simli (2D sebagai cadangan); false = kartun 2D saja. */
-  realistic: boolean
-  /** Jalur audio dan bisu lokal per persona dari useLiveSession (suara Simli dan 2D tidak boleh bersamaan). */
-  getAudioTrack: (persona: string) => MediaStreamTrack | null
-  setLocalMuted: (persona: string, muted: boolean) => void
-  audioReady: boolean
-  /** Dilaporkan ke stage setiap berubah: simli | connecting | fallback | 2d. */
-  onAvatarState: (persona: string, state: AvatarState) => void
 }
 
 /** Bagian karakter yang digerakkan per frame. */
@@ -47,7 +34,7 @@ interface Rig {
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a)
 
-export function AvatarPanel({ persona, name, speaking, getLevel, realistic, getAudioTrack, setLocalMuted, audioReady, onAvatarState }: Props) {
+export function AvatarPanel({ persona, name, speaking, getLevel }: Props) {
   const rig: Rig = {
     torso: useRef<SVGGElement>(null),
     head: useRef<SVGGElement>(null),
@@ -60,16 +47,9 @@ export function AvatarPanel({ persona, name, speaking, getLevel, realistic, getA
   const speakingRef = useRef(speaking)
   speakingRef.current = speaking
   const t = THEME[persona]
-  const { videoRef, audioRef, state } = useSimliStream(persona, getAudioTrack, setLocalMuted, audioReady, realistic)
-  const simli = state === 'simli'
 
+  // Animasi karakter 2D: satu loop per panel.
   useEffect(() => {
-    onAvatarState(persona, state)
-  }, [persona, state, onAvatarState])
-
-  // Animasi karakter 2D: satu loop per panel, hanya selama karakter 2D yang tampil.
-  useEffect(() => {
-    if (simli) return
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
     let raf = 0
     let last = performance.now()
@@ -143,30 +123,21 @@ export function AvatarPanel({ persona, name, speaking, getLevel, realistic, getA
       for (const el of [rig.head.current, rig.hairBack.current, rig.torso.current, rig.eyes.current, rig.brows.current, discRef.current]) set(el, '')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [simli, getLevel])
+  }, [getLevel])
 
   return (
     <div className="stage-panel" style={{ background: `repeating-conic-gradient(${t.checker} 0 25%, #FFFFFF 0 50%) 0 0 / 60px 60px` }}>
       <div className="stage-panel__glow" aria-hidden="true" />
       <Doodles color={t.doodle} flip={persona === 'salsa'} />
       <div ref={discRef} className="stage-panel__disc" style={{ background: t.disc }} aria-hidden="true" />
-      {/* Video dan audio Simli ada di halaman hanya bila gaya realistis (disembunyikan dengan opacity, bukan display) supaya sambungan bisa siap lebih dulu. */}
-      {realistic && (
-        <>
-          <video ref={videoRef} className={`stage-simli ${simli ? 'is-live' : ''}`} autoPlay playsInline muted aria-label={`${name} (avatar)`} />
-          <audio ref={audioRef} autoPlay />
-        </>
-      )}
-      {!simli && (
-        <svg
-          className="stage-avatar"
-          role="img"
-          aria-label={`${name} ${speaking ? 'sedang bicara' : 'sedang mendengarkan'}`}
-          viewBox="0 0 300 300"
-        >
-          {persona === 'raka' ? <Raka speaking={speaking} rig={rig} /> : <Salsa speaking={speaking} rig={rig} />}
-        </svg>
-      )}
+      <svg
+        className="stage-avatar"
+        role="img"
+        aria-label={`${name} ${speaking ? 'sedang bicara' : 'sedang mendengarkan'}`}
+        viewBox="0 0 300 300"
+      >
+        {persona === 'raka' ? <Raka speaking={speaking} rig={rig} /> : <Salsa speaking={speaking} rig={rig} />}
+      </svg>
     </div>
   )
 }
