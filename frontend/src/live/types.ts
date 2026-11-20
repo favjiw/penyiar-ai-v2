@@ -142,6 +142,6 @@ export interface OutputStatus {
   clients: Record<string, number>
   /** Status mic penyiar dari prompter (mode A); null bila belum ada laporan. */
   mic?: { down: boolean; reason: string } | null
-  /** Avatar di layar OBS per persona: 2d (kartun beranimasi); null bila stage belum melapor. */
-  avatar?: Record<string, '2d'> | null
+  /** Avatar di layar OBS per persona: video (klip T1) atau 2d (kartun, klip belum ada); null bila stage belum melapor. */
+  avatar?: Record<string, 'video' | '2d'> | null
 }

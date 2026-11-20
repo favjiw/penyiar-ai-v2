@@ -185,6 +185,10 @@ def build_app(settings: Settings | None = None) -> FastAPI:
         log_generation(request.app, "regenerate", blocker.tema, meta, [blocker])
         return {"variant": blocker, "latency_ms": meta.latency_ms, "attempts": meta.attempts, "model": meta.model}
 
+    # Klip avatar T1 (berkas besar, tidak di git) disajikan terpisah dari build frontend.
+    Path(settings.AVATAR_DIR).mkdir(parents=True, exist_ok=True)
+    app.mount("/avatar-assets", StaticFiles(directory=settings.AVATAR_DIR), name="avatar-assets")
+
     _serve_frontend(app, settings)
     return app
 

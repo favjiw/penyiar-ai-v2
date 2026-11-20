@@ -31,6 +31,9 @@ tahap0/out/
 *.wav
 *.mp3
 
+# Manifest klip dummy (dibuat assets/make_dummy_clips.py). Manifest klip Flow asli: git add -f
+assets/avatar/*/manifest.json
+
 # OS / IDE
 .idea/
 .vscode/*

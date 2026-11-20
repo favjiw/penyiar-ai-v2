@@ -145,6 +145,7 @@ class Settings(BaseSettings):
     # Penyimpanan: data aplikasi ada di database; DATA_DIR hanya tempat SQLite lokal, CACHE_DIR cache audio (berkas biner).
     DATA_DIR: str = str(BACKEND_ROOT / "data")
     CACHE_DIR: str = str(BACKEND_ROOT / "cache")
+    AVATAR_DIR: str = str(REPO_ROOT / "assets" / "avatar")  # klip video T1 + manifest.json per persona (FR-8)
 
     # Database: pengguna, sesi login, dan materi. Contoh Postgres: postgresql+psycopg://user:sandi@host:5432/nama.
     # Kosong = SQLite <DATA_DIR>/app.db (pengembangan lokal, tes).

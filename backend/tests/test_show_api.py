@@ -203,8 +203,10 @@ def test_stage_avatar_state_reaches_console(client):
         with client.websocket_connect("/ws/session?role=stage") as stage:
             stage.receive_json()
             _output_status(console)
-            stage.send_json({"action": "avatar_state", "data": {"personas": {"raka": "2d", "salsa": "2d"}}})
-            assert _output_status(console)["avatar"] == {"raka": "2d", "salsa": "2d"}
+            stage.send_json({"action": "avatar_state", "data": {"personas": {"raka": "video", "salsa": "2d"}}})
+            assert _output_status(console)["avatar"] == {"raka": "video", "salsa": "2d"}
+            stage.send_json({"action": "avatar_state", "data": {"personas": {"raka": "aneh"}}})
+            assert _output_status(console)["avatar"] == {"raka": "2d"}  # nilai tak dikenal dianggap kartun 2D
         for _ in range(5):
             st = _output_status(console)
             if st["clients"]["stage"] == 0:

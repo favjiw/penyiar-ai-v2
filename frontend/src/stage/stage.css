@@ -31,6 +31,10 @@ html:has(.stage) #root { height: 100%; }
 .stage-rig--eyes { transform-box: fill-box; transform-origin: center; }
 .stage-avatar__mouth { transform-box: fill-box; transform-origin: center; transform: scaleY(.2); }
 
+/* Avatar video T1: isi panel penuh, klip 9:16 dipotong tengah untuk panel setengah tinggi. */
+.video-avatar { position: absolute; inset: 0; overflow: hidden; background: #000; }
+.video-avatar video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
 /* Hanya saat browser memblokir suara: tombol menutupi layar supaya satu klik di mana pun cukup. */
 .stage-unlock {
   position: fixed;

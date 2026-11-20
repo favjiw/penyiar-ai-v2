@@ -238,7 +238,7 @@ export function SiapLive({ live, mode, onMode: setMode, readiness, materi, duras
 
       <div className="siap-field">
         <span className="siap-legend">Layanan gratis aktif</span>
-        <span className="siap-hint">Avatar Kartun 2D beranimasi · Suara Edge TTS (cadangan gTTS) · Otak AI Gemini free tier.</span>
+        <span className="siap-hint">Avatar video persona (cadangan kartun 2D) · Suara Edge TTS (cadangan gTTS) · Otak AI Gemini free tier.</span>
       </div>
 
       {mode === 'A' && (

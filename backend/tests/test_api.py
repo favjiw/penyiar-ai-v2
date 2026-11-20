@@ -12,7 +12,8 @@ from app.main import build_app
 def client(tmp_path):
     settings = Settings(
         LLM_MODE="mock", TTS_MODE="mock", DATA_DIR=str(tmp_path / "data"),
-        CACHE_DIR=str(tmp_path / "cache"), POINT_TIME_LIMIT_S=0, _env_file=None,  # tes API lama: Showrunner per topik
+        CACHE_DIR=str(tmp_path / "cache"), AVATAR_DIR=str(tmp_path / "avatar"),
+        POINT_TIME_LIMIT_S=0, _env_file=None,  # tes API lama: Showrunner per topik
     )
     with TestClient(build_app(settings)) as c:
         yield c
@@ -27,6 +28,14 @@ def chosen_variant(client, tema="Kopi"):
 def test_health(client):
     body = client.get("/api/health").json()
     assert body["llm_mode"] == "mock" and body["tts"]["primary"] == "mock"
+
+
+def test_avatar_assets_are_served(client, tmp_path):
+    folder = tmp_path / "avatar" / "raka"
+    folder.mkdir(parents=True)
+    (folder / "manifest.json").write_text('{"persona": "raka", "clips": []}', encoding="utf-8")
+    assert client.get("/avatar-assets/raka/manifest.json").json()["persona"] == "raka"
+    assert client.get("/avatar-assets/salsa/manifest.json").status_code == 404
 
 
 def test_generate_validates_input(client):

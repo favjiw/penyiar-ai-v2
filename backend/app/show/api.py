@@ -294,8 +294,8 @@ async def ws_session(ws: WebSocket, role: str = "console"):
                     manager.mic[ws] = state
                     await manager.broadcast_output_status()
             elif action == "avatar_state" and manager.clients.get(ws) == "stage":
-                # Mode gratis: avatar layar OBS selalu karakter 2D beranimasi.
-                state = {str(p)[:20]: "2d" for p in list((data.get("personas") or {}).keys())[:4]}
+                # Mode gratis: klip video persona (T1); kartun 2D bila klip belum ada.
+                state = {str(p)[:20]: ("video" if v == "video" else "2d") for p, v in list((data.get("personas") or {}).items())[:4]}
                 if manager.avatar.get(ws) != state:
                     manager.avatar[ws] = state
                     await manager.broadcast_output_status()
